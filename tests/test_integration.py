@@ -320,3 +320,24 @@ async def test_unload(hass: HomeAssistant):
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert DOMAIN not in hass.data
     await asyncio.sleep(0)
+
+
+async def test_subscription_follows_options(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    entry = await _prepare_history(hass, hass_admin_user.id)
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "whereabouts/subscribe"})
+    assert (await ws.receive_json())["success"]
+    first = (await ws.receive_json())["event"]
+    assert first["shown"] == ["person.alex", "person.sam"]
+    assert [p["entity_id"] for p in first["persons"]] == ["person.alex", "person.sam"]
+    # Show only Sam: the open card gets the new list without reloading
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "show_persons": ["person.sam"]})
+    await hass.async_block_till_done()
+    for _ in range(5):
+        event = (await ws.receive_json())["event"]
+        if event.get("available") and event["shown"] == ["person.sam"]:
+            break
+    assert [p["entity_id"] for p in event["persons"]] == ["person.sam"]
+    # History of Alex is kept, only hidden
+    days = await hass.async_add_executor_job(entry.runtime_data.storage.days, "alex")
+    assert days == ["2026-06-24"]

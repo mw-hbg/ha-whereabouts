@@ -15,6 +15,7 @@ GEOCODE_CACHE_FILE = "geocode_cache.json"
 CONF_LIVE_CARD = "live_card"
 CONF_HISTORY_CARD = "history_card"
 CONF_RECORD_PERSONS = "record_persons"
+CONF_SHOW_PERSONS = "show_persons"  # persons shown in both cards (empty = all)
 CONF_ADDRESS_SOURCE = "address_source"
 CONF_ADDRESS_SENSORS = "address_sensors"  # {person entity_id: sensor entity_id}
 CONF_MIN_INTERVAL = "min_interval"
@@ -46,6 +47,8 @@ DEFAULT_OPTIONS: dict = {
     CONF_HISTORY_CARD: True,
     # Privacy first: nothing is recorded until persons are chosen.
     CONF_RECORD_PERSONS: [],
+    # Shown in both cards; empty = every person in Home Assistant.
+    CONF_SHOW_PERSONS: [],
     # The Companion app's geocoded location first; only if it has no fitting
     # address, OpenStreetMap (sends the coordinates of that place).
     CONF_ADDRESS_SOURCE: ADDRESS_SOURCE_PHONE_OSM,
@@ -71,6 +74,9 @@ PROJECT_URL = "https://github.com/mw-hbg/ha-whereabouts"
 
 # Frontend
 FRONTEND_URL_BASE = "/whereabouts_static"
+
+# Sent whenever what the cards show may have changed (options, imports)
+SIGNAL_INFO_CHANGED = f"{DOMAIN}_info_changed"
 CARDS_FILE = "whereabouts-cards.js"
 
 STATE_HOME = "home"

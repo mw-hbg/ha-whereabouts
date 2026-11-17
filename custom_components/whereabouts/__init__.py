@@ -11,6 +11,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
@@ -25,6 +26,7 @@ from .const import (
     FRONTEND_URL_BASE,
     GEOCODE_CACHE_FILE,
     HISTORY_FOLDER,
+    SIGNAL_INFO_CHANGED,
     STORAGE_FOLDER,
 )
 from .logger import LocationLogger
@@ -60,6 +62,7 @@ class Runtime:
     async def async_refresh_known(self, hass: HomeAssistant) -> None:
         files = await hass.async_add_executor_job(self.storage.list_files)
         self._known = {f"person.{person}" for person, _ in files}
+        async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -99,6 +102,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.runtime_data = runtime
     logger.start()
     entry.async_on_unload(entry.add_update_listener(_options_updated))
+    async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)  # open cards follow the new options
     return True
 
 
@@ -112,6 +116,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if runtime.js_url:
         remove_extra_js_url(hass, runtime.js_url)
     hass.data.pop(DOMAIN, None)
+    async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
     return True
 
 

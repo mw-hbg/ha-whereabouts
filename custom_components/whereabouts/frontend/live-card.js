@@ -44,18 +44,14 @@ export function defineLiveCard(S) {
     setConfig(config) {
       this._config = { ...S.DEFAULTS_MAP, ...LIVE_DEFAULTS, ...(config || {}) };
       this._follow = this._config.follow !== false;
-      if (this._built) {
-        // Rebuild after a change in the editor
-        this._teardown();
-        this._built = false;
-        if (this._hass) this.hass = this._hass;
-      }
+      // Changed in the editor: draw again with the new settings
+      if (this._info) { this._infoSig = null; this._onInfo(this._info); }
     }
 
     set hass(hass) {
       this._hass = hass;
-      if (!this._built) {
-        this._built = true;
+      if (!this._started) {
+        this._started = true;
         this._start();
         return;
       }
@@ -66,7 +62,7 @@ export function defineLiveCard(S) {
     }
 
     connectedCallback() {
-      if (this._config && this._built) S.applyHeight(this, this._config);
+      if (this._config && this._ready) S.applyHeight(this, this._config);
       if (this._ready) {
         this._startBackground();
         if (this._map) setTimeout(() => this._map && this._map.invalidateSize(), 0);
@@ -85,26 +81,24 @@ export function defineLiveCard(S) {
       return { columns: 'full', rows: 8, min_rows: 4 };
     }
 
-    // --- start --------------------------------------------------------------
+    // --- start ----------------------------------------------------------------
     async _start() {
       await S.loadTranslations(S.language(this._hass));
       this._t = S.translator(this._hass);
-      let info;
-      try {
-        info = await S.integrationInfo(this._hass);
-      } catch (err) {
-        this.innerHTML = S.messageHtml(this._t('not_set_up'));
-        return;
-      }
-      if (!info.live_card) {
-        this.innerHTML = S.messageHtml(this._t('card_off'));
-        return;
-      }
+      S.subscribeInfo(this._hass, (info) => this._onInfo(info));
+    }
+
+    // Called at the start and whenever the integration's options change.
+    _onInfo(info) {
+      const sig = JSON.stringify([info.available, info.live_card, info.shown]);
+      if (sig === this._infoSig) return;
+      this._infoSig = sig;
+      this._info = info;
+      this._teardown();
+      if (!info.available) { this.innerHTML = S.messageHtml(this._t('not_set_up')); return; }
+      if (!info.live_card) { this.innerHTML = S.messageHtml(this._t('card_off')); return; }
       this._persons = this._personList();
-      if (!this._persons.length) {
-        this.innerHTML = S.messageHtml(this._t('no_persons'));
-        return;
-      }
+      if (!this._persons.length) { this.innerHTML = S.messageHtml(this._t('no_persons')); return; }
       this._build();
       this._ready = true;
       this._startBackground();
@@ -124,9 +118,11 @@ export function defineLiveCard(S) {
       this.innerHTML = '';
     }
 
+    // Shown persons of the integration, narrowed by the card's own selection
     _personList() {
-      const configured = (this._config.persons || []).filter((id) => this._hass.states[id]);
-      const ids = configured.length ? configured : S.allPersonIds(this._hass);
+      const shown = this._info.shown || [];
+      const configured = (this._config.persons || []).filter((id) => shown.includes(id));
+      const ids = configured.length ? configured : shown;
       return ids.map((id) => ({
         id,
         key: id.replace(/[^a-z0-9_]/gi, '_'),

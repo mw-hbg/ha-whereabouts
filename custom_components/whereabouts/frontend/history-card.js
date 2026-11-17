@@ -47,17 +47,13 @@ export function defineHistoryCard(S) {
     setConfig(config) {
       this._config = { ...S.DEFAULTS_MAP, ...HISTORY_DEFAULTS, ...(config || {}) };
       this._tableView = this._config.default_view === 'table';
-      if (this._built) {
-        this._teardown();
-        this._built = false;
-        if (this._hass) this.hass = this._hass;
-      }
+      if (this._info) { this._infoSig = null; this._onInfo(this._info); }
     }
 
     set hass(hass) {
       this._hass = hass;
-      if (!this._built) {
-        this._built = true;
+      if (!this._started) {
+        this._started = true;
         this._start();
         return;
       }
@@ -66,7 +62,7 @@ export function defineHistoryCard(S) {
     }
 
     connectedCallback() {
-      if (this._config && this._built) S.applyHeight(this, this._config);
+      if (this._config && this._ready) S.applyHeight(this, this._config);
       if (this._ready) this._startBackground();
     }
 
@@ -86,19 +82,20 @@ export function defineHistoryCard(S) {
     async _start() {
       await S.loadTranslations(S.language(this._hass));
       this._t = S.translator(this._hass);
-      let info;
-      try {
-        info = await S.integrationInfo(this._hass, true);
-      } catch (err) {
-        this.innerHTML = S.messageHtml(this._t('not_set_up'));
-        return;
-      }
-      if (!info.history_card) {
-        this.innerHTML = S.messageHtml(this._t('card_off'));
-        return;
-      }
-      const allowed = info.persons.filter((p) => p.can_view);
-      const wanted = (this._config.persons || []);
+      S.subscribeInfo(this._hass, (info) => this._onInfo(info));
+    }
+
+    // Called at the start and whenever the integration's options change.
+    _onInfo(info) {
+      const sig = JSON.stringify([info.available, info.history_card, info.persons]);
+      if (sig === this._infoSig) return;
+      this._infoSig = sig;
+      this._info = info;
+      this._teardown();
+      if (!info.available) { this.innerHTML = S.messageHtml(this._t('not_set_up')); return; }
+      if (!info.history_card) { this.innerHTML = S.messageHtml(this._t('card_off')); return; }
+      const allowed = info.persons || [];
+      const wanted = this._config.persons || [];
       const chosen = wanted.length ? wanted.map((id) => allowed.find((p) => p.entity_id === id)).filter(Boolean) : allowed;
       this._persons = chosen.map((p) => ({
         id: p.entity_id,
@@ -107,11 +104,8 @@ export function defineHistoryCard(S) {
         color: S.safeColor(S.personColor(this._hass, this._config, p.entity_id), S.PALETTE[0]),
         canDelete: p.can_delete,
       }));
-      if (!this._persons.length) {
-        this.innerHTML = S.messageHtml(this._t('no_history_persons'));
-        return;
-      }
-      if (this._persons.length === 1) this._person = this._persons[0].id;
+      if (!this._persons.length) { this.innerHTML = S.messageHtml(this._t('no_history_persons')); return; }
+      if (!this._persons.some((p) => p.id === this._person)) this._person = this._persons.length === 1 ? this._persons[0].id : 'all';
       this._build();
       this._ready = true;
       this._startBackground();

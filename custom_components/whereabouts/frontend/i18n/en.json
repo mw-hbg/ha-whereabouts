@@ -64,7 +64,7 @@
   "no_history_persons": "No history to show. Choose the persons to record under Settings → Devices & services → Whereabouts → Configure.",
   "ed_title": "Title",
   "ed_title_help": "Empty = default title",
-  "ed_persons": "Persons (empty = all)",
+  "ed_persons": "Persons in this card (empty = as set in the integration)",
   "ed_person": "Person: {name}",
   "ed_name": "Display name",
   "ed_color": "Colour",

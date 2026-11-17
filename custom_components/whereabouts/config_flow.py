@@ -26,6 +26,7 @@ from .const import (
     CONF_RECORD_PERSONS,
     CONF_RETENTION_DAYS,
     CONF_SAME_PLACE_DISTANCE,
+    CONF_SHOW_PERSONS,
     DEFAULT_OPTIONS,
     DELETE_ACCESS_LEVELS,
     DOMAIN,
@@ -65,6 +66,7 @@ def _basic_schema(values: dict) -> vol.Schema:
         {
             vol.Required(CONF_LIVE_CARD, default=values[CONF_LIVE_CARD]): selector.BooleanSelector(),
             vol.Required(CONF_HISTORY_CARD, default=values[CONF_HISTORY_CARD]): selector.BooleanSelector(),
+            vol.Optional(CONF_SHOW_PERSONS, default=values[CONF_SHOW_PERSONS]): _PERSONS,
             vol.Optional(CONF_RECORD_PERSONS, default=values[CONF_RECORD_PERSONS]): _PERSONS,
             vol.Required(CONF_ADDRESS_SOURCE, default=values[CONF_ADDRESS_SOURCE]): _select(
                 ADDRESS_SOURCES, CONF_ADDRESS_SOURCE

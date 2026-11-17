@@ -357,19 +357,31 @@ export function applyHeight(el, config) {
 }
 
 // --- integration ---------------------------------------------------------------
-// whereabouts/info once per page (cards and editors share it).
-let infoPromise = null;
-let infoAt = 0;
+// One subscription per page: the integration sends what the cards need
+// (enabled cards, shown persons, the user's rights) at once and again
+// whenever its options change - open cards follow without reloading.
+const infoListeners = new Set();
+let infoSubscription = null;
+let lastInfo = null;
 
-export function integrationInfo(hass, fresh = false) {
-  if (!infoPromise || fresh || Date.now() - infoAt > 60000) {
-    infoAt = Date.now();
-    infoPromise = hass.callWS({ type: 'whereabouts/info' }).catch((err) => {
-      infoPromise = null;
-      throw err;
-    });
+export function subscribeInfo(hass, listener) {
+  infoListeners.add(listener);
+  if (lastInfo) listener(lastInfo);
+  if (!infoSubscription) {
+    infoSubscription = hass.connection
+      .subscribeMessage((info) => {
+        lastInfo = info;
+        infoListeners.forEach((l) => l(info));
+      }, { type: 'whereabouts/subscribe' })
+      .catch((err) => {
+        // Integration not loaded at all (unknown command)
+        console.warn('Whereabouts: integration not available', err);
+        infoSubscription = null;
+        lastInfo = { available: false };
+        infoListeners.forEach((l) => l(lastInfo));
+      });
   }
-  return infoPromise;
+  return () => infoListeners.delete(listener);
 }
 
 export function messageHtml(text) {

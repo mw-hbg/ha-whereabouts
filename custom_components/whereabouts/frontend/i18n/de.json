@@ -64,7 +64,7 @@
   "no_history_persons": "Kein Verlauf zum Anzeigen. Die aufzuzeichnenden Personen wählst du unter Einstellungen → Geräte & Dienste → Whereabouts → Konfigurieren.",
   "ed_title": "Titel",
   "ed_title_help": "Leer = Standardtitel",
-  "ed_persons": "Personen (leer = alle)",
+  "ed_persons": "Personen in dieser Karte (leer = wie in der Integration)",
   "ed_person": "Person: {name}",
   "ed_name": "Anzeigename",
   "ed_color": "Farbe",

@@ -5,6 +5,10 @@
 - Addresses: default is now "Companion app (geocoded location), otherwise
   OpenStreetMap". Clearer names for all choices; set-up, options and README say
   that the sensor "Geocoded location" must be switched on in the Companion app.
+- New option "Show these persons in the cards" in the integration: applies to
+  both cards, open cards follow changes at once (no reload). Each card can still
+  show fewer persons. Hiding a person keeps their history.
+- Only entries the user may delete can be selected in the table.
 
 ---
 
@@ -12,6 +16,10 @@
   OpenStreetMap“. Klarere Namen für alle Möglichkeiten; Einrichtung, Optionen
   und README sagen, dass in der Companion App der Sensor „Geokodierter Standort“
   eingeschaltet sein muss.
+- Neue Option „Diese Personen in den Karten anzeigen“ in der Integration: gilt
+  für beide Karten, offene Karten übernehmen Änderungen sofort (ohne Neuladen).
+  Jede Karte kann weiterhin weniger Personen zeigen. Ausblenden behält den Verlauf.
+- In der Tabelle lassen sich nur Einträge auswählen, die man löschen darf.
 
 ## 0.1.0
 

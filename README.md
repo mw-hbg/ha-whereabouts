@@ -76,7 +76,7 @@ The first dialog asks for the cards, the persons whose history is recorded
 
 | Menu | What you can set |
 |---|---|
-| Cards and recording | Cards on/off, recorded persons, store interval at the same place (60 s), "same place" radius on the way (50 m), deleting old history (default: never) |
+| Cards and recording | Cards on/off, persons shown in the cards (default: all; changes open cards at once), recorded persons, store interval at the same place (60 s), "same place" radius on the way (50 m), deleting old history (default: never) |
 | Addresses | Companion app (geocoded location), otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; per person the sensor "Geocoded location" (found automatically) |
 | Who may see and delete the history | Administrators and own person (default), administrators only, all users |
 | Import history | Upload a file (see below) |
@@ -90,7 +90,7 @@ filling the page use a view of type **Panel**.
 | Setting | "Where is…?" | "Location history" |
 |---|---|---|
 | Title | optional | optional |
-| Persons | all (or the ones you choose) | all you may see (or the ones you choose) |
+| Persons | as set in the integration (or fewer) | as set in the integration and you may see (or fewer) |
 | Per person | display name, colour, address sensor | display name, colour |
 | Map | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO (own key), link for coordinates (Google, Apple, OpenStreetMap) | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO |
 | Display | info bar, status bar, zones, GPS accuracy, follow at start, zone names from zoom, reload interval | start with map or table, legend, download buttons, refresh interval |
@@ -228,7 +228,7 @@ steht unter **Konfigurieren**:
 
 | Menü | Was man einstellt |
 |---|---|
-| Karten und Aufzeichnung | Karten an/aus, aufgezeichnete Personen, Speicherabstand am selben Ort (60 s), Umkreis „derselbe Ort“ unterwegs (50 m), alten Verlauf löschen (Standard: nie) |
+| Karten und Aufzeichnung | Karten an/aus, in den Karten angezeigte Personen (Standard: alle; ändert offene Karten sofort), aufgezeichnete Personen, Speicherabstand am selben Ort (60 s), Umkreis „derselbe Ort“ unterwegs (50 m), alten Verlauf löschen (Standard: nie) |
 | Adressen | Companion App (Geokodierter Standort), sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; pro Person der Sensor „Geokodierter Standort“ (wird automatisch gefunden) |
 | Wer den Verlauf sehen und löschen darf | Administratoren und eigene Person (Standard), nur Administratoren, alle Benutzer |
 | Verlauf importieren | Datei hochladen (siehe unten) |
@@ -243,7 +243,7 @@ eingestellt; für eine Karte, die die ganze Seite füllt, eine Ansicht vom Typ
 | Einstellung | „Wo ist…?“ | „Standortverlauf“ |
 |---|---|---|
 | Titel | optional | optional |
-| Personen | alle (oder die gewählten) | alle, die man sehen darf (oder die gewählten) |
+| Personen | wie in der Integration eingestellt (oder weniger) | wie in der Integration eingestellt und die man sehen darf (oder weniger) |
 | Pro Person | Anzeigename, Farbe, Adress-Sensor | Anzeigename, Farbe |
 | Karte | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO (eigener Schlüssel), Link für Koordinaten (Google, Apple, OpenStreetMap) | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO |
 | Anzeige | Infoleiste, Statusleiste, Zonen, GPS-Genauigkeit, beim Start folgen, Zonennamen ab Zoom, Neuladen | Start mit Karte oder Tabelle, Legende, Download-Knöpfe, Aktualisieren |

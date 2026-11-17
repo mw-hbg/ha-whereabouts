@@ -21,6 +21,7 @@ from homeassistant.auth.models import User
 from homeassistant.components import websocket_api
 from homeassistant.components.http import KEY_HASS_USER, HomeAssistantView
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -31,7 +32,9 @@ from .const import (
     CONF_HISTORY_CARD,
     CONF_LIVE_CARD,
     CONF_RECORD_PERSONS,
+    CONF_SHOW_PERSONS,
     DOMAIN,
+    SIGNAL_INFO_CHANGED,
 )
 from .logger import person_key
 from .storage import Stay, export_csv, is_valid_date, is_valid_key
@@ -83,6 +86,7 @@ def _stay_dict(stay: Stay) -> dict[str, Any]:
 @callback
 def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_info)
+    websocket_api.async_register_command(hass, ws_subscribe)
     websocket_api.async_register_command(hass, ws_history)
     websocket_api.async_register_command(hass, ws_days)
     websocket_api.async_register_command(hass, ws_delete)
@@ -104,37 +108,67 @@ def _check(hass, connection, msg, person: str, check) -> bool:
     return True
 
 
-@websocket_api.websocket_command({vol.Required("type"): "whereabouts/info"})
-@callback
-def ws_info(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """What the cards need to know: enabled cards, persons and the user's rights."""
+def shown_persons(hass: HomeAssistant, options: dict) -> list[str]:
+    """Persons shown in the cards: the chosen ones, or every person in Home Assistant."""
+    existing = sorted(hass.states.async_entity_ids("person"))
+    chosen = options.get(CONF_SHOW_PERSONS) or []
+    return [p for p in chosen if p in existing] if chosen else existing
+
+
+def build_info(hass: HomeAssistant, user: User | None) -> dict[str, Any]:
+    """What the cards need to know - for this user."""
     runtime = _runtime(hass)
     if runtime is None:
-        connection.send_error(msg["id"], ERR_NOT_SET_UP, "Whereabouts is not set up")
-        return
-    # Only persons whose history this user may see - nothing about the others.
+        return {"available": False}
+    shown = shown_persons(hass, runtime.options)
+    # History: only shown persons that have (or get) a history and that this
+    # user may see - nothing about the others.
     persons = []
     for entity_id in sorted(set(runtime.options[CONF_RECORD_PERSONS]) | set(runtime.known_persons())):
-        if not can_view(hass, connection.user, entity_id):
+        if entity_id not in shown or not can_view(hass, user, entity_id):
             continue
         persons.append(
             {
                 "entity_id": entity_id,
                 "recording": entity_id in runtime.options[CONF_RECORD_PERSONS],
                 "can_view": True,
-                "can_delete": can_delete(hass, connection.user, entity_id),
+                "can_delete": can_delete(hass, user, entity_id),
             }
         )
-    connection.send_result(
-        msg["id"],
-        {
-            "version": runtime.version,
-            "live_card": runtime.options[CONF_LIVE_CARD],
-            "history_card": runtime.options[CONF_HISTORY_CARD],
-            "persons": persons,
-            "today": dt_util.now().strftime("%Y-%m-%d"),
-        },
-    )
+    return {
+        "available": True,
+        "version": runtime.version,
+        "live_card": runtime.options[CONF_LIVE_CARD],
+        "history_card": runtime.options[CONF_HISTORY_CARD],
+        "shown": shown,
+        "persons": persons,
+        "today": dt_util.now().strftime("%Y-%m-%d"),
+    }
+
+
+@websocket_api.websocket_command({vol.Required("type"): "whereabouts/info"})
+@callback
+def ws_info(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """What the cards need to know: enabled cards, persons and the user's rights."""
+    info = build_info(hass, connection.user)
+    if not info["available"]:
+        connection.send_error(msg["id"], ERR_NOT_SET_UP, "Whereabouts is not set up")
+        return
+    connection.send_result(msg["id"], info)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "whereabouts/subscribe"})
+@callback
+def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Like whereabouts/info, and again whenever the options change - the cards follow at once."""
+
+    @callback
+    def _send() -> None:
+        connection.send_message(websocket_api.event_message(msg["id"], build_info(hass, connection.user)))
+
+    connection.subscriptions[msg["id"]] = async_dispatcher_connect(hass, SIGNAL_INFO_CHANGED, _send)
+    connection.send_result(msg["id"])
+    _send()
 
 
 @websocket_api.websocket_command(

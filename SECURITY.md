@@ -33,6 +33,8 @@ do and how to reproduce it.
   OpenStreetMap or CARTO), which sees the requested map area.
 * Importing is only possible in the integration's options, i.e. for
   administrators. Uploads are limited in size (also inside ZIP files).
-* Nothing leaves Home Assistant unless OpenStreetMap is switched on as address
-  source; then only the coordinates of places on the way are sent to
-  `nominatim.openstreetmap.org`.
+* Addresses come first from the Companion app's geocoded location (local). By
+  default, only if it has no fitting address, the coordinates of that place are
+  sent to `nominatim.openstreetmap.org`; this can be switched off (address
+  source "Companion app only" or "No addresses"). Nothing else leaves Home
+  Assistant.

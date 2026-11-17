@@ -29,8 +29,8 @@ ADDRESS_SOURCE_PHONE = "phone"
 ADDRESS_SOURCE_PHONE_OSM = "phone_osm"
 ADDRESS_SOURCE_OSM = "osm"
 ADDRESS_SOURCES = [
-    ADDRESS_SOURCE_PHONE,
     ADDRESS_SOURCE_PHONE_OSM,
+    ADDRESS_SOURCE_PHONE,
     ADDRESS_SOURCE_OSM,
     ADDRESS_SOURCE_OFF,
 ]
@@ -46,9 +46,9 @@ DEFAULT_OPTIONS: dict = {
     CONF_HISTORY_CARD: True,
     # Privacy first: nothing is recorded until persons are chosen.
     CONF_RECORD_PERSONS: [],
-    # Only the phone's own geocoding by default; OpenStreetMap sends
-    # coordinates to a third party, so it has to be switched on deliberately.
-    CONF_ADDRESS_SOURCE: ADDRESS_SOURCE_PHONE,
+    # The Companion app's geocoded location first; only if it has no fitting
+    # address, OpenStreetMap (sends the coordinates of that place).
+    CONF_ADDRESS_SOURCE: ADDRESS_SOURCE_PHONE_OSM,
     CONF_ADDRESS_SENSORS: {},
     CONF_MIN_INTERVAL: 60,
     CONF_SAME_PLACE_DISTANCE: 50,

@@ -40,14 +40,15 @@ server). Whereabouts puts the whole thing into **one integration**:
   (a person gets the same colour automatically).
 - **Stays instead of raw points** – consecutive points at the same place become
   one entry with a time span; inside a zone the exact position does not matter.
-- **Addresses that are right** – the phone's own geocoding is only used when its
-  position matches the point; optionally OpenStreetMap fills the gaps.
+- **Addresses that are right** – the geocoded location of the Companion app is only
+  used when its position matches the point; OpenStreetMap fills the gaps.
 - **Permissions per user** – who may see and delete whose history (e.g. children
   only their own person).
 - **Clean data** – plain CSV files in your configuration folder, part of every
   backup; import of CSV, GPX and old archives, export as CSV and GPX.
 - **Privacy first** – nothing is recorded until you choose persons; nothing
-  leaves Home Assistant unless you switch on OpenStreetMap.
+  leaves Home Assistant except, for places on the way without an address from the
+  Companion app, a request to OpenStreetMap (can be switched off).
 
 ### Installation
 
@@ -65,6 +66,10 @@ update, restart Home Assistant when the repair notice asks for it.
 
 ### Set-up
 
+**For addresses:** switch on the sensor **Geocoded location** in the Home Assistant
+Companion app on every phone (app settings → Companion app → Sensors / Manage
+sensors → Geocoded location). Without it, addresses come only from OpenStreetMap.
+
 The first dialog asks for the cards, the persons whose history is recorded
 (none by default) and the address source. Everything else is under
 **Configure**:
@@ -72,7 +77,7 @@ The first dialog asks for the cards, the persons whose history is recorded
 | Menu | What you can set |
 |---|---|
 | Cards and recording | Cards on/off, recorded persons, store interval at the same place (60 s), "same place" radius on the way (50 m), deleting old history (default: never) |
-| Addresses | Phone, phone + OpenStreetMap, OpenStreetMap or none; per person the phone's geocoded location sensor (found automatically) |
+| Addresses | Companion app (geocoded location), otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; per person the sensor "Geocoded location" (found automatically) |
 | Who may see and delete the history | Administrators and own person (default), administrators only, all users |
 | Import history | Upload a file (see below) |
 
@@ -111,8 +116,8 @@ map_link: google     # google | apple | osm | none
   so it is **not** reachable via `/local/` or any other web address.
 - The cards read the history only through Home Assistant's authenticated
   connection; every request is checked against the logged-in user.
-- OpenStreetMap is off by default. When switched on, the coordinates of places
-  on the way are sent to `nominatim.openstreetmap.org` (max. one request per 1.5 s,
+- Addresses come first from the Companion app. Only if it has no fitting address,
+  the coordinates of that place are sent to `nominatim.openstreetmap.org` (max. one request per 1.5 s,
   results cached locally), as its
   [usage policy](https://operations.osmfoundation.org/policies/nominatim/) requires.
 - The live map shows only what every Home Assistant user can see anyway.
@@ -122,8 +127,8 @@ map_link: google     # google | apple | osm | none
 | What | From where | Sends |
 |---|---|---|
 | Recording, history, import, export | Home Assistant | nothing – works fully local |
-| Addresses from the phone (default) | Home Assistant | nothing – the Companion app already sent them |
-| Addresses from OpenStreetMap (off by default) | Home Assistant → `nominatim.openstreetmap.org` | coordinates of places on the way |
+| Addresses from the Companion app (geocoded location) | Home Assistant | nothing – the app already sent them |
+| Addresses from OpenStreetMap (default: only if the Companion app has none; can be switched off) | Home Assistant → `nominatim.openstreetmap.org` | coordinates of places on the way |
 | Map tiles | **your browser / app** → Esri, OpenStreetMap or CARTO (as chosen in the card) | the visible map area (like any online map) |
 | Map library (Leaflet) | Home Assistant itself | nothing – bundled, no CDN |
 
@@ -186,14 +191,15 @@ Server). Whereabouts bringt das Ganze in **eine Integration**:
   gleichen Stil (eine Person bekommt automatisch dieselbe Farbe).
 - **Aufenthalte statt Rohpunkte** – aufeinanderfolgende Punkte am selben Ort
   werden ein Eintrag mit Zeitraum; in einer Zone zählt die genaue Position nicht.
-- **Adressen, die stimmen** – die Geokodierung des Handys wird nur genommen,
-  wenn ihre Position zum Punkt passt; auf Wunsch füllt OpenStreetMap die Lücken.
+- **Adressen, die stimmen** – der geokodierte Standort der Companion App wird nur
+  genommen, wenn seine Position zum Punkt passt; OpenStreetMap füllt die Lücken.
 - **Rechte pro Benutzer** – wer wessen Verlauf sehen und löschen darf (z. B.
   Kinder nur ihre eigene Person).
 - **Saubere Daten** – einfache CSV-Dateien im Konfigurationsordner, Teil jeder
   Sicherung; Import von CSV, GPX und alten Archiven, Export als CSV und GPX.
 - **Datenschutz zuerst** – aufgezeichnet wird erst, wenn du Personen auswählst;
-  nichts verlässt Home Assistant, außer du schaltest OpenStreetMap ein.
+  nichts verlässt Home Assistant außer – für Orte unterwegs ohne Adresse aus der
+  Companion App – eine Anfrage an OpenStreetMap (abschaltbar).
 
 ### Installation
 
@@ -211,6 +217,11 @@ Update Home Assistant neu starten, wenn der Reparatur-Hinweis darum bittet.
 
 ### Einrichtung
 
+**Für Adressen:** In der Home-Assistant-Companion-App auf jedem Smartphone den
+Sensor **Geokodierter Standort** einschalten (Einstellungen der App → Companion App
+→ Sensoren bzw. Sensoren verwalten → Geokodierter Standort). Ohne ihn kommen
+Adressen nur von OpenStreetMap.
+
 Der erste Dialog fragt nach den Karten, den Personen, deren Verlauf
 aufgezeichnet wird (standardmäßig keine), und der Adressquelle. Alles Weitere
 steht unter **Konfigurieren**:
@@ -218,7 +229,7 @@ steht unter **Konfigurieren**:
 | Menü | Was man einstellt |
 |---|---|
 | Karten und Aufzeichnung | Karten an/aus, aufgezeichnete Personen, Speicherabstand am selben Ort (60 s), Umkreis „derselbe Ort“ unterwegs (50 m), alten Verlauf löschen (Standard: nie) |
-| Adressen | Handy, Handy + OpenStreetMap, OpenStreetMap oder keine; pro Person der Sensor „Geokodierter Standort“ des Handys (wird automatisch gefunden) |
+| Adressen | Companion App (Geokodierter Standort), sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; pro Person der Sensor „Geokodierter Standort“ (wird automatisch gefunden) |
 | Wer den Verlauf sehen und löschen darf | Administratoren und eigene Person (Standard), nur Administratoren, alle Benutzer |
 | Verlauf importieren | Datei hochladen (siehe unten) |
 
@@ -258,8 +269,8 @@ map_link: google     # google | apple | osm | none
   also **nicht** über `/local/` oder eine andere Web-Adresse erreichbar.
 - Die Karten lesen den Verlauf nur über die angemeldete Home-Assistant-Verbindung;
   jede Anfrage wird gegen den angemeldeten Benutzer geprüft.
-- OpenStreetMap ist standardmäßig aus. Eingeschaltet werden die Koordinaten von
-  Orten unterwegs an `nominatim.openstreetmap.org` geschickt (höchstens eine Anfrage
+- Adressen kommen zuerst aus der Companion App. Nur wenn sie keine passende hat,
+  werden die Koordinaten dieses Ortes an `nominatim.openstreetmap.org` geschickt (höchstens eine Anfrage
   pro 1,5 s, Ergebnisse lokal zwischengespeichert), wie es die
   [Nutzungsregeln](https://operations.osmfoundation.org/policies/nominatim/) verlangen.
 - Die Live-Karte zeigt nur, was jeder Home-Assistant-Benutzer ohnehin sehen kann.
@@ -269,8 +280,8 @@ map_link: google     # google | apple | osm | none
 | Was | Von wo | Sendet |
 |---|---|---|
 | Aufzeichnung, Verlauf, Import, Export | Home Assistant | nichts – läuft komplett lokal |
-| Adressen vom Handy (Standard) | Home Assistant | nichts – die Companion-App hat sie schon geschickt |
-| Adressen von OpenStreetMap (standardmäßig aus) | Home Assistant → `nominatim.openstreetmap.org` | Koordinaten von Orten unterwegs |
+| Adressen aus der Companion App (Geokodierter Standort) | Home Assistant | nichts – die App hat sie schon geschickt |
+| Adressen von OpenStreetMap (Standard: nur wenn die Companion App keine hat; abschaltbar) | Home Assistant → `nominatim.openstreetmap.org` | Koordinaten von Orten unterwegs |
 | Kartenkacheln | **dein Browser / die App** → Esri, OpenStreetMap oder CARTO (je nach Karte) | den sichtbaren Kartenausschnitt (wie jede Online-Karte) |
 | Kartenbibliothek (Leaflet) | Home Assistant selbst | nichts – eingebaut, kein CDN |
 

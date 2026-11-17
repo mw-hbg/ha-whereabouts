@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Addresses: default is now "Companion app (geocoded location), otherwise
+  OpenStreetMap". Clearer names for all choices; set-up, options and README say
+  that the sensor "Geocoded location" must be switched on in the Companion app.
+
+---
+
+- Adressen: Standard ist jetzt „Companion App (Geokodierter Standort), sonst
+  OpenStreetMap“. Klarere Namen für alle Möglichkeiten; Einrichtung, Optionen
+  und README sagen, dass in der Companion App der Sensor „Geokodierter Standort“
+  eingeschaltet sein muss.
+
 ## 0.1.0
 
 - First version: recording of the location history (stays, addresses from the

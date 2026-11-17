@@ -14,7 +14,7 @@
           "live_card": "Zeigt die Personen live auf einer Karte. Nutzt nur, was Home Assistant ohnehin weiß, es wird nichts gespeichert.",
           "history_card": "Zeigt, wo die aufgezeichneten Personen an einem gewählten Tag waren – als Route oder Tabelle.",
           "record_persons": "Aufgezeichnet wird erst, wenn du hier Personen auswählst. Der Verlauf liegt nur auf diesem Home Assistant (Ordner whereabouts im Konfigurationsordner) und bleibt erhalten, bis du ihn löschst.",
-          "address_source": "Handy: die Adresse, die die Companion-App schon ermittelt hat (bleibt lokal). OpenStreetMap: schickt die Koordinaten von Orten unterwegs an nominatim.openstreetmap.org."
+          "address_source": "Companion App (Geokodierter Standort): die Adresse, die die Home-Assistant-Companion-App auf dem Smartphone schon ermittelt hat – bleibt lokal. Dafür muss in der App auf dem Smartphone der Sensor „Geokodierter Standort“ eingeschaltet sein (Einstellungen der Companion App → Sensoren bzw. Sensoren verwalten → Geokodierter Standort). Hat sie keine passende Adresse, wird ersatzweise OpenStreetMap gefragt (Standard): Dabei werden die Koordinaten dieses Ortes an nominatim.openstreetmap.org geschickt. Du kannst auch nur die Companion App, nur OpenStreetMap oder keine Adressen wählen."
         }
       }
     },
@@ -48,7 +48,7 @@
           "live_card": "Zeigt die Personen live auf einer Karte. Nutzt nur, was Home Assistant ohnehin weiß, es wird nichts gespeichert.",
           "history_card": "Zeigt, wo die aufgezeichneten Personen an einem gewählten Tag waren – als Route oder Tabelle.",
           "record_persons": "Aufgezeichnet wird erst, wenn du hier Personen auswählst. Der Verlauf liegt nur auf diesem Home Assistant (Ordner whereabouts im Konfigurationsordner) und bleibt erhalten, bis du ihn löschst.",
-          "address_source": "Handy: die Adresse, die die Companion-App schon ermittelt hat (bleibt lokal). OpenStreetMap: schickt die Koordinaten von Orten unterwegs an nominatim.openstreetmap.org.",
+          "address_source": "Companion App (Geokodierter Standort): die Adresse, die die Home-Assistant-Companion-App auf dem Smartphone schon ermittelt hat – bleibt lokal. Dafür muss in der App auf dem Smartphone der Sensor „Geokodierter Standort“ eingeschaltet sein (Einstellungen der Companion App → Sensoren bzw. Sensoren verwalten → Geokodierter Standort). Hat sie keine passende Adresse, wird ersatzweise OpenStreetMap gefragt (Standard): Dabei werden die Koordinaten dieses Ortes an nominatim.openstreetmap.org geschickt. Du kannst auch nur die Companion App, nur OpenStreetMap oder keine Adressen wählen.",
           "min_interval": "Ein Ortswechsel (z. B. Zone betreten) wird immer gespeichert.",
           "same_place_distance": "In einer Zone spielt die genaue Position keine Rolle.",
           "retention_days": "Standard 0: Es wird nie automatisch etwas gelöscht."
@@ -56,14 +56,14 @@
       },
       "addresses": {
         "title": "Adressen",
-        "description": "Für Orte unterwegs wird eine Adresse zum Aufenthalt gespeichert. Unten pro aufgezeichneter Person ({persons}) der Sensor „Geokodierter Standort“ des Handys; er wird automatisch gefunden, wenn die Person die Companion-App nutzt.",
+        "description": "Für Orte unterwegs wird eine Adresse zum Aufenthalt gespeichert. Unten pro aufgezeichneter Person ({persons}) der Sensor „Geokodierter Standort“ ihrer Companion App; er wird automatisch gefunden. Fehlt er: in der Companion App auf dem Smartphone einschalten.",
         "data": {
           "address_source": "Adressen für Orte unterwegs",
-          "address_max_distance": "Handy-Adresse nur verwenden im Umkreis von"
+          "address_max_distance": "Adresse der Companion App nur verwenden im Umkreis von"
         },
         "data_description": {
-          "address_source": "Handy: die Adresse, die die Companion-App schon ermittelt hat (bleibt lokal). OpenStreetMap: schickt die Koordinaten von Orten unterwegs an nominatim.openstreetmap.org.",
-          "address_max_distance": "Die Geokodierung des Handys hinkt oft hinterher. Liegt ihre Position weiter vom gespeicherten Punkt entfernt, wird keine (falsche) Adresse übernommen."
+          "address_source": "Companion App (Geokodierter Standort): die Adresse, die die Home-Assistant-Companion-App auf dem Smartphone schon ermittelt hat – bleibt lokal. Dafür muss in der App auf dem Smartphone der Sensor „Geokodierter Standort“ eingeschaltet sein (Einstellungen der Companion App → Sensoren bzw. Sensoren verwalten → Geokodierter Standort). Hat sie keine passende Adresse, wird ersatzweise OpenStreetMap gefragt (Standard): Dabei werden die Koordinaten dieses Ortes an nominatim.openstreetmap.org geschickt. Du kannst auch nur die Companion App, nur OpenStreetMap oder keine Adressen wählen.",
+          "address_max_distance": "Die Geokodierung der Companion App hinkt oft hinterher. Liegt ihre Position weiter vom gespeicherten Punkt entfernt, wird keine (falsche) Adresse übernommen."
         }
       },
       "access": {
@@ -107,9 +107,9 @@
   "selector": {
     "address_source": {
       "options": {
-        "phone": "Handy (Companion-App)",
-        "phone_osm": "Handy, sonst OpenStreetMap",
-        "osm": "OpenStreetMap",
+        "phone_osm": "Companion App (Geokodierter Standort), sonst OpenStreetMap",
+        "phone": "Nur Companion App (Geokodierter Standort)",
+        "osm": "Nur OpenStreetMap",
         "off": "Keine Adressen"
       }
     },

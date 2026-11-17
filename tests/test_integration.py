@@ -14,7 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.util import dt as dt_util
 
-from custom_components.whereabouts.const import DOMAIN
+from custom_components.whereabouts.const import DEFAULT_OPTIONS, DOMAIN
 from custom_components.whereabouts.geo import phone_address, position_for
 from custom_components.whereabouts.storage import Point
 
@@ -40,6 +40,7 @@ async def test_config_flow_creates_entry_and_only_once(hass: HomeAssistant):
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["options"]["record_persons"] == ["person.alex"]
     assert result["options"]["retention_days"] == 0  # never delete by default
+    assert DEFAULT_OPTIONS["address_source"] == "phone_osm"  # Companion app, otherwise OpenStreetMap
     await hass.async_block_till_done()
     again = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
     assert again["type"] is FlowResultType.ABORT

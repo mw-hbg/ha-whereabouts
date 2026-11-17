@@ -2,6 +2,13 @@
 
 **English** · [Deutsch](README.de.md)
 
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=mw-hbg&repository=ha-whereabouts&category=integration)
+[![Add integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=whereabouts)
+[![Test](https://github.com/mw-hbg/ha-whereabouts/actions/workflows/test.yaml/badge.svg)](https://github.com/mw-hbg/ha-whereabouts/actions/workflows/test.yaml)
+[![Release](https://img.shields.io/github/v/release/mw-hbg/ha-whereabouts?label=release)](https://github.com/mw-hbg/ha-whereabouts/releases)
+[![HACS: custom](https://img.shields.io/badge/HACS-custom-41BDF5)](https://hacs.xyz)
+![Stage: experimental](https://img.shields.io/badge/stage-experimental-orange)
+
 Live map and long-term location history for the persons in Home Assistant –
 one integration, two cards, everything set up in the UI.
 
@@ -43,9 +50,11 @@ server). Whereabouts puts the whole thing into **one integration**:
 
 ## Installation
 
-1. HACS → ⋮ → **Custom repositories** → `https://github.com/mw-hbg/ha-whereabouts`, type **Integration**.
-2. Download **Whereabouts**, restart Home Assistant.
-3. **Settings → Devices & services → Add integration → Whereabouts**.
+Click **Open in HACS** above, or by hand:
+
+1. HACS → ⋮ (top right) → **Custom repositories** → Repository `https://github.com/mw-hbg/ha-whereabouts`, Type **Integration** → **Add**.
+2. Search for **Whereabouts** in HACS → **Download** → restart Home Assistant (Settings → System → ⏻).
+3. Click **Add integration** above, or **Settings → Devices & services → + Add integration → Whereabouts**.
 
 ## Set-up
 
@@ -95,4 +104,4 @@ English and German. New languages: see [TRANSLATING.md](TRANSLATING.md).
 
 ## License
 
-MIT – see [LICENSE](LICENSE). Map data © OpenStreetMap contributors.
+MIT – see [LICENSE](LICENSE). Third-party software and services: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Map data © OpenStreetMap contributors.

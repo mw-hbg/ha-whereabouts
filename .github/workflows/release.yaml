@@ -1,10 +1,8 @@
 name: Release
 
-# Actions → Release → "Run workflow": enter the new version.
-#
-# Sets the version in manifest.json, turns "## Unreleased" in CHANGELOG.md
-# into the version, tags "v<version>" and creates the GitHub release that
-# HACS offers as update. Release notes = this version's changelog section.
+# Actions → Release → "Run workflow": enter the new version. Everything else
+# (tests, version in manifest.json, changelog, tag v<version>, GitHub release
+# under the owner's name) is done by the shared workflow.
 on:
   workflow_dispatch:
     inputs:
@@ -22,56 +20,9 @@ concurrency:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-      - name: Tests must pass
-        run: |
-          pip install -r requirements_test.txt
-          ruff check .
-          pytest -q
-      - name: Check version and changelog
-        id: check
-        run: |
-          version="${{ inputs.version }}"
-          version="${version#v}"
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Version must look like 1.2.3"; exit 1
-          fi
-          current=$(python3 -c 'import json;print(json.load(open("custom_components/whereabouts/manifest.json"))["version"])')
-          if [ "$(printf '%s\n%s\n' "$current" "$version" | sort -V | tail -1)" != "$version" ] || [ "$current" = "$version" ]; then
-            echo "::error::$version is not higher than the current version $current"; exit 1
-          fi
-          if git ls-remote --exit-code --tags origin "v$version" >/dev/null; then
-            echo "::error::Tag v$version already exists"; exit 1
-          fi
-          if ! grep -q '^## Unreleased' CHANGELOG.md; then
-            echo "::error::CHANGELOG.md has no '## Unreleased' section"; exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Set version, finish changelog, tag and release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.check.outputs.version }}
-        run: |
-          python3 - <<'PY'
-          import json, os
-          path = "custom_components/whereabouts/manifest.json"
-          data = json.load(open(path))
-          data["version"] = os.environ["VERSION"]
-          with open(path, "w") as file:
-              json.dump(data, file, indent=2)
-              file.write("\n")
-          PY
-          sed -i "0,/^## Unreleased/s//## $VERSION/" CHANGELOG.md
-          awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{if(f)exit} f' CHANGELOG.md > notes.md
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add custom_components/whereabouts/manifest.json CHANGELOG.md
-          git commit -m "Release Whereabouts $VERSION"
-          git tag "v$VERSION"
-          git push origin HEAD "v$VERSION"
-          gh release create "v$VERSION" --title "Whereabouts $VERSION" --notes-file notes.md
+    uses: mw-hbg/workflows/.github/workflows/ha-integration-release.yml@main
+    with:
+      domain: whereabouts
+      version: ${{ inputs.version }}
+    secrets:
+      release-token: ${{ secrets.RELEASE_TOKEN }}

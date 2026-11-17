@@ -2,6 +2,13 @@
 
 [English](README.md) · **Deutsch**
 
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=mw-hbg&repository=ha-whereabouts&category=integration)
+[![Add integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=whereabouts)
+[![Test](https://github.com/mw-hbg/ha-whereabouts/actions/workflows/test.yaml/badge.svg)](https://github.com/mw-hbg/ha-whereabouts/actions/workflows/test.yaml)
+[![Release](https://img.shields.io/github/v/release/mw-hbg/ha-whereabouts?label=release)](https://github.com/mw-hbg/ha-whereabouts/releases)
+[![HACS: custom](https://img.shields.io/badge/HACS-custom-41BDF5)](https://hacs.xyz)
+![Stage: experimental](https://img.shields.io/badge/stage-experimental-orange)
+
 Live-Karte und dauerhafter Standortverlauf für die Personen in Home Assistant –
 eine Integration, zwei Karten, alles in der Oberfläche eingerichtet.
 
@@ -43,9 +50,11 @@ Server). Whereabouts bringt das Ganze in **eine Integration**:
 
 ## Installation
 
-1. HACS → ⋮ → **Benutzerdefinierte Repositories** → `https://github.com/mw-hbg/ha-whereabouts`, Typ **Integration**.
-2. **Whereabouts** herunterladen, Home Assistant neu starten.
-3. **Einstellungen → Geräte & Dienste → Integration hinzufügen → Whereabouts**.
+Oben auf **Open in HACS** klicken, oder von Hand:
+
+1. HACS → ⋮ (oben rechts) → **Benutzerdefinierte Repositories** → Repository `https://github.com/mw-hbg/ha-whereabouts`, Typ **Integration** → **Hinzufügen**.
+2. In HACS nach **Whereabouts** suchen → **Herunterladen** → Home Assistant neu starten (Einstellungen → System → ⏻).
+3. Oben auf **Add integration** klicken, oder **Einstellungen → Geräte & Dienste → + Integration hinzufügen → Whereabouts**.
 
 ## Einrichtung
 
@@ -96,4 +105,4 @@ Englisch und Deutsch. Neue Sprachen: siehe [TRANSLATING.md](TRANSLATING.md).
 
 ## Lizenz
 
-MIT – siehe [LICENSE](LICENSE). Kartendaten © OpenStreetMap-Mitwirkende.
+MIT – siehe [LICENSE](LICENSE). Fremde Software und Dienste: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Kartendaten © OpenStreetMap-Mitwirkende.

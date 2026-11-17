@@ -1,15 +1,15 @@
 # Third-party notices
 
-The integration itself contains no third-party code yet. It uses the following
-software and services; their licenses apply.
+The integration bundles Leaflet (unchanged release files with their license in
+`custom_components/whereabouts/frontend/leaflet/`). It also uses the following
+software and services; their licenses and terms apply.
 
 | Software / service | Used for | License / terms | Copyright |
 |---|---|---|---|
+| [Leaflet](https://leafletjs.com) 1.9.4 (bundled) | Maps in both cards | BSD-2-Clause | © 2010–2023 Volodymyr Agafonkin, © 2010–2011 CloudMade |
+| Map tiles: [Esri](https://www.esri.com) (default), [OpenStreetMap](https://www.openstreetmap.org/copyright), [CARTO](https://carto.com) (own key) | Background map, loaded by the browser | Terms of the provider | © Esri and data providers, © OpenStreetMap contributors, © CARTO |
 | [Home Assistant](https://www.home-assistant.io) | Platform (APIs, frontend, file upload) | Apache-2.0 | © Home Assistant contributors |
 | [OpenStreetMap Nominatim](https://nominatim.org) (optional, off by default) | Reverse geocoding of places on the way | [Usage policy](https://operations.osmfoundation.org/policies/nominatim/); data [ODbL](https://opendatacommons.org/licenses/odbl/) | © OpenStreetMap contributors |
-
-The map library for the cards (Leaflet, BSD-2-Clause) will be listed here when
-the cards are added.
 
 "Find My" is a trademark of Apple Inc. Whereabouts is not affiliated with or
 endorsed by Apple.

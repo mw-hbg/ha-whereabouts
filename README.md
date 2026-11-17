@@ -12,8 +12,7 @@
 Live map and long-term location history for the persons in Home Assistant –
 one integration, two cards, everything set up in the UI.
 
-> **Status: in development (0.x).** The recording, the history API and import/export
-> are done and tested; the two cards follow in the next steps.
+> **Status: in development (0.x)** – experimental until version 1.0.
 
 ## What it does
 
@@ -35,8 +34,8 @@ the recorder history), [GPS Timeline](https://github.com/iamyacin/gps-timeline)
 (unlimited point storage) and [Dawarich](https://dawarich.app) (a separate
 server). Whereabouts puts the whole thing into **one integration**:
 
-- **Live map and history together** – persons, names and colours are set once and
-  look the same in both cards.
+- **Live map and history together** – one installation, the same look in both cards
+  (a person gets the same colour automatically).
 - **Stays instead of raw points** – consecutive points at the same place become
   one entry with a time span; inside a zone the exact position does not matter.
 - **Addresses that are right** – the phone's own geocoding is only used when its
@@ -68,6 +67,35 @@ The first dialog asks for the cards, the persons whose history is recorded
 | Addresses | Phone, phone + OpenStreetMap, OpenStreetMap or none; per person the phone's geocoded location sensor (found automatically) |
 | Who may see and delete the history | Administrators and own person (default), administrators only, all users |
 | Import history | Upload a file (see below) |
+
+## The cards
+
+Add them like any other card: **Edit dashboard → + Add card → "Where is…?"** or
+**"Location history"**. Everything is set in the visual editor; for one card
+filling the page use a view of type **Panel**.
+
+| Setting | "Where is…?" | "Location history" |
+|---|---|---|
+| Title | optional | optional |
+| Persons | all (or the ones you choose) | all you may see (or the ones you choose) |
+| Per person | display name, colour, address sensor | display name, colour |
+| Map | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO (own key), link for coordinates (Google, Apple, OpenStreetMap) | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO |
+| Display | info bar, status bar, zones, GPS accuracy, follow at start, zone names from zoom, reload interval | start with map or table, legend, download buttons, refresh interval |
+| Height | automatic (full height in a panel view), full screen or fixed | same |
+
+Without a colour, a person gets the same colour in both cards automatically.
+In YAML the same looks like this:
+
+```yaml
+type: custom:whereabouts-live-card
+persons: [person.alex, person.sam]
+person_settings:
+  person.alex: { color: "#378ADD" }
+  person.sam: { name: Sam, color: "#D6409F" }
+tiles: esri          # esri | osm | carto (then carto_api_key: ...)
+map_style: auto      # auto | light | dark
+map_link: google     # google | apple | osm | none
+```
 
 ## Privacy and security
 

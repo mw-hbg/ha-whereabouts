@@ -12,8 +12,7 @@
 Live-Karte und dauerhafter Standortverlauf für die Personen in Home Assistant –
 eine Integration, zwei Karten, alles in der Oberfläche eingerichtet.
 
-> **Stand: in Entwicklung (0.x).** Aufzeichnung, Verlaufs-Schnittstelle sowie Import
-> und Export sind fertig und getestet; die beiden Karten folgen in den nächsten Schritten.
+> **Stand: in Entwicklung (0.x)** – experimentell bis Version 1.0.
 
 ## Was es kann
 
@@ -35,8 +34,8 @@ Recorder-Verlauf), [GPS Timeline](https://github.com/iamyacin/gps-timeline)
 (unbegrenzte Punktspeicherung) und [Dawarich](https://dawarich.app) (eigener
 Server). Whereabouts bringt das Ganze in **eine Integration**:
 
-- **Live-Karte und Verlauf zusammen** – Personen, Namen und Farben einmal
-  einstellen, beide Karten sehen gleich aus.
+- **Live-Karte und Verlauf zusammen** – eine Installation, beide Karten im
+  gleichen Stil (eine Person bekommt automatisch dieselbe Farbe).
 - **Aufenthalte statt Rohpunkte** – aufeinanderfolgende Punkte am selben Ort
   werden ein Eintrag mit Zeitraum; in einer Zone zählt die genaue Position nicht.
 - **Adressen, die stimmen** – die Geokodierung des Handys wird nur genommen,
@@ -68,6 +67,36 @@ steht unter **Konfigurieren**:
 | Adressen | Handy, Handy + OpenStreetMap, OpenStreetMap oder keine; pro Person der Sensor „Geokodierter Standort“ des Handys (wird automatisch gefunden) |
 | Wer den Verlauf sehen und löschen darf | Administratoren und eigene Person (Standard), nur Administratoren, alle Benutzer |
 | Verlauf importieren | Datei hochladen (siehe unten) |
+
+## Die Karten
+
+Hinzufügen wie jede andere Karte: **Dashboard bearbeiten → + Karte hinzufügen →
+„Wo ist…?“** oder **„Standortverlauf“**. Alles wird im grafischen Editor
+eingestellt; für eine Karte, die die ganze Seite füllt, eine Ansicht vom Typ
+**Panel** verwenden.
+
+| Einstellung | „Wo ist…?“ | „Standortverlauf“ |
+|---|---|---|
+| Titel | optional | optional |
+| Personen | alle (oder die gewählten) | alle, die man sehen darf (oder die gewählten) |
+| Pro Person | Anzeigename, Farbe, Adress-Sensor | Anzeigename, Farbe |
+| Karte | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO (eigener Schlüssel), Link für Koordinaten (Google, Apple, OpenStreetMap) | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO |
+| Anzeige | Infoleiste, Statusleiste, Zonen, GPS-Genauigkeit, beim Start folgen, Zonennamen ab Zoom, Neuladen | Start mit Karte oder Tabelle, Legende, Download-Knöpfe, Aktualisieren |
+| Höhe | automatisch (ganze Höhe in einer Panel-Ansicht), ganze Bildschirmhöhe oder fest | ebenso |
+
+Ohne eigene Farbe bekommt eine Person in beiden Karten automatisch dieselbe
+Farbe. In YAML sieht das so aus:
+
+```yaml
+type: custom:whereabouts-live-card
+persons: [person.alex, person.sam]
+person_settings:
+  person.alex: { color: "#378ADD" }
+  person.sam: { name: Sam, color: "#D6409F" }
+tiles: esri          # esri | osm | carto (dann carto_api_key: ...)
+map_style: auto      # auto | light | dark
+map_link: google     # google | apple | osm | none
+```
 
 ## Datenschutz und Sicherheit
 

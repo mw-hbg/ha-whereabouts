@@ -22,3 +22,4 @@ jobs:
     with:
       groups: |
         custom_components/whereabouts/strings.json custom_components/whereabouts/translations/*.json
+        custom_components/whereabouts/frontend/i18n/*.json

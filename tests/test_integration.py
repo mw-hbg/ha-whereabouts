@@ -68,8 +68,9 @@ async def test_history_card_off_disables_recording(hass: HomeAssistant):
 async def test_cards_are_served(hass: HomeAssistant, hass_client):
     await setup_integration(hass)
     client = await hass_client()
-    response = await client.get("/whereabouts_static/whereabouts-cards.js")
-    assert response.status == 200
+    for path in ("whereabouts-cards.js", "shared.js", "i18n/de.json", "leaflet/leaflet.js", "leaflet/leaflet.css"):
+        response = await client.get(f"/whereabouts_static/{path}")
+        assert response.status == 200, path
 
 
 # --- recording ------------------------------------------------------------

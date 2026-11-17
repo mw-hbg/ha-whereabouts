@@ -1,0 +1,377 @@
+// Whereabouts – shared helpers for both cards.
+// Loaded by whereabouts-cards.js with the same "?v=<version>" as the cards.
+
+const SCRIPT_URL = new URL(import.meta.url);
+export const BASE = SCRIPT_URL.pathname.replace(/\/[^/]*$/, ''); // /whereabouts_static
+export const QUERY = SCRIPT_URL.search; // ?v=<version>
+
+// Distinct colours for persons without a configured colour. A person gets the
+// colour of its position among ALL persons in Home Assistant, so both cards
+// show the same colour without any configuration.
+export const PALETTE = [
+  '#378ADD', '#D6409F', '#2E9E5B', '#E8833A', '#8E5CD6',
+  '#C9A227', '#1FA5A5', '#D94848', '#6B7A8F', '#9C6B3F',
+];
+
+export const DEFAULTS_MAP = {
+  map_style: 'auto', // auto | light | dark
+  tiles: 'esri', // esri | osm | carto
+  carto_api_key: '',
+  map_link: 'google', // google | apple | osm | none
+  height_mode: 'auto', // auto (full height in a panel view) | full | fixed
+  height: 450,
+};
+
+// --- translations ---------------------------------------------------------
+const translations = {};
+
+export async function loadTranslations(lang) {
+  const want = [lang, 'en'].filter(Boolean);
+  for (const code of want) {
+    if (translations[code]) return translations[code];
+    try {
+      const response = await fetch(`${BASE}/i18n/${code}.json${QUERY}`);
+      if (response.ok) {
+        translations[code] = await response.json();
+        if (code !== 'en' && !translations.en) await loadTranslations('en');
+        return translations[code];
+      }
+    } catch (err) {
+      // try the next language
+    }
+  }
+  return {};
+}
+
+export function language(hass) {
+  return ((hass && ((hass.locale && hass.locale.language) || hass.language)) || 'en').split('-')[0];
+}
+
+export function translator(hass) {
+  const lang = language(hass);
+  return (key, vars = {}) => {
+    const text = (translations[lang] && translations[lang][key]) || (translations.en && translations.en[key]) || key;
+    return text.replace(/\{(\w+)\}/g, (_, name) => (name in vars ? String(vars[name]) : `{${name}}`));
+  };
+}
+
+// --- Leaflet (bundled with the integration, no CDN) -------------------------
+let leafletPromise = null;
+
+export function loadLeaflet() {
+  if (window.L && window.L.map) return Promise.resolve();
+  if (!leafletPromise) {
+    leafletPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = `${BASE}/leaflet/leaflet.js`;
+      script.onload = resolve;
+      script.onerror = () => {
+        script.remove();
+        leafletPromise = null;
+        reject(new Error('Leaflet could not be loaded'));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return leafletPromise;
+}
+
+// Leaflet's CSS has to live inside the card (Home Assistant uses Shadow DOM).
+export function leafletCss() {
+  return `<link rel="stylesheet" data-whereabouts-leaflet href="${BASE}/leaflet/leaflet.css">`;
+}
+
+export function waitForCss(root) {
+  const link = root.querySelector('link[data-whereabouts-leaflet]');
+  return new Promise((resolve) => {
+    if (!link || link.sheet) return resolve();
+    link.addEventListener('load', () => resolve(), { once: true });
+    link.addEventListener('error', () => resolve(), { once: true });
+  });
+}
+
+// --- map tiles ----------------------------------------------------------------
+export function isDark(hass, style) {
+  if (style === 'dark') return true;
+  if (style === 'light') return false;
+  const themes = hass && hass.themes;
+  if (themes && typeof themes.darkMode === 'boolean') return themes.darkMode;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+// Replaces the tile layers of `map`. Returns the new layers.
+export function setTiles(map, oldLayers, config, dark, container) {
+  const L = window.L;
+  oldLayers.forEach((layer) => map.removeLayer(layer));
+  const layers = [];
+  const add = (url, options) => layers.push(L.tileLayer(url, options).addTo(map));
+  container.style.background = dark ? '#262626' : '#f2efe9';
+  container.classList.toggle('wa-osm-dark', false);
+  const tiles = config.tiles || 'esri';
+  if (tiles === 'carto' && config.carto_api_key) {
+    // CARTO delivers tiles with a key only up to zoom 18 -> scale up above.
+    const style = dark ? 'dark_all' : 'rastertiles/voyager';
+    add(`https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(config.carto_api_key)}`, {
+      attribution: '&copy; OpenStreetMap &copy; CARTO', subdomains: 'abcd', maxNativeZoom: 18, maxZoom: 20,
+    });
+  } else if (tiles === 'osm') {
+    add('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxNativeZoom: 19, maxZoom: 20,
+    });
+    // OpenStreetMap has no dark style: darken the tiles with a filter.
+    container.classList.toggle('wa-osm-dark', dark);
+  } else if (dark) {
+    add('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap', maxNativeZoom: 16, maxZoom: 20,
+    });
+    add('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+      maxNativeZoom: 16, maxZoom: 20,
+    });
+  } else {
+    add('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap', maxNativeZoom: 19, maxZoom: 20,
+    });
+  }
+  return layers;
+}
+
+// CSS shared by both cards for the map itself.
+export const MAP_CSS = `
+  .leaflet-container { font: inherit; }
+  /* No hairlines between tiles at browser zoom != 100 % */
+  .leaflet-tile-container img.leaflet-tile { mix-blend-mode: plus-lighter; }
+  .leaflet-tile-pane, .leaflet-tile-container { isolation: isolate; }
+  .wa-osm-dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.9); }
+`;
+
+// Several cards share one style scope in Home Assistant (no Shadow DOM per
+// card here, Leaflet needs the light DOM) - so every rule is prefixed with the
+// card's root selector. Handles @media blocks; @keyframes stay global.
+export function scopeCss(css, scope) {
+  let out = '';
+  let i = 0;
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  while (i < text.length) {
+    const open = text.indexOf('{', i);
+    if (open < 0) { out += text.slice(i); break; }
+    const head = text.slice(i, open).trim();
+    // find the matching closing brace
+    let depth = 1;
+    let j = open + 1;
+    while (j < text.length && depth) { if (text[j] === '{') depth += 1; else if (text[j] === '}') depth -= 1; j += 1; }
+    const body = text.slice(open + 1, j - 1);
+    if (head.startsWith('@media') || head.startsWith('@supports')) out += `${head} { ${scopeCss(body, scope)} }\n`;
+    else if (head.startsWith('@')) out += `${head} {${body}}\n`;
+    else {
+      const selectors = head.split(',').map((sel) => sel.trim()).filter(Boolean)
+        .map((sel) => (sel.startsWith(scope) ? sel : `${scope} ${sel}`));
+      out += `${selectors.join(', ')} {${body}}\n`;
+    }
+    i = j;
+  }
+  return out;
+}
+
+// --- persons ----------------------------------------------------------------
+export function allPersonIds(hass) {
+  return Object.keys((hass && hass.states) || {}).filter((id) => id.startsWith('person.')).sort();
+}
+
+export function personSettings(config, entityId) {
+  return ((config && config.person_settings) || {})[entityId] || {};
+}
+
+export function personColor(hass, config, entityId) {
+  const own = personSettings(config, entityId).color;
+  if (own) return own;
+  const index = allPersonIds(hass).indexOf(entityId);
+  return PALETTE[(index < 0 ? 0 : index) % PALETTE.length];
+}
+
+export function personName(hass, config, entityId) {
+  const own = personSettings(config, entityId).name;
+  if (own) return own;
+  const st = hass && hass.states[entityId];
+  return (st && st.attributes.friendly_name) || entityId.split('.')[1];
+}
+
+// --- positions --------------------------------------------------------------
+export function distanceM(lat1, lon1, lat2, lon2) {
+  const r = 6371000;
+  const rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad;
+  const dLon = (lon2 - lon1) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * r * Math.asin(Math.sqrt(Math.min(1, h)));
+}
+
+const num = (v) => (v === null || v === undefined || v === '' ? NaN : Number(v));
+
+export function zoneFor(states, name) {
+  if (name === 'home') return states['zone.home'];
+  return Object.keys(states).filter((id) => id.startsWith('zone.')).map((id) => states[id])
+    .find((z) => z.attributes && z.attributes.friendly_name === name);
+}
+
+// Position of a person - the same rule the integration uses when recording:
+// own coordinates; otherwise (e.g. a Wi-Fi tracker is the source) the GPS
+// tracker if it lies inside the current zone, else the zone centre; away
+// without zone: the GPS tracker.
+export function position(states, st) {
+  const a = st.attributes || {};
+  const lat = num(a.latitude);
+  const lon = num(a.longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon, accuracy: num(a.gps_accuracy) || 0 };
+  const gpsId = (a.device_trackers || []).find((id) => states[id] && states[id].attributes.source_type === 'gps');
+  const gps = gpsId ? states[gpsId].attributes : {};
+  const glat = num(gps.latitude);
+  const glon = num(gps.longitude);
+  const gpsOk = Number.isFinite(glat) && Number.isFinite(glon);
+  const zone = st.state !== 'not_home' ? zoneFor(states, st.state) : null;
+  if (zone) {
+    const zlat = num(zone.attributes.latitude);
+    const zlon = num(zone.attributes.longitude);
+    if (!Number.isFinite(zlat) || !Number.isFinite(zlon)) return null;
+    const radius = (num(zone.attributes.radius) || 100) + (num(gps.gps_accuracy) || 0);
+    if (gpsOk && distanceM(glat, glon, zlat, zlon) <= radius) return { lat: glat, lon: glon, accuracy: num(gps.gps_accuracy) || 0 };
+    return { lat: zlat, lon: zlon, accuracy: 0 };
+  }
+  return gpsOk ? { lat: glat, lon: glon, accuracy: num(gps.gps_accuracy) || 0 } : null;
+}
+
+// The phone's geocoded location sensor (Companion app): a sensor on the same
+// device as one of the person's trackers that carries address attributes.
+export function findAddressSensor(hass, personState) {
+  const entities = hass.entities || {};
+  const trackers = (personState && personState.attributes.device_trackers) || [];
+  for (const trackerId of trackers) {
+    const device = entities[trackerId] && entities[trackerId].device_id;
+    if (!device) continue;
+    const match = Object.values(entities).find((e) => {
+      if (e.device_id !== device || !e.entity_id.startsWith('sensor.')) return false;
+      const st = hass.states[e.entity_id];
+      const a = (st && st.attributes) || {};
+      return ('Location' in a || 'location' in a) && ('Locality' in a || 'locality' in a || 'Thoroughfare' in a || 'thoroughfare' in a);
+    });
+    if (match) return match.entity_id;
+  }
+  return null;
+}
+
+// "Street No, City[, Country]" - the country only outside the country Home Assistant is set to.
+export function phoneAddress(hass, sensorId) {
+  const st = sensorId && hass.states[sensorId];
+  if (!st) return '';
+  const a = st.attributes || {};
+  const value = (...names) => {
+    for (const n of names) {
+      const v = a[n];
+      if (v !== undefined && v !== null && v !== '' && v !== 'null' && v !== 'N/A') return String(v);
+    }
+    return '';
+  };
+  const street = [value('thoroughfare', 'Thoroughfare'), value('sub_thoroughfare', 'Sub Thoroughfare')].filter(Boolean).join(' ');
+  const city = value('locality', 'Locality') || value('sub_locality', 'Sub Locality');
+  const parts = [street, city].filter(Boolean);
+  const code = value('iso_country_code', 'ISO Country Code').toUpperCase();
+  const country = value('country', 'Country');
+  const home = ((hass.config && hass.config.country) || '').toUpperCase();
+  if (country && code !== home) parts.push(country);
+  if (parts.length) return parts.join(', ');
+  return st.state && !['unknown', 'unavailable'].includes(st.state) ? st.state.split('\n').map((s) => s.trim()).filter(Boolean).join(', ') : '';
+}
+
+// --- texts --------------------------------------------------------------------
+export function placeText(t, state) {
+  if (state === 'home') return t('home');
+  if (state === 'not_home') return t('not_home');
+  if (!state || state === 'unknown' || state === 'unavailable') return t('unknown');
+  return state;
+}
+
+export function clock(hass, date, seconds = false) {
+  const options = { hour: '2-digit', minute: '2-digit' };
+  if (seconds) options.second = '2-digit';
+  return date.toLocaleTimeString(language(hass), options);
+}
+
+export function sinceText(hass, t, iso) {
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return '–';
+  const same = (a, b) => a.toDateString() === b.toDateString();
+  const time = t('time', { time: clock(hass, dt) });
+  if (same(dt, new Date())) return time;
+  if (same(dt, new Date(Date.now() - 86400000))) return t('yesterday', { time });
+  return `${dt.toLocaleDateString(language(hass), { day: '2-digit', month: '2-digit' })} ${time}`;
+}
+
+export function agoText(t, iso) {
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return '–';
+  const s = Math.max(0, Math.round((Date.now() - dt.getTime()) / 1000));
+  if (s < 60) return t('just_now');
+  const m = Math.round(s / 60);
+  if (m < 60) return m === 1 ? t('minute_ago') : t('minutes_ago', { n: m });
+  const h = Math.round(m / 60);
+  if (h < 24) return h === 1 ? t('hour_ago') : t('hours_ago', { n: h });
+  const d = Math.round(h / 24);
+  return d === 1 ? t('day_ago') : t('days_ago', { n: d });
+}
+
+export function mapLink(kind, lat, lon) {
+  const q = `${lat.toFixed(6)},${lon.toFixed(6)}`;
+  if (kind === 'apple') return `https://maps.apple.com/?q=${encodeURIComponent(q)}`;
+  if (kind === 'osm') return `https://www.openstreetmap.org/?mlat=${lat.toFixed(6)}&mlon=${lon.toFixed(6)}#map=17/${q.replace(',', '/')}`;
+  if (kind === 'none') return '';
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+}
+
+export function escapeHtml(text) {
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Colours from the user's config end up in CSS - allow only real colour values.
+export function safeColor(value, fallback) {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(value) ? value : fallback;
+}
+
+// Is the card inside a panel view (one card filling the page)?
+function inPanelView(el) {
+  let node = el;
+  for (let i = 0; node && i < 12; i += 1) {
+    if (node.tagName === 'HUI-PANEL-VIEW') return true;
+    node = node.parentElement || (node.getRootNode && node.getRootNode().host) || null;
+  }
+  return false;
+}
+
+// Height: full screen height (panel view) or a fixed height.
+export function applyHeight(el, config) {
+  const mode = config.height_mode || 'auto';
+  const full = mode === 'full' || (mode === 'auto' && inPanelView(el));
+  if (full) {
+    el.style.height = CSS.supports('height', '100dvh') ? 'calc(100dvh - var(--header-height, 56px))' : 'calc(100vh - 56px)';
+  } else {
+    el.style.height = `${Math.max(200, Number(config.height) || 450)}px`;
+  }
+}
+
+// --- integration ---------------------------------------------------------------
+// whereabouts/info once per page (cards and editors share it).
+let infoPromise = null;
+let infoAt = 0;
+
+export function integrationInfo(hass, fresh = false) {
+  if (!infoPromise || fresh || Date.now() - infoAt > 60000) {
+    infoAt = Date.now();
+    infoPromise = hass.callWS({ type: 'whereabouts/info' }).catch((err) => {
+      infoPromise = null;
+      throw err;
+    });
+  }
+  return infoPromise;
+}
+
+export function messageHtml(text) {
+  return `<ha-card><div style="padding:16px;color:var(--secondary-text-color)">${escapeHtml(text)}</div></ha-card>`;
+}

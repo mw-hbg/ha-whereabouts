@@ -1,0 +1,130 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Whereabouts",
+        "description": "Live-Karte und Standortverlauf für deine Personen. Alles lässt sich später unter „Konfigurieren“ ändern.",
+        "data": {
+          "live_card": "Karte „Wo ist…?“ (Live-Karte)",
+          "history_card": "Karte „Standortverlauf“",
+          "record_persons": "Verlauf dieser Personen aufzeichnen",
+          "address_source": "Adressen für Orte unterwegs"
+        },
+        "data_description": {
+          "live_card": "Zeigt die Personen live auf einer Karte. Nutzt nur, was Home Assistant ohnehin weiß, es wird nichts gespeichert.",
+          "history_card": "Zeigt, wo die aufgezeichneten Personen an einem gewählten Tag waren – als Route oder Tabelle.",
+          "record_persons": "Aufgezeichnet wird erst, wenn du hier Personen auswählst. Der Verlauf liegt nur auf diesem Home Assistant (Ordner whereabouts im Konfigurationsordner) und bleibt erhalten, bis du ihn löschst.",
+          "address_source": "Handy: die Adresse, die die Companion-App schon ermittelt hat (bleibt lokal). OpenStreetMap: schickt die Koordinaten von Orten unterwegs an nominatim.openstreetmap.org."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Whereabouts ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Whereabouts",
+        "menu_options": {
+          "basics": "Karten und Aufzeichnung",
+          "addresses": "Adressen",
+          "access": "Wer den Verlauf sehen und löschen darf",
+          "import_file": "Verlauf importieren"
+        }
+      },
+      "basics": {
+        "title": "Karten und Aufzeichnung",
+        "data": {
+          "live_card": "Karte „Wo ist…?“ (Live-Karte)",
+          "history_card": "Karte „Standortverlauf“",
+          "record_persons": "Verlauf dieser Personen aufzeichnen",
+          "address_source": "Adressen für Orte unterwegs",
+          "min_interval": "Positions-Updates am selben Ort höchstens speichern alle",
+          "same_place_distance": "Unterwegs als derselbe Ort zählen im Umkreis von",
+          "retention_days": "Verlauf löschen, der älter ist als (0 = nie)"
+        },
+        "data_description": {
+          "live_card": "Zeigt die Personen live auf einer Karte. Nutzt nur, was Home Assistant ohnehin weiß, es wird nichts gespeichert.",
+          "history_card": "Zeigt, wo die aufgezeichneten Personen an einem gewählten Tag waren – als Route oder Tabelle.",
+          "record_persons": "Aufgezeichnet wird erst, wenn du hier Personen auswählst. Der Verlauf liegt nur auf diesem Home Assistant (Ordner whereabouts im Konfigurationsordner) und bleibt erhalten, bis du ihn löschst.",
+          "address_source": "Handy: die Adresse, die die Companion-App schon ermittelt hat (bleibt lokal). OpenStreetMap: schickt die Koordinaten von Orten unterwegs an nominatim.openstreetmap.org.",
+          "min_interval": "Ein Ortswechsel (z. B. Zone betreten) wird immer gespeichert.",
+          "same_place_distance": "In einer Zone spielt die genaue Position keine Rolle.",
+          "retention_days": "Standard 0: Es wird nie automatisch etwas gelöscht."
+        }
+      },
+      "addresses": {
+        "title": "Adressen",
+        "description": "Für Orte unterwegs wird eine Adresse zum Aufenthalt gespeichert. Unten pro aufgezeichneter Person ({persons}) der Sensor „Geokodierter Standort“ des Handys; er wird automatisch gefunden, wenn die Person die Companion-App nutzt.",
+        "data": {
+          "address_source": "Adressen für Orte unterwegs",
+          "address_max_distance": "Handy-Adresse nur verwenden im Umkreis von"
+        },
+        "data_description": {
+          "address_source": "Handy: die Adresse, die die Companion-App schon ermittelt hat (bleibt lokal). OpenStreetMap: schickt die Koordinaten von Orten unterwegs an nominatim.openstreetmap.org.",
+          "address_max_distance": "Die Geokodierung des Handys hinkt oft hinterher. Liegt ihre Position weiter vom gespeicherten Punkt entfernt, wird keine (falsche) Adresse übernommen."
+        }
+      },
+      "access": {
+        "title": "Wer den Verlauf sehen und löschen darf",
+        "description": "Gilt nur für den Verlauf. Die Live-Karte zeigt, was jeder Home-Assistant-Benutzer ohnehin sehen kann.",
+        "data": {
+          "history_access": "Verlauf sehen",
+          "delete_access": "Einträge löschen"
+        },
+        "data_description": {
+          "history_access": "„Eigene Person“ ist die Person, die mit dem Benutzerkonto verknüpft ist (Einstellungen → Personen)."
+        }
+      },
+      "import_file": {
+        "title": "Verlauf importieren",
+        "description": "Unterstützt: Whereabouts-CSV (auch das, was der Export schreibt), die Tagesdateien der ursprünglichen Skript-Version (eine Datei oder viele als ZIP) und GPX. Das Format steht in der Dokumentation (FORMAT.md). {detail}",
+        "data": {
+          "file": "Datei",
+          "target_person": "In diese Person importieren",
+          "replace": "Vorhandene Tage ersetzen"
+        },
+        "data_description": {
+          "target_person": "Pflicht bei GPX. Bei CSV-Dateien leer lassen, dann gilt die Person aus der Datei.",
+          "replace": "Aus: Bereits vorhandene Einträge (gleiche Startzeit) werden übersprungen. An: Jeder Tag aus der Datei ersetzt den gespeicherten Tag vollständig."
+        }
+      }
+    },
+    "error": {
+      "unknown_format": "Das Dateiformat wurde nicht erkannt.",
+      "unreadable": "Die Datei konnte nicht gelesen werden.",
+      "too_large": "Die Datei ist zu groß (max. 50 MB, ZIP-Inhalt max. 200 MB).",
+      "no_points": "Die Datei enthält keine verwendbaren Einträge.",
+      "person_required": "Bitte die Person wählen, zu der die Datei gehört.",
+      "unknown_person": "Die Datei nennt eine Person, die es in Home Assistant nicht gibt. Bitte die Ziel-Person wählen.",
+      "not_set_up": "Whereabouts läuft nicht."
+    },
+    "abort": {
+      "import_done": "Importiert für {persons}: {added} Einträge an {days} Tagen ({skipped} waren schon vorhanden)."
+    }
+  },
+  "selector": {
+    "address_source": {
+      "options": {
+        "phone": "Handy (Companion-App)",
+        "phone_osm": "Handy, sonst OpenStreetMap",
+        "osm": "OpenStreetMap",
+        "off": "Keine Adressen"
+      }
+    },
+    "history_access": {
+      "options": {
+        "admins_and_self": "Administratoren und eigene Person",
+        "admins": "Nur Administratoren",
+        "everyone": "Alle Benutzer"
+      }
+    },
+    "delete_access": {
+      "options": {
+        "admins_and_self": "Administratoren und eigene Person",
+        "admins": "Nur Administratoren"
+      }
+    }
+  }
+}

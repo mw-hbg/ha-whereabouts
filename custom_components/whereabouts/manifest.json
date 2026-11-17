@@ -1,0 +1,15 @@
+{
+  "domain": "whereabouts",
+  "name": "Whereabouts",
+  "codeowners": ["@mw-hbg"],
+  "config_flow": true,
+  "dependencies": ["file_upload", "frontend", "http", "person", "websocket_api", "zone"],
+  "after_dependencies": ["mobile_app"],
+  "documentation": "https://github.com/mw-hbg/ha-whereabouts",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/mw-hbg/ha-whereabouts/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

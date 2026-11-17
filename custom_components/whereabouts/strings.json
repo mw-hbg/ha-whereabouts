@@ -1,0 +1,130 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Whereabouts",
+        "description": "Live map and location history for your persons. Everything can be changed later under Configure.",
+        "data": {
+          "live_card": "\"Where is...?\" card (live map)",
+          "history_card": "\"Location history\" card",
+          "record_persons": "Record the history of these persons",
+          "address_source": "Addresses for places on the way"
+        },
+        "data_description": {
+          "live_card": "Shows the persons live on a map. Uses only what Home Assistant already knows, nothing is stored.",
+          "history_card": "Shows where the recorded persons were on a chosen day, as a route or table.",
+          "record_persons": "Nothing is recorded until you choose persons here. The history is stored only on this Home Assistant (folder whereabouts in the configuration directory) and is kept until you delete it.",
+          "address_source": "Phone: the address the Companion app already determined (stays local). OpenStreetMap: sends the coordinates of places on the way to nominatim.openstreetmap.org."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Whereabouts is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Whereabouts",
+        "menu_options": {
+          "basics": "Cards and recording",
+          "addresses": "Addresses",
+          "access": "Who may see and delete the history",
+          "import_file": "Import history"
+        }
+      },
+      "basics": {
+        "title": "Cards and recording",
+        "data": {
+          "live_card": "\"Where is...?\" card (live map)",
+          "history_card": "\"Location history\" card",
+          "record_persons": "Record the history of these persons",
+          "address_source": "Addresses for places on the way",
+          "min_interval": "Store position updates at the same place at most every",
+          "same_place_distance": "On the way, count as the same place within",
+          "retention_days": "Delete history older than (0 = never)"
+        },
+        "data_description": {
+          "live_card": "Shows the persons live on a map. Uses only what Home Assistant already knows, nothing is stored.",
+          "history_card": "Shows where the recorded persons were on a chosen day, as a route or table.",
+          "record_persons": "Nothing is recorded until you choose persons here. The history is stored only on this Home Assistant (folder whereabouts in the configuration directory) and is kept until you delete it.",
+          "address_source": "Phone: the address the Companion app already determined (stays local). OpenStreetMap: sends the coordinates of places on the way to nominatim.openstreetmap.org.",
+          "min_interval": "A change of place (e.g. entering a zone) is always stored.",
+          "same_place_distance": "Inside a zone the exact position does not matter.",
+          "retention_days": "Default 0: nothing is ever deleted automatically."
+        }
+      },
+      "addresses": {
+        "title": "Addresses",
+        "description": "For places on the way, an address is stored with the stay. Below, per recorded person ({persons}), the phone's geocoded location sensor; it is found automatically when the person uses the Companion app.",
+        "data": {
+          "address_source": "Addresses for places on the way",
+          "address_max_distance": "Use the phone's address only within"
+        },
+        "data_description": {
+          "address_source": "Phone: the address the Companion app already determined (stays local). OpenStreetMap: sends the coordinates of places on the way to nominatim.openstreetmap.org.",
+          "address_max_distance": "The phone's geocoding often lags behind. If its position is further away from the stored point, no (wrong) address is used."
+        }
+      },
+      "access": {
+        "title": "Who may see and delete the history",
+        "description": "Applies to the history only. The live map shows what every Home Assistant user can see anyway.",
+        "data": {
+          "history_access": "See the history",
+          "delete_access": "Delete entries"
+        },
+        "data_description": {
+          "history_access": "\"Own person\" means the person linked to the user account (Settings → People)."
+        }
+      },
+      "import_file": {
+        "title": "Import history",
+        "description": "Supported: Whereabouts CSV (also what the export writes), the daily files of the original script version (one file or a ZIP of many) and GPX. The format is described in the documentation (FORMAT.md). {detail}",
+        "data": {
+          "file": "File",
+          "target_person": "Import into person",
+          "replace": "Replace existing days"
+        },
+        "data_description": {
+          "target_person": "Required for GPX. For CSV files, leave empty to use the person named in the file.",
+          "replace": "Off: entries that already exist (same start time) are skipped. On: every day in the file replaces the stored day completely."
+        }
+      }
+    },
+    "error": {
+      "unknown_format": "The file format was not recognized.",
+      "unreadable": "The file could not be read.",
+      "too_large": "The file is too large (max. 50 MB, ZIP content max. 200 MB).",
+      "no_points": "The file contains no usable entries.",
+      "person_required": "Please choose the person this file belongs to.",
+      "unknown_person": "The file names a person that does not exist in Home Assistant. Choose the person to import into.",
+      "not_set_up": "Whereabouts is not running."
+    },
+    "abort": {
+      "import_done": "Imported for {persons}: {added} entries on {days} days ({skipped} already existed)."
+    }
+  },
+  "selector": {
+    "address_source": {
+      "options": {
+        "phone": "Phone (Companion app)",
+        "phone_osm": "Phone, otherwise OpenStreetMap",
+        "osm": "OpenStreetMap",
+        "off": "No addresses"
+      }
+    },
+    "history_access": {
+      "options": {
+        "admins_and_self": "Administrators and own person",
+        "admins": "Administrators only",
+        "everyone": "All users"
+      }
+    },
+    "delete_access": {
+      "options": {
+        "admins_and_self": "Administrators and own person",
+        "admins": "Administrators only"
+      }
+    }
+  }
+}

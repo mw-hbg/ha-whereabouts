@@ -221,12 +221,15 @@ async def test_user_sees_only_own_person(hass: HomeAssistant, hass_ws_client, ha
     await _prepare_history(hass, hass_admin_user.id)  # alex is linked to this user
     hass_admin_user.groups = []  # ... who is now a normal user
     ws = await hass_ws_client(hass)
-    await ws.send_json({"id": 1, "type": "whereabouts/history", "person": "person.sam", "date": "2026-06-24"})
+    await ws.send_json({"id": 1, "type": "whereabouts/info"})
+    info = (await ws.receive_json())["result"]
+    assert [p["entity_id"] for p in info["persons"]] == ["person.alex"]  # nothing about the others
+    await ws.send_json({"id": 2, "type": "whereabouts/history", "person": "person.sam", "date": "2026-06-24"})
     assert (await ws.receive_json())["error"]["code"] == "forbidden"
-    await ws.send_json({"id": 2, "type": "whereabouts/history", "person": "person.alex", "date": "2026-06-24"})
+    await ws.send_json({"id": 3, "type": "whereabouts/history", "person": "person.alex", "date": "2026-06-24"})
     assert (await ws.receive_json())["success"]
     await ws.send_json(
-        {"id": 3, "type": "whereabouts/delete", "person": "person.sam", "date": "2026-06-24", "times": ["08:00:00"]}
+        {"id": 4, "type": "whereabouts/delete", "person": "person.sam", "date": "2026-06-24", "times": ["08:00:00"]}
     )
     assert (await ws.receive_json())["error"]["code"] == "forbidden"
 
@@ -256,8 +259,14 @@ async def test_export_csv_and_gpx(hass: HomeAssistant, hass_client, hass_admin_u
     assert "alex,2026-06-24,08:00:00" in await response.text()
     response = await client.get("/api/whereabouts/export?person=person.alex&from=2026-06-24&format=gpx")
     assert "<gpx" in await response.text()
-    response = await client.get("/api/whereabouts/export?person=person.alex&from=bad")
-    assert response.status == 400
+    for query in (
+        "person=person.alex&from=bad",
+        "person=person.x/..&from=2026-06-24",
+        "person=person.alex&from=2000-01-01&to=2026-06-24",
+        "person=sensor.x&from=2026-06-24",
+    ):
+        response = await client.get(f"/api/whereabouts/export?{query}")
+        assert response.status == 400, query
 
 
 async def test_export_needs_login(hass: HomeAssistant, hass_client_no_auth):

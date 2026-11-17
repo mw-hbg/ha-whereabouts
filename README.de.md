@@ -101,7 +101,7 @@ map_link: google     # google | apple | osm | none
 ## Datenschutz und Sicherheit
 
 - Der Verlauf liegt nur in `<config>/whereabouts/history/` – außerhalb von `www/`,
-  also **nicht** über `/local/` erreichbar. Die Dateien kann nur Home Assistant lesen.
+  also **nicht** über `/local/` oder eine andere Web-Adresse erreichbar.
 - Die Karten lesen den Verlauf nur über die angemeldete Home-Assistant-Verbindung;
   jede Anfrage wird gegen den angemeldeten Benutzer geprüft.
 - OpenStreetMap ist standardmäßig aus. Eingeschaltet werden die Koordinaten von
@@ -109,6 +109,19 @@ map_link: google     # google | apple | osm | none
   pro 1,5 s, Ergebnisse lokal zwischengespeichert), wie es die
   [Nutzungsregeln](https://operations.osmfoundation.org/policies/nominatim/) verlangen.
 - Die Live-Karte zeigt nur, was jeder Home-Assistant-Benutzer ohnehin sehen kann.
+
+## Verbindungen nach außen
+
+| Was | Von wo | Sendet |
+|---|---|---|
+| Aufzeichnung, Verlauf, Import, Export | Home Assistant | nichts – läuft komplett lokal |
+| Adressen vom Handy (Standard) | Home Assistant | nichts – die Companion-App hat sie schon geschickt |
+| Adressen von OpenStreetMap (standardmäßig aus) | Home Assistant → `nominatim.openstreetmap.org` | Koordinaten von Orten unterwegs |
+| Kartenkacheln | **dein Browser / die App** → Esri, OpenStreetMap oder CARTO (je nach Karte) | den sichtbaren Kartenausschnitt (wie jede Online-Karte) |
+| Kartenbibliothek (Leaflet) | Home Assistant selbst | nichts – eingebaut, kein CDN |
+
+Ohne Internet laufen Aufzeichnung und Verlauf weiter; nur der Kartenhintergrund
+bleibt leer.
 
 ## Import und Export
 

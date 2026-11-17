@@ -166,3 +166,11 @@ def test_import_keeps_same_second_rows_of_one_file(store):
     points = [Point(D, "06:46:37", "home", 48.1, 8.1), Point(D, "06:46:37", "not_home", 48.2, 8.2)]
     assert store.import_points("alex", points)["added"] == 2
     assert store.import_points("alex", points)["skipped"] == 2
+
+
+def test_export_quotes_formulas_and_import_restores_them(store, tmp_path):
+    store.add_point("alex", Point(D, "10:00:00", "not_home", 48.0, 8.0, "=HYPERLINK(1)"))
+    text = export_csv("alex", store.export_rows("alex", D, D))
+    assert ",'=HYPERLINK(1)" in text
+    parsed = read_import("e.csv", text.encode(), timezone=UTC, zone_for=lambda a, b: "", same_place_distance=50)
+    assert parsed["alex"][0].address == "=HYPERLINK(1)"

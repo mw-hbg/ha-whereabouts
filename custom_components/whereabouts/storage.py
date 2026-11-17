@@ -352,11 +352,35 @@ class HistoryStorage:
         return result
 
 
+_FORMULA_START = ("=", "+", "@", "\t", "\r")
+
+
+def _no_formula(text: str) -> str:
+    """Spreadsheets run cells that start with "=" etc. as formulas - quote them."""
+    return "'" + text if text.startswith(_FORMULA_START) else text
+
+
+def from_export_text(text: str) -> str:
+    """Undo _no_formula when importing."""
+    return text[1:] if text.startswith("'") and text[1:].startswith(_FORMULA_START) else text
+
+
 def export_csv(person: str, rows: list[tuple[str, Stay]]) -> str:
     """Whereabouts exchange format (see FORMAT.md), comma separated with header."""
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(["person", "date", "start", "end", "state", "latitude", "longitude", "address"])
     for day, stay in rows:
-        writer.writerow([person, day, stay.start, stay.end, stay.state, stay.latitude, stay.longitude, stay.address])
+        writer.writerow(
+            [
+                person,
+                day,
+                stay.start,
+                stay.end,
+                _no_formula(stay.state),
+                stay.latitude,
+                stay.longitude,
+                _no_formula(stay.address),
+            ]
+        )
     return out.getvalue()

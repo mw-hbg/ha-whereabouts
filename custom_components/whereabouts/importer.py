@@ -24,6 +24,7 @@ from xml.etree import ElementTree
 from .storage import (
     STATE_NOT_HOME,
     Point,
+    from_export_text,
     is_valid_date,
     is_valid_key,
     is_valid_time,
@@ -97,10 +98,10 @@ def parse_whereabouts_csv(text: str) -> dict[str, list[Point]]:
             Point(
                 date=date,
                 time=start,
-                state=get("state") or STATE_NOT_HOME,
+                state=from_export_text(get("state")) or STATE_NOT_HOME,
                 latitude=to_float(get("latitude")),
                 longitude=to_float(get("longitude")),
-                address=get("address"),
+                address=from_export_text(get("address")),
                 end=end if is_valid_time(end) else "",
             )
         )

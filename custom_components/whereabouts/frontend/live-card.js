@@ -557,7 +557,7 @@ export function defineLiveCard(S) {
         const color = home ? '#2e7d32' : '#ef6c00';
         L.circle([Number(a.latitude), Number(a.longitude)], {
           radius: Number(a.radius) || 100, color, weight: 1.5, opacity: 0.7, fillColor: color, fillOpacity: 0.1, interactive: false,
-        }).addTo(this._zoneLayer).bindTooltip(home ? this._t('home') : (a.friendly_name || z.entity_id), {
+        }).addTo(this._zoneLayer).bindTooltip(S.escapeHtml(home ? this._t('home') : (a.friendly_name || z.entity_id)), {
           permanent: true, direction: 'center', offset: [0, 14], className: 'zonen-name',
         });
       });

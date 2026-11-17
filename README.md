@@ -100,7 +100,7 @@ map_link: google     # google | apple | osm | none
 ## Privacy and security
 
 - The history is stored only in `<config>/whereabouts/history/` – outside `www/`,
-  so it is **not** reachable via `/local/`. Files are readable by Home Assistant only.
+  so it is **not** reachable via `/local/` or any other web address.
 - The cards read the history only through Home Assistant's authenticated
   connection; every request is checked against the logged-in user.
 - OpenStreetMap is off by default. When switched on, the coordinates of places
@@ -108,6 +108,19 @@ map_link: google     # google | apple | osm | none
   results cached locally), as its
   [usage policy](https://operations.osmfoundation.org/policies/nominatim/) requires.
 - The live map shows only what every Home Assistant user can see anyway.
+
+## Connections to the outside
+
+| What | From where | Sends |
+|---|---|---|
+| Recording, history, import, export | Home Assistant | nothing – works fully local |
+| Addresses from the phone (default) | Home Assistant | nothing – the Companion app already sent them |
+| Addresses from OpenStreetMap (off by default) | Home Assistant → `nominatim.openstreetmap.org` | coordinates of places on the way |
+| Map tiles | **your browser / app** → Esri, OpenStreetMap or CARTO (as chosen in the card) | the visible map area (like any online map) |
+| Map library (Leaflet) | Home Assistant itself | nothing – bundled, no CDN |
+
+Without internet the recording and the history keep working; only the map
+background stays empty.
 
 ## Import and export
 

@@ -34,7 +34,7 @@ from .const import (
     DOMAIN,
 )
 from .logger import person_key
-from .storage import Stay, export_csv, is_valid_date
+from .storage import Stay, export_csv, is_valid_date, is_valid_key
 
 DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 TIME_PATTERN = r"^\d{2}:\d{2}:\d{2}$"
@@ -112,13 +112,16 @@ def ws_info(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
     if runtime is None:
         connection.send_error(msg["id"], ERR_NOT_SET_UP, "Whereabouts is not set up")
         return
+    # Only persons whose history this user may see - nothing about the others.
     persons = []
     for entity_id in sorted(set(runtime.options[CONF_RECORD_PERSONS]) | set(runtime.known_persons())):
+        if not can_view(hass, connection.user, entity_id):
+            continue
         persons.append(
             {
                 "entity_id": entity_id,
                 "recording": entity_id in runtime.options[CONF_RECORD_PERSONS],
-                "can_view": can_view(hass, connection.user, entity_id),
+                "can_view": True,
                 "can_delete": can_delete(hass, connection.user, entity_id),
             }
         )
@@ -210,12 +213,15 @@ class ExportView(HomeAssistantView):
             return self.json_message("Whereabouts is not set up", HTTPStatus.NOT_FOUND)
         if (
             not person.startswith("person.")
+            or not is_valid_key(person_key(person))
             or not is_valid_date(date_from)
             or not is_valid_date(date_to)
             or date_from > date_to
             or fmt not in ("csv", "gpx")
         ):
             return self.json_message("Invalid request", HTTPStatus.BAD_REQUEST)
+        if (dt_util.parse_date(date_to) - dt_util.parse_date(date_from)).days > 3660:
+            return self.json_message("Range too long (max. 10 years)", HTTPStatus.BAD_REQUEST)
         if not can_view(hass, user, person):
             return self.json_message("Not allowed", HTTPStatus.FORBIDDEN)
         key = person_key(person)

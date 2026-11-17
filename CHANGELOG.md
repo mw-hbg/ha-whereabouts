@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0
 
 - First version: recording of the location history (stays, addresses from the
   phone or OpenStreetMap, day change at midnight), WebSocket API with permissions

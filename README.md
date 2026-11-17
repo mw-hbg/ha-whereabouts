@@ -2,11 +2,11 @@
 
 [English](#english) · [Deutsch](#deutsch)
 
-[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=mw-hbg&repository=ha-whereabouts&category=integration)
+[![Open in the Marketplace](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=mw-hbg&repository=ha-whereabouts&category=integration)
 [![Add integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=whereabouts)
 [![Test](https://github.com/mw-hbg/ha-whereabouts/actions/workflows/test.yaml/badge.svg)](https://github.com/mw-hbg/ha-whereabouts/actions/workflows/test.yaml)
 [![Release](https://img.shields.io/github/v/release/mw-hbg/ha-whereabouts?label=release)](https://github.com/mw-hbg/ha-whereabouts/releases)
-[![HACS: custom](https://img.shields.io/badge/HACS-custom-41BDF5)](https://hacs.xyz)
+![Marketplace: add from link](https://img.shields.io/badge/Marketplace-add%20from%20link-41BDF5)
 ![Stage: experimental](https://img.shields.io/badge/stage-experimental-orange)
 
 ## English
@@ -51,11 +51,17 @@ server). Whereabouts puts the whole thing into **one integration**:
 
 ### Installation
 
-Click **Open in HACS** above, or by hand:
+Requires Home Assistant **2026.11** or newer. Whereabouts is installed through the
+**Marketplace** (built into Home Assistant since 2026.11). Click **Open in the Marketplace** above, or by hand:
 
-1. HACS → ⋮ (top right) → **Custom repositories** → Repository `https://github.com/mw-hbg/ha-whereabouts`, Type **Integration** → **Add**.
-2. Search for **Whereabouts** in HACS → **Download** → restart Home Assistant (Settings → System → ⏻).
+1. **Settings → Marketplace → Add from link** → `https://github.com/mw-hbg/ha-whereabouts`.
+   The first time, Home Assistant asks you to connect GitHub (a code you enter on GitHub; read-only).
+2. Open **Whereabouts** → **Install**. A restart is usually not needed – if it is,
+   a repair notice says so (**Settings → System → Repairs**).
 3. Click **Add integration** above, or **Settings → Devices & services → + Add integration → Whereabouts**.
+
+Updates appear in the Marketplace and under **Settings → Updates**; after an
+update, restart Home Assistant when the repair notice asks for it.
 
 ### Set-up
 
@@ -136,7 +142,7 @@ Export: from the history card (CSV or GPX), or directly via
 
 ### Uninstalling
 
-Remove the integration under **Devices & services**, then in HACS. The recorded
+Remove the integration under **Devices & services**, then in the **Marketplace**. The recorded
 history is **kept on purpose** in `<config>/whereabouts/` – delete the folder if
 you don't need it any more. If you add the integration again, the history is
 there again.
@@ -191,11 +197,17 @@ Server). Whereabouts bringt das Ganze in **eine Integration**:
 
 ### Installation
 
-Oben auf **Open in HACS** klicken, oder von Hand:
+Benötigt Home Assistant **2026.11** oder neuer. Whereabouts wird über den
+**Marketplace** installiert (seit 2026.11 fest in Home Assistant eingebaut). Oben auf **Open in the Marketplace** klicken, oder von Hand:
 
-1. HACS → ⋮ (oben rechts) → **Benutzerdefinierte Repositories** → Repository `https://github.com/mw-hbg/ha-whereabouts`, Typ **Integration** → **Hinzufügen**.
-2. In HACS nach **Whereabouts** suchen → **Herunterladen** → Home Assistant neu starten (Einstellungen → System → ⏻).
+1. **Einstellungen → Marketplace → Über Link hinzufügen** → `https://github.com/mw-hbg/ha-whereabouts`.
+   Beim ersten Mal fragt Home Assistant nach einer Verbindung zu GitHub (ein Code, den du auf GitHub eingibst; nur lesend).
+2. **Whereabouts** öffnen → **Installieren**. Ein Neustart ist meist nicht nötig – falls doch,
+   meldet es ein Reparatur-Hinweis (**Einstellungen → System → Reparaturen**).
 3. Oben auf **Add integration** klicken, oder **Einstellungen → Geräte & Dienste → + Integration hinzufügen → Whereabouts**.
+
+Updates erscheinen im Marketplace und unter **Einstellungen → Updates**; nach einem
+Update Home Assistant neu starten, wenn der Reparatur-Hinweis darum bittet.
 
 ### Einrichtung
 
@@ -278,7 +290,7 @@ Export: aus der Verlaufskarte (CSV oder GPX) oder direkt über
 
 ### Deinstallieren
 
-Integration unter **Geräte & Dienste** entfernen, danach in HACS. Der
+Integration unter **Geräte & Dienste** entfernen, danach im **Marketplace**. Der
 aufgezeichnete Verlauf bleibt **bewusst erhalten** in `<config>/whereabouts/` –
 lösche den Ordner, wenn du ihn nicht mehr brauchst. Fügst du die Integration
 wieder hinzu, ist der Verlauf wieder da.

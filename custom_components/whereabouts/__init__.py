@@ -40,8 +40,14 @@ DATA_STATIC = f"{DOMAIN}_static_registered"
 
 
 def merged_options(entry: ConfigEntry) -> dict:
-    """Defaults plus what the user set."""
-    return {**DEFAULT_OPTIONS, **entry.options}
+    """Defaults plus what the user set (0.1.x had one person list for both cards)."""
+    options = {**DEFAULT_OPTIONS, **entry.options}
+    legacy = options.pop("show_persons", None)
+    if legacy:
+        for key in ("show_persons_live", "show_persons_history"):
+            if key not in entry.options:
+                options[key] = list(legacy)
+    return options
 
 
 @dataclass

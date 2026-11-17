@@ -49,18 +49,9 @@ async def test_config_flow_creates_entry_and_only_once(hass: HomeAssistant):
 async def test_history_card_off_disables_recording(hass: HomeAssistant):
     entry = await setup_integration(hass, record_persons=["person.alex"])
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "basics"})
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "card_history"})
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"],
-        {
-            "live_card": True,
-            "history_card": False,
-            "record_persons": ["person.alex"],
-            "address_source": "phone",
-            "min_interval": 60,
-            "same_place_distance": 50,
-            "retention_days": 0,
-        },
+        result["flow_id"], {"history_card": False, "show_persons_history": []}
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options["record_persons"] == []
@@ -330,14 +321,34 @@ async def test_subscription_follows_options(hass: HomeAssistant, hass_ws_client,
     first = (await ws.receive_json())["event"]
     assert first["shown"] == ["person.alex", "person.sam"]
     assert [p["entity_id"] for p in first["persons"]] == ["person.alex", "person.sam"]
-    # Show only Sam: the open card gets the new list without reloading
-    hass.config_entries.async_update_entry(entry, options={**entry.options, "show_persons": ["person.sam"]})
+    # Live card: only Sam. History card unchanged. Open cards get it without reloading.
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "show_persons_live": ["person.sam"]})
     await hass.async_block_till_done()
     for _ in range(5):
         event = (await ws.receive_json())["event"]
         if event.get("available") and event["shown"] == ["person.sam"]:
             break
+    assert [p["entity_id"] for p in event["persons"]] == ["person.alex", "person.sam"]
+    # History card: only Sam
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "show_persons_history": ["person.sam"]})
+    await hass.async_block_till_done()
+    for _ in range(5):
+        event = (await ws.receive_json())["event"]
+        if event.get("available") and [p["entity_id"] for p in event["persons"]] == ["person.sam"]:
+            break
     assert [p["entity_id"] for p in event["persons"]] == ["person.sam"]
     # History of Alex is kept, only hidden
     days = await hass.async_add_executor_job(entry.runtime_data.storage.days, "alex")
     assert days == ["2026-06-24"]
+
+
+async def test_legacy_show_persons_applies_to_both_cards(hass: HomeAssistant):
+    entry = await setup_integration(hass, record_persons=["person.alex"])
+    old = {key: value for key, value in entry.options.items() if not key.startswith("show_persons_")}
+    hass.config_entries.async_update_entry(entry, options={**old, "show_persons": ["person.sam"]})
+    from custom_components.whereabouts import merged_options
+
+    options = merged_options(entry)
+    assert options["show_persons_live"] == ["person.sam"]
+    assert options["show_persons_history"] == ["person.sam"]
+    assert "show_persons" not in options

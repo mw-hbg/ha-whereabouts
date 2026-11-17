@@ -41,6 +41,8 @@ export function defineHistoryCard(S) {
       this._staleView = false;
       this._dark = null;
       this._signature = '';
+      this._zoneLayer = null;
+      this._zoneSignature = '';
       this._keyHandler = (e) => this._key(e);
     }
 
@@ -59,6 +61,7 @@ export function defineHistoryCard(S) {
       }
       const dark = S.isDark(hass, this._config.map_style);
       if (this._map && dark !== this._dark) this._setTiles(dark);
+      if (this._map) this._drawZones();
     }
 
     connectedCallback() {
@@ -119,6 +122,8 @@ export function defineHistoryCard(S) {
       this._legend = null;
       this._routeLayer = null;
       this._markerLayer = null;
+      this._zoneLayer = null;
+      this._zoneSignature = '';
       this._ready = false;
       this.innerHTML = '';
     }
@@ -137,8 +142,15 @@ export function defineHistoryCard(S) {
         this._barObserver = new ResizeObserver(() => this._layout());
         this._barObserver.observe(this.querySelector('.controls'));
       }
-      const seconds = Math.max(30, Number(this._config.refresh_interval) || 120);
-      this._timer = setInterval(() => this._autoRefresh(), seconds * 1000);
+      this._interval = Math.max(30, Number(this._config.refresh_interval) || 120);
+      this._rest = this._interval;
+      this._renderCountdown();
+      this._timer = setInterval(() => {
+        if (this._date !== this._todayStr()) { this._rest = this._interval; this._renderCountdown(); return; }
+        this._rest -= 1;
+        if (this._rest <= 0) { this._rest = this._interval; this._autoRefresh(); }
+        this._renderCountdown();
+      }, 1000);
       document.addEventListener('keydown', this._keyHandler);
     }
 
@@ -147,6 +159,19 @@ export function defineHistoryCard(S) {
       if (this._barObserver) { this._barObserver.disconnect(); this._barObserver = null; }
       if (this._timer) { clearInterval(this._timer); this._timer = null; }
       document.removeEventListener('keydown', this._keyHandler);
+    }
+
+    // Ring around the reload button: runs only for today (other days do not change).
+    _renderCountdown() {
+      const button = this.querySelector('.neuladen');
+      if (!button) return;
+      const today = this._date === this._todayStr();
+      button.classList.toggle('still', !today);
+      const ring = button.querySelector('.ring');
+      const length = 2 * Math.PI * 15;
+      ring.style.strokeDasharray = length.toFixed(2);
+      ring.style.strokeDashoffset = today ? (length * (1 - this._rest / this._interval)).toFixed(2) : length.toFixed(2);
+      button.title = today ? this._t('reload_in', { n: this._rest }) : this._t('reload_now');
     }
 
     _autoRefresh() {
@@ -192,6 +217,8 @@ export function defineHistoryCard(S) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '') || value > today) value = today;
       this._date = value;
       this._updateDateControls();
+      this._rest = this._interval;
+      this._renderCountdown();
       this._selected.clear();
       this._load({ fit: true });
     }
@@ -268,6 +295,16 @@ export function defineHistoryCard(S) {
             .controls button:disabled { opacity: 0.4; cursor: default; }
             .controls button.aktiv { background: var(--primary-color); color: var(--text-primary-color, #fff); }
             .controls button.icon { padding: 8px 12px; font-size: 18px; line-height: 1; }
+            .controls button.neuladen { position: relative; width: 38px; height: 38px; padding: 0; border-radius: 50%;
+                                        display: inline-flex; align-items: center; justify-content: center; }
+            .neuladen svg.ringe { position: absolute; inset: 1px; width: 34px; height: 34px; }
+            .neuladen .ring-hg { fill: none; stroke: rgba(127,127,127,.25); stroke-width: 2; }
+            .neuladen .ring { fill: none; stroke: var(--primary-color, #03a9f4); stroke-width: 2; stroke-linecap: round;
+                              transform: rotate(-90deg); transform-origin: 17px 17px; transition: stroke-dashoffset 1s linear; }
+            .neuladen.still .ring { transition: none; }
+            .neuladen .pfeil { width: 18px; height: 18px; }
+            .neuladen.dreht .pfeil { animation: wa-drehen .6s ease-in-out; }
+            @keyframes wa-drehen { to { transform: rotate(360deg); } }
             .controls .segmented .segment { border: none; border-right: 1px solid var(--divider-color); border-radius: 0; }
             .controls .segmented .segment:last-child { border-right: none; }
             .auswahl { display: none; flex: 0 0 auto; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--divider-color); }
@@ -278,11 +315,17 @@ export function defineHistoryCard(S) {
             .auswahl button:disabled { opacity: 0.5; cursor: default; }
             .auswahl button.loeschen, .popup button.loeschen { color: var(--error-color, #db4437); border: 1px solid var(--error-color, #db4437); }
             .auswahl button.loeschen:hover:not(:disabled), .popup button.loeschen:hover:not(:disabled) { background: var(--error-color, #db4437); color: #fff; }
-            .popup { display: flex; align-items: center; gap: 8px; font-size: 14px; }
-            .popup .marke { white-space: nowrap; flex: 0 0 auto; color: #fff; font-size: 12px; font-weight: 600; padding: 2px 7px; border-radius: 8px; }
-            .popup .text { min-width: 160px; max-width: 280px; }
-            .popup button.loeschen { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
-                                     padding: 0; border-radius: 6px; background: transparent; cursor: pointer; flex: 0 0 auto; }
+            .leaflet-popup-content { margin: 12px 14px; }
+            .popup { display: grid; grid-template-columns: minmax(0, 1fr) 32px; grid-template-rows: auto auto;
+                     column-gap: 10px; row-gap: 6px; align-items: center; font-size: 14px; }
+            .popup .zeile1 { grid-column: 1; grid-row: 1; display: flex; align-items: center; gap: 8px; min-width: 0; padding-right: 8px; }
+            .popup .zeit { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+            .popup .ort { grid-column: 1 / span 2; grid-row: 2; overflow-wrap: anywhere; }
+            .popup.mit-loeschen .ort { grid-column: 1; }
+            .popup .marke { white-space: nowrap; flex: 0 0 auto; color: #fff; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 8px;
+                            overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+            .popup button.loeschen { grid-column: 2; grid-row: 2; align-self: end; display: inline-flex; align-items: center; justify-content: center;
+                                     width: 32px; height: 32px; padding: 0; border-radius: 6px; background: transparent; cursor: pointer; }
             .popup button.loeschen svg { width: 20px; height: 20px; fill: var(--error-color, #db4437); }
             .popup button.loeschen:hover:not(:disabled) svg { fill: #fff; }
             .popup button.loeschen:disabled { opacity: 0.5; cursor: default; }
@@ -341,7 +384,10 @@ export function defineHistoryCard(S) {
               <div class="aktionen">
                 <button class="auswahlBtn" style="display:none;">${esc(t('multi_select'))}</button>
                 <button class="ansicht"></button>
-                <button class="refresh icon" title="${esc(t('refresh'))}" aria-label="${esc(t('refresh'))}">&#x21bb;</button>
+                <button class="neuladen" title="${esc(t('reload_now'))}" aria-label="${esc(t('reload_now'))}">
+                  <svg class="ringe" viewBox="0 0 34 34" aria-hidden="true"><circle class="ring-hg" cx="17" cy="17" r="15"/><circle class="ring" cx="17" cy="17" r="15"/></svg>
+                  <svg class="pfeil" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                </button>
               </div>
             </div>
           </div>
@@ -390,7 +436,13 @@ export function defineHistoryCard(S) {
         if (!this._tableView && this._selectMode) this._setSelectMode(false);
         this._updateView();
       });
-      this.querySelector('.refresh').addEventListener('click', () => this._load({ fit: false }));
+      const reload = this.querySelector('.neuladen');
+      reload.addEventListener('click', () => {
+        reload.classList.remove('dreht'); void reload.offsetWidth; reload.classList.add('dreht');
+        this._rest = this._interval;
+        this._renderCountdown();
+        this._load({ fit: false });
+      });
       this.querySelector('.auswahlBtn').addEventListener('click', () => this._setSelectMode(!this._selectMode));
       this.querySelector('.alleBtn').addEventListener('click', () => this._selectAll());
       this.querySelector('.loeschenBtn').addEventListener('click', () => this._delete([...this._selected], this.querySelector('.loeschenBtn')));
@@ -403,8 +455,11 @@ export function defineHistoryCard(S) {
         await S.loadLeaflet();
         await S.waitForCss(this);
         const home = this._hass.config || {};
-        this._map = window.L.map(this.querySelector('.wa-map')).setView([home.latitude || 0, home.longitude || 0], 14);
+        const mapDiv = this.querySelector('.wa-map');
+        this._map = window.L.map(mapDiv).setView([home.latitude || 0, home.longitude || 0], 14);
         this._setTiles(S.isDark(this._hass, this._config.map_style));
+        S.watchZoneNames(this._map, mapDiv, this._config);
+        this._drawZones();
       } catch (err) {
         // Without a map the table still works.
         console.error('Whereabouts: map could not be loaded', err);
@@ -417,6 +472,14 @@ export function defineHistoryCard(S) {
     _setTiles(dark) {
       this._dark = dark;
       this._tiles = S.setTiles(this._map, this._tiles, this._config, dark, this.querySelector('.wa-map'));
+    }
+
+    _drawZones() {
+      const signature = S.zoneSignature(this._hass, this._config);
+      if (signature === this._zoneSignature && (this._zoneLayer || !this._config.show_zones)) return;
+      this._zoneSignature = signature;
+      this._zoneLayer = S.drawZones(this._map, this._zoneLayer, this._hass, this._config, this._t);
+      this._zoneLayer.eachLayer((layer) => layer.bringToBack && layer.bringToBack());
     }
 
     // --- data ---------------------------------------------------------------------------
@@ -554,7 +617,7 @@ export function defineHistoryCard(S) {
           } else {
             marker = L.circleMarker([p.lat, p.lon], { radius: 5, color: person.color, weight: 1, fillColor: person.color, fillOpacity: 0.6 });
           }
-          marker.bindPopup(() => this._popup(p), { className: `popup-${person.key}` });
+          marker.bindPopup(() => this._popup(p), { className: `popup-${person.key}`, minWidth: 190, maxWidth: 300 });
           this._markerLayer.addLayer(marker);
         });
       });
@@ -604,20 +667,27 @@ export function defineHistoryCard(S) {
       this._legend = legend;
     }
 
+    // Two rows: name and time on top, place below; delete at the bottom right (never under the X).
     _popup(p) {
       const person = this._personById(p.person);
       const box = document.createElement('div');
       box.className = 'popup';
+      const top = document.createElement('div');
+      top.className = 'zeile1';
       const name = document.createElement('span');
       name.className = 'marke';
       name.style.background = person.color;
       name.textContent = person.name;
-      box.appendChild(name);
-      const text = document.createElement('span');
-      text.className = 'text';
-      text.textContent = `${this._timeText(p)} — ${this._placeText(p)}`;
-      box.appendChild(text);
+      const time = document.createElement('span');
+      time.className = 'zeit';
+      time.textContent = this._timeText(p);
+      top.append(name, time);
+      const place = document.createElement('div');
+      place.className = 'ort';
+      place.textContent = this._placeText(p);
+      box.append(top, place);
       if (person.canDelete) {
+        box.classList.add('mit-loeschen');
         const button = document.createElement('button');
         button.className = 'loeschen';
         button.title = this._t('delete_entry');

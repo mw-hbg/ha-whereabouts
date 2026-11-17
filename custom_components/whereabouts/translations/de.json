@@ -7,14 +7,12 @@
         "data": {
           "live_card": "Karte „Wo ist…?“ (Live-Karte)",
           "history_card": "Karte „Standortverlauf“",
-          "show_persons": "Diese Personen in den Karten anzeigen (leer = alle)",
           "record_persons": "Verlauf dieser Personen aufzeichnen",
           "address_source": "Adressen für Orte unterwegs"
         },
         "data_description": {
           "live_card": "Zeigt die Personen live auf einer Karte. Nutzt nur, was Home Assistant ohnehin weiß, es wird nichts gespeichert.",
           "history_card": "Zeigt, wo die aufgezeichneten Personen an einem gewählten Tag waren – als Route oder Tabelle.",
-          "show_persons": "Gilt für beide Karten und ändert sie sofort. Jede Karte kann in ihren eigenen Einstellungen weniger Personen zeigen. Ausblenden löscht keinen Verlauf.",
           "record_persons": "Aufgezeichnet wird erst, wenn du hier Personen auswählst. Der Verlauf liegt nur auf diesem Home Assistant (Ordner whereabouts im Konfigurationsordner) und bleibt erhalten, bis du ihn löschst.",
           "address_source": "Companion App (Geokodierter Standort): die Adresse, die die Home-Assistant-Companion-App auf dem Smartphone schon ermittelt hat – bleibt lokal. Dafür muss in der App auf dem Smartphone der Sensor „Geokodierter Standort“ eingeschaltet sein (Einstellungen der Companion App → Sensoren bzw. Sensoren verwalten → Geokodierter Standort). Hat sie keine passende Adresse, wird ersatzweise OpenStreetMap gefragt (Standard): Dabei werden die Koordinaten dieses Ortes an nominatim.openstreetmap.org geschickt. Du kannst auch nur die Companion App, nur OpenStreetMap oder keine Adressen wählen."
         }
@@ -29,30 +27,46 @@
       "init": {
         "title": "Whereabouts",
         "menu_options": {
-          "basics": "Karten und Aufzeichnung",
+          "card_live": "Karte „Wo ist…?“",
+          "card_history": "Karte „Standortverlauf“",
+          "recording": "Aufzeichnung",
           "addresses": "Adressen",
           "access": "Wer den Verlauf sehen und löschen darf",
           "import_file": "Verlauf importieren"
         }
       },
-      "basics": {
-        "title": "Karten und Aufzeichnung",
+      "card_live": {
+        "title": "Karte „Wo ist…?“",
         "data": {
           "live_card": "Karte „Wo ist…?“ (Live-Karte)",
+          "show_persons_live": "Diese Personen in „Wo ist…?“ anzeigen (leer = alle)"
+        },
+        "data_description": {
+          "live_card": "Zeigt die Personen live auf einer Karte. Nutzt nur, was Home Assistant ohnehin weiß, es wird nichts gespeichert.",
+          "show_persons_live": "Ändert die Karte sofort. In den Einstellungen der Karte legst du Anzeigename, Farbe und Bild je Person fest und kannst dort auch weniger Personen zeigen."
+        }
+      },
+      "card_history": {
+        "title": "Karte „Standortverlauf“",
+        "data": {
           "history_card": "Karte „Standortverlauf“",
-          "show_persons": "Diese Personen in den Karten anzeigen (leer = alle)",
+          "show_persons_history": "Diese Personen im „Standortverlauf“ anzeigen (leer = alle)"
+        },
+        "data_description": {
+          "history_card": "Zeigt, wo die aufgezeichneten Personen an einem gewählten Tag waren – als Route oder Tabelle.",
+          "show_persons_history": "Ändert die Karte sofort. Einen Verlauf haben nur aufgezeichnete Personen. Ausblenden löscht keinen Verlauf."
+        }
+      },
+      "recording": {
+        "title": "Aufzeichnung",
+        "data": {
           "record_persons": "Verlauf dieser Personen aufzeichnen",
-          "address_source": "Adressen für Orte unterwegs",
           "min_interval": "Positions-Updates am selben Ort höchstens speichern alle",
           "same_place_distance": "Unterwegs als derselbe Ort zählen im Umkreis von",
           "retention_days": "Verlauf löschen, der älter ist als (0 = nie)"
         },
         "data_description": {
-          "live_card": "Zeigt die Personen live auf einer Karte. Nutzt nur, was Home Assistant ohnehin weiß, es wird nichts gespeichert.",
-          "history_card": "Zeigt, wo die aufgezeichneten Personen an einem gewählten Tag waren – als Route oder Tabelle.",
-          "show_persons": "Gilt für beide Karten und ändert sie sofort. Jede Karte kann in ihren eigenen Einstellungen weniger Personen zeigen. Ausblenden löscht keinen Verlauf.",
           "record_persons": "Aufgezeichnet wird erst, wenn du hier Personen auswählst. Der Verlauf liegt nur auf diesem Home Assistant (Ordner whereabouts im Konfigurationsordner) und bleibt erhalten, bis du ihn löschst.",
-          "address_source": "Companion App (Geokodierter Standort): die Adresse, die die Home-Assistant-Companion-App auf dem Smartphone schon ermittelt hat – bleibt lokal. Dafür muss in der App auf dem Smartphone der Sensor „Geokodierter Standort“ eingeschaltet sein (Einstellungen der Companion App → Sensoren bzw. Sensoren verwalten → Geokodierter Standort). Hat sie keine passende Adresse, wird ersatzweise OpenStreetMap gefragt (Standard): Dabei werden die Koordinaten dieses Ortes an nominatim.openstreetmap.org geschickt. Du kannst auch nur die Companion App, nur OpenStreetMap oder keine Adressen wählen.",
           "min_interval": "Ein Ortswechsel (z. B. Zone betreten) wird immer gespeichert.",
           "same_place_distance": "In einer Zone spielt die genaue Position keine Rolle.",
           "retention_days": "Standard 0: Es wird nie automatisch etwas gelöscht."

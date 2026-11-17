@@ -8,6 +8,9 @@ const rgbToHex = (rgb) => (Array.isArray(rgb) && rgb.length === 3
   ? `#${rgb.map((v) => Math.max(0, Math.min(255, Number(v) || 0)).toString(16).padStart(2, '0')).join('')}`.toUpperCase()
   : undefined);
 
+const ZONE_COLORS = ['zone_color_home', 'zone_color'];
+const HELP = ['title', 'persons', 'picture', 'map_link_choice'];
+
 // defaults: { live: LIVE_DEFAULTS, history: HISTORY_DEFAULTS } (passed in, so no module is loaded twice)
 export function defineEditor(S, defaults) {
   class WhereaboutsCardEditor extends HTMLElement {
@@ -52,6 +55,7 @@ export function defineEditor(S, defaults) {
         schema: [
           { name: 'name', selector: { text: {} } },
           { name: 'color', selector: { color_rgb: {} } },
+          { name: 'picture', selector: { text: {} } },
           ...(live ? [{ name: 'address_sensor', selector: { entity: { filter: { domain: 'sensor' } } } }] : []),
         ],
       }));
@@ -59,7 +63,8 @@ export function defineEditor(S, defaults) {
         select('map_style', ['auto', 'light', 'dark']),
         select('tiles', ['esri', 'osm', 'carto']),
         ...((this._config.tiles || this._defaults.tiles) === 'carto' ? [{ name: 'carto_api_key', selector: { text: {} } }] : []),
-        ...(live ? [select('map_link', ['google', 'apple', 'osm', 'none'])] : []),
+        ...(live ? [select('map_link', ['google', 'apple', 'osm', 'waze', 'here', 'none'])] : []),
+        ...(live && this._data().map_link !== 'none' ? [{ name: 'map_link_choice', selector: { boolean: {} } }] : []),
         select('height_mode', ['auto', 'full', 'fixed']),
         ...(this._data().height_mode !== 'fixed' ? [] : [{ name: 'height', selector: { number: { min: 200, max: 2000, step: 10, mode: 'box', unit_of_measurement: 'px' } } }]),
       ];
@@ -67,10 +72,8 @@ export function defineEditor(S, defaults) {
         ? [
           { name: 'show_info_bar', selector: { boolean: {} } },
           { name: 'show_status_bar', selector: { boolean: {} } },
-          { name: 'show_zones', selector: { boolean: {} } },
           { name: 'show_accuracy', selector: { boolean: {} } },
           { name: 'follow', selector: { boolean: {} } },
-          { name: 'zone_names_zoom', selector: { number: { min: 1, max: 20, step: 1, mode: 'box' } } },
           { name: 'refresh_interval', selector: { number: { min: 5, max: 3600, step: 5, mode: 'box', unit_of_measurement: 's' } } },
         ]
         : [
@@ -79,11 +82,20 @@ export function defineEditor(S, defaults) {
           { name: 'show_export', selector: { boolean: {} } },
           { name: 'refresh_interval', selector: { number: { min: 30, max: 3600, step: 10, mode: 'box', unit_of_measurement: 's' } } },
         ];
+      const zones = [
+        { name: 'show_zones', selector: { boolean: {} } },
+        ...(this._data().show_zones ? [
+          { name: 'zone_color_home', selector: { color_rgb: {} } },
+          { name: 'zone_color', selector: { color_rgb: {} } },
+          { name: 'zone_names_zoom', selector: { number: { min: 1, max: 20, step: 1, mode: 'box' } } },
+        ] : []),
+      ];
       return [
         { name: 'title', selector: { text: {} } },
         { name: 'persons', selector: { entity: { multiple: true, filter: { domain: 'person' } } } },
         ...persons,
         { type: 'expandable', name: '', flatten: true, title: t('ed_appearance'), schema: map },
+        { type: 'expandable', name: '', flatten: true, title: t('ed_zones'), schema: zones },
         { type: 'expandable', name: '', flatten: true, title: t('ed_display'), schema: display },
       ];
     }
@@ -91,10 +103,13 @@ export function defineEditor(S, defaults) {
     // Config -> form data (defaults filled in, person settings per index)
     _data() {
       const data = { ...this._defaults, ...this._config };
+      ZONE_COLORS.forEach((key) => { data[key] = hexToRgb(data[key]); });
       const settings = this._config.person_settings || {};
       (this._hass ? this._shownPersons() : []).forEach((id, index) => {
         const own = settings[id] || {};
-        data[`ps_${index}`] = { name: own.name || '', color: hexToRgb(own.color), address_sensor: own.address_sensor || '' };
+        data[`ps_${index}`] = {
+          name: own.name || '', color: hexToRgb(own.color), picture: own.picture || '', address_sensor: own.address_sensor || '',
+        };
       });
       return data;
     }
@@ -104,7 +119,7 @@ export function defineEditor(S, defaults) {
       if (!this._form) {
         this._form = document.createElement('ha-form');
         this._form.computeLabel = (schema) => this._t(`ed_${schema.name}`);
-        this._form.computeHelper = (schema) => (schema.name === 'title' ? this._t('ed_title_help') : undefined);
+        this._form.computeHelper = (schema) => (HELP.includes(schema.name) ? this._t(`ed_${schema.name}_help`) : undefined);
         this._form.addEventListener('value-changed', (e) => this._changed(e.detail.value));
         this.appendChild(this._form);
       }
@@ -119,7 +134,7 @@ export function defineEditor(S, defaults) {
       const defaults = this._defaults;
       Object.keys(value).forEach((key) => {
         if (key.startsWith('ps_')) return;
-        const v = value[key];
+        const v = ZONE_COLORS.includes(key) ? rgbToHex(value[key]) : value[key];
         // keep the YAML short: leave out defaults and empty values
         if (v === '' || v === undefined || (Array.isArray(v) && !v.length) || v === defaults[key]) return;
         config[key] = v;
@@ -131,6 +146,7 @@ export function defineEditor(S, defaults) {
         if (ps.name) entry.name = ps.name;
         const color = rgbToHex(ps.color);
         if (color) entry.color = color;
+        if (ps.picture) entry.picture = ps.picture.trim();
         if (ps.address_sensor) entry.address_sensor = ps.address_sensor;
         if (Object.keys(entry).length) settings[id] = entry;
       });

@@ -7,14 +7,12 @@
         "data": {
           "live_card": "\"Where is...?\" card (live map)",
           "history_card": "\"Location history\" card",
-          "show_persons": "Show these persons in the cards (empty = all)",
           "record_persons": "Record the history of these persons",
           "address_source": "Addresses for places on the way"
         },
         "data_description": {
           "live_card": "Shows the persons live on a map. Uses only what Home Assistant already knows, nothing is stored.",
           "history_card": "Shows where the recorded persons were on a chosen day, as a route or table.",
-          "show_persons": "Applies to both cards and changes them at once. Each card can show fewer persons in its own settings. Hiding a person does not delete their history.",
           "record_persons": "Nothing is recorded until you choose persons here. The history is stored only on this Home Assistant (folder whereabouts in the configuration directory) and is kept until you delete it.",
           "address_source": "Companion app (geocoded location): the address the Home Assistant Companion app on the phone already determined – stays local. The sensor \"Geocoded location\" must be switched on in the app on the phone (Companion app settings → Sensors / Manage sensors → Geocoded location). If it has no fitting address, OpenStreetMap is asked instead (default): the coordinates of that place are sent to nominatim.openstreetmap.org. You can also use only the Companion app, only OpenStreetMap or no addresses."
         }
@@ -29,30 +27,46 @@
       "init": {
         "title": "Whereabouts",
         "menu_options": {
-          "basics": "Cards and recording",
+          "card_live": "\"Where is...?\" card",
+          "card_history": "\"Location history\" card",
+          "recording": "Recording",
           "addresses": "Addresses",
           "access": "Who may see and delete the history",
           "import_file": "Import history"
         }
       },
-      "basics": {
-        "title": "Cards and recording",
+      "card_live": {
+        "title": "\"Where is...?\" card",
         "data": {
           "live_card": "\"Where is...?\" card (live map)",
+          "show_persons_live": "Show these persons in \"Where is...?\" (empty = all)"
+        },
+        "data_description": {
+          "live_card": "Shows the persons live on a map. Uses only what Home Assistant already knows, nothing is stored.",
+          "show_persons_live": "Changes the card at once. In the card's own settings you choose the display name, colour and picture of each person and can show fewer persons there."
+        }
+      },
+      "card_history": {
+        "title": "\"Location history\" card",
+        "data": {
           "history_card": "\"Location history\" card",
-          "show_persons": "Show these persons in the cards (empty = all)",
+          "show_persons_history": "Show these persons in \"Location history\" (empty = all)"
+        },
+        "data_description": {
+          "history_card": "Shows where the recorded persons were on a chosen day, as a route or table.",
+          "show_persons_history": "Changes the card at once. Only recorded persons have a history. Hiding a person does not delete their history."
+        }
+      },
+      "recording": {
+        "title": "Recording",
+        "data": {
           "record_persons": "Record the history of these persons",
-          "address_source": "Addresses for places on the way",
           "min_interval": "Store position updates at the same place at most every",
           "same_place_distance": "On the way, count as the same place within",
           "retention_days": "Delete history older than (0 = never)"
         },
         "data_description": {
-          "live_card": "Shows the persons live on a map. Uses only what Home Assistant already knows, nothing is stored.",
-          "history_card": "Shows where the recorded persons were on a chosen day, as a route or table.",
-          "show_persons": "Applies to both cards and changes them at once. Each card can show fewer persons in its own settings. Hiding a person does not delete their history.",
           "record_persons": "Nothing is recorded until you choose persons here. The history is stored only on this Home Assistant (folder whereabouts in the configuration directory) and is kept until you delete it.",
-          "address_source": "Companion app (geocoded location): the address the Home Assistant Companion app on the phone already determined – stays local. The sensor \"Geocoded location\" must be switched on in the app on the phone (Companion app settings → Sensors / Manage sensors → Geocoded location). If it has no fitting address, OpenStreetMap is asked instead (default): the coordinates of that place are sent to nominatim.openstreetmap.org. You can also use only the Companion app, only OpenStreetMap or no addresses.",
           "min_interval": "A change of place (e.g. entering a zone) is always stored.",
           "same_place_distance": "Inside a zone the exact position does not matter.",
           "retention_days": "Default 0: nothing is ever deleted automatically."

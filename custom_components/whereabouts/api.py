@@ -32,7 +32,8 @@ from .const import (
     CONF_HISTORY_CARD,
     CONF_LIVE_CARD,
     CONF_RECORD_PERSONS,
-    CONF_SHOW_PERSONS,
+    CONF_SHOW_PERSONS_HISTORY,
+    CONF_SHOW_PERSONS_LIVE,
     DOMAIN,
     SIGNAL_INFO_CHANGED,
 )
@@ -108,10 +109,10 @@ def _check(hass, connection, msg, person: str, check) -> bool:
     return True
 
 
-def shown_persons(hass: HomeAssistant, options: dict) -> list[str]:
-    """Persons shown in the cards: the chosen ones, or every person in Home Assistant."""
+def shown_persons(hass: HomeAssistant, options: dict, key: str) -> list[str]:
+    """Persons shown in a card: the chosen ones, or every person in Home Assistant."""
     existing = sorted(hass.states.async_entity_ids("person"))
-    chosen = options.get(CONF_SHOW_PERSONS) or []
+    chosen = options.get(key) or []
     return [p for p in chosen if p in existing] if chosen else existing
 
 
@@ -120,7 +121,8 @@ def build_info(hass: HomeAssistant, user: User | None) -> dict[str, Any]:
     runtime = _runtime(hass)
     if runtime is None:
         return {"available": False}
-    shown = shown_persons(hass, runtime.options)
+    shown_live = shown_persons(hass, runtime.options, CONF_SHOW_PERSONS_LIVE)
+    shown = shown_persons(hass, runtime.options, CONF_SHOW_PERSONS_HISTORY)
     # History: only shown persons that have (or get) a history and that this
     # user may see - nothing about the others.
     persons = []
@@ -140,7 +142,7 @@ def build_info(hass: HomeAssistant, user: User | None) -> dict[str, Any]:
         "version": runtime.version,
         "live_card": runtime.options[CONF_LIVE_CARD],
         "history_card": runtime.options[CONF_HISTORY_CARD],
-        "shown": shown,
+        "shown": shown_live,
         "persons": persons,
         "today": dt_util.now().strftime("%Y-%m-%d"),
     }

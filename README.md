@@ -76,10 +76,20 @@ The first dialog asks for the cards, the persons whose history is recorded
 
 | Menu | What you can set |
 |---|---|
-| Cards and recording | Cards on/off, persons shown in the cards (default: all; changes open cards at once), recorded persons, store interval at the same place (60 s), "same place" radius on the way (50 m), deleting old history (default: never) |
+| "Where is…?" card | On/off, persons shown (default: all; changes open cards at once) |
+| "Location history" card | On/off, persons shown (default: all; changes open cards at once) |
+| Recording | Recorded persons, store interval at the same place (60 s), "same place" radius on the way (50 m), deleting old history (default: never) |
 | Addresses | Companion app (geocoded location), otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; per person the sensor "Geocoded location" (found automatically) |
 | Who may see and delete the history | Administrators and own person (default), administrators only, all users |
 | Import history | Upload a file (see below) |
+
+**Wi-Fi trackers (optional):** A person in Home Assistant can have several
+trackers, e.g. the Companion app (GPS) and a router or ARP-scan tracker for the
+home network. Add them to the person under **Settings → People**; Home Assistant
+then combines them (at home the stationary tracker answers faster, away the GPS).
+Whereabouts uses exactly this person state, so no extra setting is needed. Only
+watch your **own home network** this way and only add devices that also run the
+Companion app – otherwise a phone lying at home makes the person "home".
 
 ### The cards
 
@@ -91,9 +101,10 @@ filling the page use a view of type **Panel**.
 |---|---|---|
 | Title | optional | optional |
 | Persons | as set in the integration (or fewer) | as set in the integration and you may see (or fewer) |
-| Per person | display name, colour, address sensor | display name, colour |
-| Map | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO (own key), link for coordinates (Google, Apple, OpenStreetMap) | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO |
-| Display | info bar, status bar, zones, GPS accuracy, follow at start, zone names from zoom, reload interval | start with map or table, legend, download buttons, refresh interval |
+| Per person (this card only) | display name, colour, picture, address sensor | display name, colour, picture |
+| Map | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO (own key), coordinates open in Google Maps (default), Apple Maps, OpenStreetMap, Waze or HERE; on phones and tablets a choice of apps | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO |
+| Zones | on/off, colour of Home and of the other zones, names from zoom | same |
+| Display | info bar, status bar, GPS accuracy, follow at start, reload interval | start with map or table, legend, download buttons, auto reload (today only) |
 | Height | automatic (full height in a panel view), full screen or fixed | same |
 
 Without a colour, a person gets the same colour in both cards automatically.
@@ -104,10 +115,13 @@ type: custom:whereabouts-live-card
 persons: [person.alex, person.sam]
 person_settings:
   person.alex: { color: "#378ADD" }
-  person.sam: { name: Sam, color: "#D6409F" }
+  person.sam: { name: Sam, color: "#D6409F", picture: /local/pictures/sam.jpg }
 tiles: esri          # esri | osm | carto (then carto_api_key: ...)
 map_style: auto      # auto | light | dark
-map_link: google     # google | apple | osm | none
+map_link: google     # google | apple | osm | waze | here | none
+map_link_choice: true
+zone_color_home: "#2E7D32"
+zone_color: "#EF6C00"
 ```
 
 ### Privacy and security
@@ -228,10 +242,21 @@ steht unter **Konfigurieren**:
 
 | Menü | Was man einstellt |
 |---|---|
-| Karten und Aufzeichnung | Karten an/aus, in den Karten angezeigte Personen (Standard: alle; ändert offene Karten sofort), aufgezeichnete Personen, Speicherabstand am selben Ort (60 s), Umkreis „derselbe Ort“ unterwegs (50 m), alten Verlauf löschen (Standard: nie) |
+| Karte „Wo ist…?“ | An/aus, angezeigte Personen (Standard: alle; ändert offene Karten sofort) |
+| Karte „Standortverlauf“ | An/aus, angezeigte Personen (Standard: alle; ändert offene Karten sofort) |
+| Aufzeichnung | Aufgezeichnete Personen, Speicherabstand am selben Ort (60 s), Umkreis „derselbe Ort“ unterwegs (50 m), alten Verlauf löschen (Standard: nie) |
 | Adressen | Companion App (Geokodierter Standort), sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; pro Person der Sensor „Geokodierter Standort“ (wird automatisch gefunden) |
 | Wer den Verlauf sehen und löschen darf | Administratoren und eigene Person (Standard), nur Administratoren, alle Benutzer |
 | Verlauf importieren | Datei hochladen (siehe unten) |
+
+**WLAN-Tracker (optional):** Eine Person in Home Assistant kann mehrere Tracker
+haben, z. B. die Companion App (GPS) und einen Router- oder ARP-Scan-Tracker fürs
+Heimnetz. Sie werden unter **Einstellungen → Personen** der Person zugeordnet;
+Home Assistant führt sie dann zusammen (zu Hause meldet der feste Tracker
+schneller, unterwegs zählt GPS). Whereabouts nutzt genau diesen Personenstatus,
+eine eigene Einstellung ist nicht nötig. Auf diese Weise nur das **eigene
+Heimnetz** überwachen und nur Geräte eintragen, auf denen auch die Companion App
+läuft – sonst gilt eine Person als „zu Hause“, nur weil ihr Handy dort liegt.
 
 ### Die Karten
 
@@ -244,9 +269,10 @@ eingestellt; für eine Karte, die die ganze Seite füllt, eine Ansicht vom Typ
 |---|---|---|
 | Titel | optional | optional |
 | Personen | wie in der Integration eingestellt (oder weniger) | wie in der Integration eingestellt und die man sehen darf (oder weniger) |
-| Pro Person | Anzeigename, Farbe, Adress-Sensor | Anzeigename, Farbe |
-| Karte | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO (eigener Schlüssel), Link für Koordinaten (Google, Apple, OpenStreetMap) | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO |
-| Anzeige | Infoleiste, Statusleiste, Zonen, GPS-Genauigkeit, beim Start folgen, Zonennamen ab Zoom, Neuladen | Start mit Karte oder Tabelle, Legende, Download-Knöpfe, Aktualisieren |
+| Pro Person (nur diese Karte) | Anzeigename, Farbe, Bild, Adress-Sensor | Anzeigename, Farbe, Bild |
+| Karte | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO (eigener Schlüssel), Koordinaten öffnen in Google Maps (Standard), Apple Karten, OpenStreetMap, Waze oder HERE; auf Handy und Tablet mit App-Auswahl | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO |
+| Zonen | an/aus, Farbe von Zuhause und der übrigen Zonen, Namen ab Zoom | ebenso |
+| Anzeige | Infoleiste, Statusleiste, GPS-Genauigkeit, beim Start folgen, Neuladen | Start mit Karte oder Tabelle, Legende, Download-Knöpfe, automatisch neu laden (nur heute) |
 | Höhe | automatisch (ganze Höhe in einer Panel-Ansicht), ganze Bildschirmhöhe oder fest | ebenso |
 
 Ohne eigene Farbe bekommt eine Person in beiden Karten automatisch dieselbe
@@ -257,10 +283,13 @@ type: custom:whereabouts-live-card
 persons: [person.alex, person.sam]
 person_settings:
   person.alex: { color: "#378ADD" }
-  person.sam: { name: Sam, color: "#D6409F" }
+  person.sam: { name: Sam, color: "#D6409F", picture: /local/bilder/sam.jpg }
 tiles: esri          # esri | osm | carto (dann carto_api_key: ...)
 map_style: auto      # auto | light | dark
-map_link: google     # google | apple | osm | none
+map_link: google     # google | apple | osm | waze | here | none
+map_link_choice: true
+zone_color_home: "#2E7D32"
+zone_color: "#EF6C00"
 ```
 
 ### Datenschutz und Sicherheit

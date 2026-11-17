@@ -6,14 +6,15 @@ export const LIVE_DEFAULTS = {
   persons: [],
   show_info_bar: true,
   show_status_bar: true,
-  show_zones: true,
   show_accuracy: true,
-  zone_names_zoom: 14,
   refresh_interval: 30,
   follow: true,
 };
 
 const MAX_ACCURACY = 1000; // larger accuracy circles are not drawn
+const CLUSTER_PX = 46; // pins closer than this (on screen) become one pin
+const AVATAR = 38; // size of a picture in a pin
+const FIT_ICON = '<path fill="currentColor" d="M5 5h5V3H3v7h2V5zm9-2v2h5v5h2V3h-7zm5 16h-5v2h7v-7h-2v5zM5 14H3v7h7v-2H5v-5zm4-5v6h6V9H9z"/>';
 
 export function defineLiveCard(S) {
   class WhereaboutsLiveCard extends HTMLElement {
@@ -33,6 +34,8 @@ export function defineLiveCard(S) {
       this._tiles = [];
       this._markers = {};
       this._circles = {};
+      this._groups = [];
+      this._panel = null;
       this._zoneLayer = null;
       this._zoneSignature = '';
       this._follow = true;
@@ -71,6 +74,7 @@ export function defineLiveCard(S) {
 
     disconnectedCallback() {
       this._stopBackground();
+      this._closePanel(false);
     }
 
     getCardSize() {
@@ -111,6 +115,8 @@ export function defineLiveCard(S) {
       this._tiles = [];
       this._markers = {};
       this._circles = {};
+      this._groups = [];
+      this._panel = null;
       this._zoneLayer = null;
       this._zoneSignature = '';
       this._last = {};
@@ -128,6 +134,7 @@ export function defineLiveCard(S) {
         key: id.replace(/[^a-z0-9_]/gi, '_'),
         name: S.personName(this._hass, this._config, id),
         color: S.safeColor(S.personColor(this._hass, this._config, id), S.PALETTE[0]),
+        picture: S.safeUrl(S.personSettings(this._config, id).picture),
         sensor: S.personSettings(this._config, id).address_sensor || null,
       }));
     }
@@ -174,7 +181,7 @@ export function defineLiveCard(S) {
           if (states[id] !== this._last[id]) { changed = true; this._last[id] = states[id]; }
         });
       });
-      if (this._zoneSig() !== this._zoneSignature) changed = true;
+      if (S.zoneSignature(this._hass, this._config) !== this._zoneSignature) changed = true;
       return changed;
     }
 
@@ -225,18 +232,47 @@ export function defineLiveCard(S) {
           .alle.aktiv { color: #fff; background: #555; }
           .wa-live.dark .alle.aktiv { background: #e8eaed; color: #202124; }
           .alle svg { width: 22px; height: 22px; }
-          .wa-marker .rund { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--farbe);
-                             background: var(--farbe) center/cover no-repeat; box-sizing: border-box;
-                             box-shadow: 0 2px 6px rgba(0,0,0,.35); color: #fff; font-weight: 700; font-size: 18px;
+          .wa-marker { background: none; border: none; }
+          .wa-marker .pin { position: relative; display: inline-flex; flex-wrap: wrap; gap: 3px; padding: 3px; box-sizing: border-box;
+                            border-radius: 999px; background: var(--rand); box-shadow: 0 2px 7px rgba(0,0,0,.4); cursor: pointer;
+                            transition: transform .15s; }
+          .wa-marker .pin:hover { transform: translateY(-2px); }
+          .wa-marker .pin.raster { border-radius: 24px; width: ${2 * AVATAR + 9}px; }
+          .wa-marker .rund { width: ${AVATAR}px; height: ${AVATAR}px; border-radius: 50%; box-sizing: border-box;
+                             border: 2px solid rgba(255,255,255,.9); background: var(--farbe) center/cover no-repeat;
+                             color: #fff; font-weight: 700; font-size: 17px;
                              display: flex; align-items: center; justify-content: center; }
-          .wa-marker .spitze { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%);
-                               width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent;
-                               border-top: 9px solid var(--farbe); }
-          .wa-live .zonen-name { background: transparent; border: none; box-shadow: none; font-weight: 600;
-                                 color: #555; text-shadow: 0 0 3px #fff, 0 0 3px #fff; padding: 0; }
-          .wa-live.dark .zonen-name { color: #ddd; text-shadow: 0 0 3px #000, 0 0 3px #000; }
-          .wa-live .zonen-name::before { display: none; }
-          .wa-live.zonen-aus .zonen-name { display: none; }
+          .wa-marker .rund.mehr { background: rgba(0,0,0,.55); font-size: 14px; }
+          .wa-marker .spitze { position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%);
+                               width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent;
+                               border-top: 10px solid var(--spitze); }
+          .infofenster { position: absolute; z-index: 1100; left: 0; top: 0; width: min(320px, calc(100% - 16px)); box-sizing: border-box;
+                         padding: 12px 14px 12px; border-radius: 14px; background: var(--wa-glas); color: var(--wa-text);
+                         backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 6px 22px rgba(0,0,0,.28);
+                         transform-origin: 0 0; will-change: transform, opacity; }
+          .infofenster[hidden] { display: none; }
+          .infofenster.gleitet { transition: transform .45s cubic-bezier(.2,.85,.25,1), opacity .3s ease-out; }
+          .infofenster.weg { transition: transform .2s ease-in, opacity .2s ease-in; opacity: 0; }
+          .infofenster .zipfel { position: absolute; bottom: -9px; width: 0; height: 0; margin-left: -9px;
+                                 border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 9px solid var(--wa-glas); }
+          .infofenster .zu { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border: none; border-radius: 50%;
+                             background: transparent; color: var(--wa-leise); cursor: pointer; font-size: 20px; line-height: 1;
+                             display: flex; align-items: center; justify-content: center; }
+          .infofenster .zu:hover { background: rgba(127,127,127,.18); color: var(--wa-text); }
+          .infofenster .eintrag + .eintrag { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(127,127,127,.25); }
+          .infofenster .eintrag { display: flex; gap: 10px; align-items: flex-start; }
+          .infofenster .eintrag:first-of-type { padding-right: 26px; }
+          .infofenster .bild { width: 36px; height: 36px; font-size: 15px; border-width: 2px; }
+          .infofenster .zeilen { min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: .92em; line-height: 1.35; }
+          .infofenster .wer { font-weight: 700; color: var(--farbe); font-size: 1.08em; }
+          .infofenster .ort { font-weight: 600; overflow-wrap: anywhere; }
+          .infofenster .ort .seit, .infofenster .leise { font-weight: 400; color: var(--wa-leise); }
+          .infofenster.unten .zipfel { bottom: auto; top: -9px; border-top: none; border-bottom: 9px solid var(--wa-glas); }
+          .infofenster.rechts .zipfel, .infofenster.links .zipfel { bottom: auto; margin: -9px 0 0; border: 9px solid transparent; }
+          .infofenster.rechts .zipfel { left: -18px !important; border-right-color: var(--wa-glas); }
+          .infofenster.links .zipfel { left: auto !important; right: -18px; border-left-color: var(--wa-glas); }
+          .infofenster a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; font-variant-numeric: tabular-nums; }
+          .infofenster a:hover { color: var(--primary-color, #03a9f4); text-decoration-style: solid; }
           .wa-live .leaflet-bottom.leaflet-right .leaflet-control-zoom { margin-bottom: 24px; }
           .statusbar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 14px;
                        font-size: 13px; color: var(--secondary-text-color, var(--wa-leise));
@@ -273,6 +309,7 @@ export function defineLiveCard(S) {
           ${title ? `<div class="wa-titel">${S.escapeHtml(title)}</div>` : ''}
           <div class="bereich">
             <div class="wa-map"></div>
+            <div class="infofenster" hidden role="dialog"></div>
             ${c.show_info_bar ? `<div class="leiste">${this._persons.map((p) => `
               <button class="person p-${p.key}" data-person="${p.key}" type="button" title="${S.escapeHtml(t('jump_to', { name: p.name }))}">
                 <div class="bild"></div>
@@ -283,7 +320,7 @@ export function defineLiveCard(S) {
                 </div>
               </button>`).join('')}</div>` : ''}
             <button class="alle${this._follow ? ' aktiv' : ''}" type="button" title="${S.escapeHtml(t('show_all'))}" aria-label="${S.escapeHtml(t('show_all'))}">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true">${FIT_ICON}</svg>
             </button>
           </div>
           ${c.show_status_bar ? `<div class="statusbar">
@@ -327,15 +364,17 @@ export function defineLiveCard(S) {
         await S.waitForCss(this);
         const L = window.L;
         const home = this._hass.config || {};
-        this._map = L.map(this.querySelector('.wa-map'), { zoomControl: false })
+        const mapDiv = this.querySelector('.wa-map');
+        this._map = L.map(mapDiv, { zoomControl: false })
           .setView([home.latitude || 0, home.longitude || 0], 12);
         L.control.zoom({ position: 'bottomright' }).addTo(this._map);
         this._setTiles(S.isDark(this._hass, this._config.map_style));
         ['dragstart', 'zoomstart'].forEach((ev) => this._map.on(ev, () => { if (!this._programmatic) this._setFollow(false); }));
-        const zoneNames = () => this.querySelector('.wa-live')
-          .classList.toggle('zonen-aus', this._map.getZoom() < Number(this._config.zone_names_zoom || 14));
-        this._map.on('zoomend', zoneNames);
-        zoneNames();
+        S.watchZoneNames(this._map, mapDiv, this._config);
+        // Pins close together on screen become one pin: group again after zooming.
+        this._map.on('zoomend', () => this._drawPersons());
+        this._map.on('move zoom', () => this._placePanel(false));
+        this._map.on('click', () => this._closePanel(true));
         this._update();
         this._fitAll(false);
       } catch (err) {
@@ -360,6 +399,7 @@ export function defineLiveCard(S) {
       this._drawZones();
       this._drawPersons();
       if (this._follow) this._fitAll(true);
+      this._renderPanel();
     }
 
     _data(p) {
@@ -367,7 +407,14 @@ export function defineLiveCard(S) {
       const st = states[p.id];
       if (!st) return null;
       const pos = S.position(states, st);
-      return { st, picture: st.attributes.entity_picture || '', pos };
+      return { st, picture: p.picture || S.safeUrl(st.attributes.entity_picture), pos };
+    }
+
+    // Zone name or (away) the Companion app's address
+    _placeLine(p, d) {
+      const t = this._t;
+      if (d.st.state !== 'not_home') return S.placeText(t, d.st.state);
+      return S.phoneAddress(this._hass, this._sensorFor(p)) || S.placeText(t, d.st.state);
     }
 
     _renderBar() {
@@ -402,7 +449,7 @@ export function defineLiveCard(S) {
     _setPicture(el, url, name) {
       if (el.dataset.url === url) return;
       el.dataset.url = url;
-      if (url) { el.style.backgroundImage = `url("${url.replace(/"/g, '%22')}")`; el.textContent = ''; }
+      if (url) { el.style.backgroundImage = `url("${url}")`; el.textContent = ''; }
       else { el.style.backgroundImage = ''; el.textContent = name.charAt(0); }
     }
 
@@ -415,11 +462,11 @@ export function defineLiveCard(S) {
         const d = this._data(p);
         if (d && d.pos) {
           link.textContent = `${d.pos.lat.toFixed(5)}, ${d.pos.lon.toFixed(5)}`;
-          const href = S.mapLink(this._config.map_link, d.pos.lat, d.pos.lon);
-          if (href) link.href = href; else link.removeAttribute('href');
+          S.bindMapLink(link, this._config, t, d.pos.lat, d.pos.lon);
         } else {
           link.textContent = t('no_position');
           link.removeAttribute('href');
+          link.onclick = null;
         }
       });
       bar.querySelector('.zuletzt').textContent = this._updated
@@ -438,13 +485,20 @@ export function defineLiveCard(S) {
       }
     }
 
+    // Info bar: move to the person (no zoom out/in), then open the info window.
     _goTo(key) {
       const p = this._persons.find((x) => x.key === key);
       const d = p && this._data(p);
       if (!this._map || !d || !d.pos) return;
       this._setFollow(false);
-      this._move(() => this._map.flyTo([d.pos.lat, d.pos.lon], Math.max(this._map.getZoom(), 16), { duration: 0.8 }));
-      if (this._markers[key]) this._markers[key].setZIndexOffset(2000);
+      const target = [d.pos.lat, d.pos.lon];
+      const zoom = Math.max(this._map.getZoom(), 15);
+      const point = this._map.latLngToContainerPoint(target);
+      const size = this._map.getSize();
+      const visible = point.x > 40 && point.x < size.x - 40 && point.y > this._topFree() + 60 && point.y < size.y - 40;
+      if (visible && zoom === this._map.getZoom()) { this._openPanel(key); return; }
+      this._move(() => this._map.setView(target, zoom, { animate: true, duration: 0.5 }));
+      this._map.once('moveend', () => this._openPanel(key));
     }
 
     _setFollow(on) {
@@ -482,35 +536,83 @@ export function defineLiveCard(S) {
       });
     }
 
+    // --- pins -------------------------------------------------------------------
+    // Persons whose pins would overlap on screen form one group (one pin).
+    _grouping() {
+      const items = this._persons.map((p) => ({ p, d: this._data(p) })).filter((x) => x.d && x.d.pos);
+      const groups = [];
+      items.forEach((item) => {
+        item.pt = this._map.latLngToLayerPoint([item.d.pos.lat, item.d.pos.lon]);
+        const group = groups.find((g) => g.items.some((o) => o.pt.distanceTo(item.pt) < CLUSTER_PX));
+        if (group) group.items.push(item); else groups.push({ items: [item] });
+      });
+      groups.forEach((g) => {
+        g.key = g.items.map((x) => x.p.key).join('+');
+        g.lat = g.items.reduce((sum, x) => sum + x.d.pos.lat, 0) / g.items.length;
+        g.lon = g.items.reduce((sum, x) => sum + x.d.pos.lon, 0) / g.items.length;
+      });
+      return groups;
+    }
+
+    _avatar(p, picture) {
+      return picture
+        ? `<div class="rund" style="--farbe:${p.color};background-image:url(&quot;${S.escapeHtml(picture)}&quot;)"></div>`
+        : `<div class="rund" style="--farbe:${p.color}">${S.escapeHtml(p.name.charAt(0))}</div>`;
+    }
+
+    _icon(group) {
+      const items = group.items;
+      const n = items.length;
+      const grid = n >= 4;
+      const shown = n > 4 ? items.slice(0, 3) : items;
+      const colors = items.map((x) => x.p.color);
+      const rand = n === 1 ? colors[0] : `linear-gradient(135deg, ${colors.join(', ')})`;
+      const tip = colors[Math.floor((n - 1) / 2)];
+      const avatars = shown.map((x) => this._avatar(x.p, x.d.picture)).join('')
+        + (n > 4 ? `<div class="rund mehr">+${n - 3}</div>` : '');
+      const columns = grid ? 2 : n;
+      const width = columns * AVATAR + (columns - 1) * 3 + 6;
+      const height = (grid ? 2 : 1) * AVATAR + (grid ? 3 : 0) + 6;
+      return window.L.divIcon({
+        className: 'wa-marker',
+        html: `<div class="pin${grid ? ' raster' : ''}" style="--rand:${rand};--spitze:${tip}">${avatars}<div class="spitze"></div></div>`,
+        iconSize: [width, height], iconAnchor: [width / 2, height + 9],
+      });
+    }
+
     _drawPersons() {
+      if (!this._map) return;
       const L = window.L;
-      this._persons.forEach((p, i) => {
+      this._groups = this._grouping();
+      const keep = new Set();
+      this._groups.forEach((g, i) => {
+        keep.add(g.key);
+        const signature = g.items.map((x) => `${x.p.key}|${x.d.picture}|${x.p.color}`).join(';');
+        const old = this._markers[g.key];
+        if (old && old._waSig === signature) { old.setLatLng([g.lat, g.lon]); return; }
+        if (old) this._map.removeLayer(old);
+        const marker = L.marker([g.lat, g.lon], {
+          icon: this._icon(g), zIndexOffset: 1000 + i, keyboard: false, title: g.items.map((x) => x.p.name).join(', '),
+        }).addTo(this._map);
+        marker._waSig = signature;
+        marker.on('click', (e) => { if (e.originalEvent) window.L.DomEvent.stopPropagation(e.originalEvent); this._openPanel(g.items[0].p.key); });
+        this._markers[g.key] = marker;
+      });
+      Object.keys(this._markers).forEach((key) => {
+        if (!keep.has(key)) { this._map.removeLayer(this._markers[key]); delete this._markers[key]; }
+      });
+      this._drawCircles();
+      this._placePanel(false);
+    }
+
+    _drawCircles() {
+      const L = window.L;
+      this._persons.forEach((p) => {
         const d = this._data(p);
-        if (!d || !d.pos) {
-          if (this._markers[p.key]) { this._map.removeLayer(this._markers[p.key]); delete this._markers[p.key]; }
-          if (this._circles[p.key]) { this._map.removeLayer(this._circles[p.key]); delete this._circles[p.key]; }
-          return;
-        }
-        const pos = [d.pos.lat, d.pos.lon];
-        if (!this._markers[p.key] || this._markers[p.key]._waPicture !== d.picture) {
-          if (this._markers[p.key]) this._map.removeLayer(this._markers[p.key]);
-          const inner = d.picture
-            ? `<div class="rund" style="background-image:url(&quot;${S.escapeHtml(d.picture.replace(/"/g, '%22'))}&quot;)"></div>`
-            : `<div class="rund">${S.escapeHtml(p.name.charAt(0))}</div>`;
-          const icon = L.divIcon({
-            className: `wa-marker p-${p.key}`,
-            html: `<div style="--farbe:${p.color}">${inner}<div class="spitze"></div></div>`,
-            iconSize: [44, 44], iconAnchor: [22, 52],
-          });
-          const marker = L.marker(pos, { icon, zIndexOffset: 1000 + i, keyboard: false, title: p.name }).addTo(this._map);
-          marker._waPicture = d.picture;
-          marker.on('click', () => this._goTo(p.key));
-          this._markers[p.key] = marker;
-        } else {
-          this._markers[p.key].setLatLng(pos);
-        }
-        const circle = this._config.show_accuracy && d.pos.accuracy > 0 && d.pos.accuracy <= MAX_ACCURACY && d.st.state === 'not_home';
+        const circle = d && d.pos && this._config.show_accuracy && d.pos.accuracy > 0
+          && d.pos.accuracy <= MAX_ACCURACY && d.st.state === 'not_home';
         if (circle) {
+          const pos = [d.pos.lat, d.pos.lon];
           if (!this._circles[p.key]) {
             this._circles[p.key] = L.circle(pos, {
               radius: d.pos.accuracy, color: p.color, weight: 1, opacity: 0.6, fillColor: p.color, fillOpacity: 0.12, interactive: false,
@@ -525,38 +627,158 @@ export function defineLiveCard(S) {
       });
     }
 
-    _zones() {
-      if (!this._config.show_zones) return [];
-      const states = this._hass.states;
-      return Object.keys(states).filter((id) => id.startsWith('zone.')).map((id) => states[id])
-        .filter((z) => z.attributes && !z.attributes.passive
-          && Number.isFinite(Number(z.attributes.latitude)) && Number.isFinite(Number(z.attributes.longitude)));
+    // --- info window ----------------------------------------------------------------
+    _groupOf(key) {
+      return this._groups.find((g) => g.items.some((x) => x.p.key === key));
     }
 
-    _zoneSig() {
-      return this._zones().map((z) => {
-        const a = z.attributes;
-        return [z.entity_id, a.latitude, a.longitude, a.radius, a.friendly_name].join('|');
-      }).join(';');
+    // Slides from the person's entry in the info bar (or from the top) to the pin.
+    _openPanel(key) {
+      const group = this._groupOf(key);
+      const box = this.querySelector('.infofenster');
+      if (!group || !box) return;
+      const same = this._panel && this._panel.key === key && !box.hidden;
+      this._panel = { key };
+      this._renderPanel();
+      box.hidden = false;
+      box.classList.remove('gleitet', 'weg');
+      this._makeRoom();
+      this._placePanel(false);
+      if (same) return;
+      const area = this.querySelector('.bereich').getBoundingClientRect();
+      const end = box.getBoundingClientRect();
+      const source = this.querySelector(`.leiste .p-${key}`);
+      let from;
+      if (source && source.offsetParent) {
+        const r = source.getBoundingClientRect();
+        from = { x: r.left - area.left, y: r.top - area.top, w: r.width, h: r.height };
+      } else {
+        from = { x: (area.width - end.width) / 2, y: -end.height, w: end.width, h: end.height };
+      }
+      const to = { x: end.left - area.left, y: end.top - area.top };
+      const sx = Math.max(0.3, from.w / end.width);
+      const sy = Math.max(0.2, from.h / end.height);
+      box.style.transform = `translate(${from.x}px, ${from.y}px) scale(${sx}, ${sy})`;
+      box.style.opacity = '0.4';
+      void box.offsetWidth;
+      box.classList.add('gleitet');
+      box.style.transform = `translate(${to.x}px, ${to.y}px)`;
+      box.style.opacity = '1';
+      clearTimeout(this._panelTimer);
+      this._panelTimer = setTimeout(() => box.classList.remove('gleitet'), 480);
+    }
+
+    _closePanel(animate) {
+      const box = this.querySelector('.infofenster');
+      if (!this._panel || !box) return;
+      this._panel = null;
+      clearTimeout(this._panelTimer);
+      if (!animate) { box.hidden = true; return; }
+      box.classList.remove('gleitet');
+      box.classList.add('weg');
+      box.style.transform += ' translateY(-12px)';
+      this._panelTimer = setTimeout(() => { box.hidden = true; box.classList.remove('weg'); box.style.opacity = ''; }, 210);
+    }
+
+    _renderPanel() {
+      const box = this.querySelector('.infofenster');
+      if (!this._panel || !box) return;
+      const group = this._groupOf(this._panel.key);
+      if (!group) { this._closePanel(false); return; }
+      const t = this._t;
+      const esc = S.escapeHtml;
+      box.innerHTML = `<button class="zu" type="button" title="${esc(t('close'))}" aria-label="${esc(t('close'))}">&times;</button>`
+        + group.items.map(({ p, d }) => `
+          <div class="eintrag" style="--farbe:${p.color}">
+            <div class="bild"></div>
+            <div class="zeilen">
+              <div class="wer">${esc(p.name)}</div>
+              <div class="ort">${esc(this._placeLine(p, d))} <span class="seit">${esc(t('since', { time: S.sinceText(this._hass, t, d.st.last_changed) }))}</span></div>
+              <div class="leise">${esc(t('info_seen'))} ${esc(S.agoText(t, d.st.last_updated))} · ${esc(t('time', { time: S.clock(this._hass, new Date(d.st.last_updated)) }))}</div>
+              <div><a class="koord" data-person="${p.key}" title="${esc(t('open_in_map'))}">${d.pos.lat.toFixed(5)}, ${d.pos.lon.toFixed(5)}</a>${d.pos.accuracy > 0 ? ` <span class="leise">± ${Math.round(d.pos.accuracy)} m</span>` : ''}</div>
+            </div>
+          </div>`).join('')
+        + '<div class="zipfel"></div>';
+      group.items.forEach(({ p, d }) => {
+        const entry = box.querySelector(`.koord[data-person="${p.key}"]`);
+        S.bindMapLink(entry, this._config, t, d.pos.lat, d.pos.lon);
+        this._setPicture(entry.closest('.eintrag').querySelector('.bild'), d.picture, p.name);
+      });
+      box.querySelector('.zu').addEventListener('click', (e) => { e.stopPropagation(); this._closePanel(true); });
+      ['click', 'dblclick', 'mousedown', 'touchstart', 'wheel'].forEach((ev) => box.addEventListener(ev, (e) => e.stopPropagation()));
+      this._placePanel(false);
+    }
+
+    // Where the window sits: above the pin (below the info bar if possible),
+    // otherwise below the pin; the map moves only if neither fits.
+    _panelPosition() {
+      const group = this._panel && this._groupOf(this._panel.key);
+      const box = this.querySelector('.infofenster');
+      if (!group || !box || !this._map) return null;
+      const marker = this._markers[group.key];
+      const iconHeight = marker ? marker.options.icon.options.iconSize[1] + 9 : 50;
+      const gap = (marker ? marker.options.icon.options.iconSize[0] / 2 : 22) + 14;
+      const pt = this._map.latLngToContainerPoint([group.lat, group.lon]);
+      const size = this._map.getSize();
+      const w = box.offsetWidth;
+      const h = box.offsetHeight;
+      let x = Math.min(Math.max(8, pt.x - w / 2), size.x - w - 8);
+      const barTop = this.querySelector('.leiste') ? this._topFree() - 20 : 8;
+      const above = pt.y - iconHeight - 12 - h;
+      const below = pt.y + 14;
+      let y = above;
+      let side = '';
+      let fits = true;
+      if (above >= barTop) y = above;
+      else if (below + h <= size.y - 8) side = 'unten';
+      else if (above >= 8) y = above; // over the info bar
+      else if (h <= size.y - 16 && (pt.x + gap + w <= size.x - 8 || pt.x - gap - w >= 8)) {
+        // low map: next to the pin
+        side = pt.x + gap + w <= size.x - 8 ? 'rechts' : 'links';
+        x = side === 'rechts' ? pt.x + gap : pt.x - gap - w;
+        y = Math.min(Math.max(8, pt.y - iconHeight / 2 - h / 2), size.y - h - 8);
+      } else fits = false;
+      if (side === 'unten') y = below;
+      const tip = side === 'rechts' || side === 'links' ? Math.min(Math.max(16, pt.y - iconHeight / 2 - y), h - 16)
+        : Math.min(Math.max(16, pt.x - x), w - 16);
+      return { x, y, w, h, side, fits, tip, pinX: pt.x, pinY: pt.y };
+    }
+
+    _placePanel() {
+      const box = this.querySelector('.infofenster');
+      const at = this._panelPosition();
+      if (!at || box.hidden || box.classList.contains('gleitet') || box.classList.contains('weg')) return;
+      box.style.transform = `translate(${at.x}px, ${at.y}px)`;
+      ['unten', 'rechts', 'links'].forEach((side) => box.classList.toggle(side, at.side === side));
+      const tip = box.querySelector('.zipfel');
+      if (tip) {
+        const sideways = at.side === 'rechts' || at.side === 'links';
+        tip.style.left = sideways ? '' : `${at.tip}px`;
+        tip.style.top = sideways ? `${at.tip}px` : '';
+      }
+    }
+
+    // Pan only if the window fits nowhere or the pin is at the very edge.
+    _makeRoom() {
+      const at = this._panelPosition();
+      if (!at) return;
+      const size = this._map.getSize();
+      let dy = 0;
+      if (!at.fits) dy = at.y - 8;
+      else if (at.pinY > size.y - 20) dy = at.pinY - (size.y - 20);
+      let dx = 0;
+      if (at.pinX < 24) dx = at.pinX - 24;
+      else if (at.pinX > size.x - 24) dx = at.pinX - (size.x - 24);
+      if (!dx && !dy) return;
+      this._setFollow(false);
+      this._move(() => this._map.panBy([dx, dy], { animate: false }));
     }
 
     _drawZones() {
-      const signature = this._zoneSig();
+      const signature = S.zoneSignature(this._hass, this._config);
       if (signature === this._zoneSignature && this._zoneLayer) return;
       this._zoneSignature = signature;
-      const L = window.L;
-      if (this._zoneLayer) this._map.removeLayer(this._zoneLayer);
-      this._zoneLayer = L.layerGroup().addTo(this._map);
-      this._zones().forEach((z) => {
-        const a = z.attributes;
-        const home = z.entity_id === 'zone.home';
-        const color = home ? '#2e7d32' : '#ef6c00';
-        L.circle([Number(a.latitude), Number(a.longitude)], {
-          radius: Number(a.radius) || 100, color, weight: 1.5, opacity: 0.7, fillColor: color, fillOpacity: 0.1, interactive: false,
-        }).addTo(this._zoneLayer).bindTooltip(S.escapeHtml(home ? this._t('home') : (a.friendly_name || z.entity_id)), {
-          permanent: true, direction: 'center', offset: [0, 14], className: 'zonen-name',
-        });
-      });
+      this._zoneLayer = S.drawZones(this._map, this._zoneLayer, this._hass, this._config, this._t);
     }
   }
 

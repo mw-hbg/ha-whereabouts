@@ -17,7 +17,12 @@ export const DEFAULTS_MAP = {
   map_style: 'auto', // auto | light | dark
   tiles: 'esri', // esri | osm | carto
   carto_api_key: '',
-  map_link: 'google', // google | apple | osm | none
+  map_link: 'google', // google | apple | osm | waze | here | none
+  map_link_choice: true, // phones/tablets: ask which map app opens the coordinates
+  show_zones: true,
+  zone_names_zoom: 14,
+  zone_color_home: '#2E7D32',
+  zone_color: '#EF6C00',
   height_mode: 'auto', // auto (full height in a panel view) | full | fixed
   height: 450,
 };
@@ -107,6 +112,7 @@ export function setTiles(map, oldLayers, config, dark, container) {
   const add = (url, options) => layers.push(L.tileLayer(url, options).addTo(map));
   container.style.background = dark ? '#262626' : '#f2efe9';
   container.classList.toggle('wa-osm-dark', false);
+  container.classList.toggle('wa-dark', dark);
   const tiles = config.tiles || 'esri';
   if (tiles === 'carto' && config.carto_api_key) {
     // CARTO delivers tiles with a key only up to zoom 18 -> scale up above.
@@ -142,7 +148,53 @@ export const MAP_CSS = `
   .leaflet-tile-container img.leaflet-tile { mix-blend-mode: plus-lighter; }
   .leaflet-tile-pane, .leaflet-tile-container { isolation: isolate; }
   .wa-osm-dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.9); }
+  .zonen-name { background: transparent; border: none; box-shadow: none; font-weight: 600;
+                color: #555; text-shadow: 0 0 3px #fff, 0 0 3px #fff; padding: 0; }
+  .wa-dark .zonen-name { color: #ddd; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  .zonen-name::before { display: none; }
+  .zonen-aus .zonen-name { display: none; }
 `;
+
+// --- zones (both cards) -----------------------------------------------------------
+export function zoneStates(hass, config) {
+  if (!config.show_zones) return [];
+  const states = hass.states;
+  return Object.keys(states).filter((id) => id.startsWith('zone.')).map((id) => states[id])
+    .filter((z) => z.attributes && !z.attributes.passive
+      && Number.isFinite(Number(z.attributes.latitude)) && Number.isFinite(Number(z.attributes.longitude)));
+}
+
+export function zoneSignature(hass, config) {
+  return [config.zone_color_home, config.zone_color, ...zoneStates(hass, config).map((z) => {
+    const a = z.attributes;
+    return [z.entity_id, a.latitude, a.longitude, a.radius, a.friendly_name].join('|');
+  })].join(';');
+}
+
+// Draws the zones as circles with their names; returns the new layer.
+export function drawZones(map, oldLayer, hass, config, t) {
+  const L = window.L;
+  if (oldLayer) map.removeLayer(oldLayer);
+  const layer = L.layerGroup().addTo(map);
+  zoneStates(hass, config).forEach((z) => {
+    const a = z.attributes;
+    const home = z.entity_id === 'zone.home';
+    const color = home ? safeColor(config.zone_color_home, '#2E7D32') : safeColor(config.zone_color, '#EF6C00');
+    L.circle([Number(a.latitude), Number(a.longitude)], {
+      radius: Number(a.radius) || 100, color, weight: 1.5, opacity: 0.7, fillColor: color, fillOpacity: 0.1, interactive: false,
+    }).addTo(layer).bindTooltip(escapeHtml(home ? t('home') : (a.friendly_name || z.entity_id)), {
+      permanent: true, direction: 'center', offset: [0, 14], className: 'zonen-name',
+    });
+  });
+  return layer;
+}
+
+// Zone names only from a zoom level on (class on the map container).
+export function watchZoneNames(map, container, config) {
+  const apply = () => container.classList.toggle('zonen-aus', map.getZoom() < Number(config.zone_names_zoom || 14));
+  map.on('zoomend', apply);
+  apply();
+}
 
 // Several cards share one style scope in Home Assistant (no Shadow DOM per
 // card here, Leaflet needs the light DOM) - so every rule is prefixed with the
@@ -186,6 +238,23 @@ export function personColor(hass, config, entityId) {
   if (own) return own;
   const index = allPersonIds(hass).indexOf(entityId);
   return PALETTE[(index < 0 ? 0 : index) % PALETTE.length];
+}
+
+// Picture: own URL from the card settings, otherwise the person's picture.
+export function personPicture(hass, config, entityId) {
+  const own = safeUrl(personSettings(config, entityId).picture);
+  if (own) return own;
+  const st = hass && hass.states[entityId];
+  return safeUrl(st && st.attributes.entity_picture) || '';
+}
+
+// Only paths on this Home Assistant and http(s) addresses (they end up in CSS url()).
+export function safeUrl(value) {
+  if (typeof value !== 'string') return '';
+  const url = value.trim();
+  if (!url || /["'\\()<>\s]/.test(url)) return '';
+  if (url.startsWith('/') && !url.startsWith('//')) return url;
+  return /^https?:\/\//i.test(url) ? url : '';
 }
 
 export function personName(hass, config, entityId) {
@@ -318,12 +387,89 @@ export function agoText(t, iso) {
   return d === 1 ? t('day_ago') : t('days_ago', { n: d });
 }
 
+export const MAP_APPS = ['google', 'apple', 'osm', 'waze', 'here'];
+
 export function mapLink(kind, lat, lon) {
-  const q = `${lat.toFixed(6)},${lon.toFixed(6)}`;
-  if (kind === 'apple') return `https://maps.apple.com/?q=${encodeURIComponent(q)}`;
-  if (kind === 'osm') return `https://www.openstreetmap.org/?mlat=${lat.toFixed(6)}&mlon=${lon.toFixed(6)}#map=17/${q.replace(',', '/')}`;
+  const la = lat.toFixed(6);
+  const lo = lon.toFixed(6);
+  const q = `${la},${lo}`;
   if (kind === 'none') return '';
+  if (kind === 'apple') return `https://maps.apple.com/?ll=${q}&q=${encodeURIComponent(q)}`;
+  if (kind === 'osm') return `https://www.openstreetmap.org/?mlat=${la}&mlon=${lo}#map=17/${la}/${lo}`;
+  if (kind === 'waze') return `https://www.waze.com/ul?ll=${encodeURIComponent(q)}&navigate=no`;
+  if (kind === 'here') return `https://share.here.com/l/${q}`;
+  if (kind === 'geo') return `geo:${q}?q=${q}`;
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+}
+
+function platform() {
+  const ua = navigator.userAgent || '';
+  if (/iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  return 'other';
+}
+
+function touchDevice() {
+  return window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+}
+
+// Map apps offered in the chooser, the configured one first.
+function chooserApps(preferred) {
+  const os = platform();
+  let apps = os === 'ios' ? ['apple', 'google', 'waze', 'osm', 'here']
+    : os === 'android' ? ['google', 'waze', 'osm', 'here', 'geo'] : [...MAP_APPS];
+  if (apps.includes(preferred)) apps = [preferred, ...apps.filter((a) => a !== preferred)];
+  return apps;
+}
+
+// Fills an <a> for coordinates: link to the configured map; on phones and
+// tablets a tap asks which app should open them (if switched on).
+export function bindMapLink(a, config, t, lat, lon) {
+  const kind = config.map_link || 'google';
+  const href = mapLink(kind, lat, lon);
+  if (href) { a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; } else a.removeAttribute('href');
+  a.onclick = (e) => {
+    if (!href || config.map_link_choice === false || !touchDevice()) return;
+    e.preventDefault();
+    showMapChooser(t, lat, lon, kind);
+  };
+}
+
+const CHOOSER_CSS = `
+  .wa-chooser { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: flex-end; justify-content: center;
+                background: rgba(0,0,0,0); transition: background .2s; font-family: var(--paper-font-body1_-_font-family, system-ui, sans-serif); }
+  .wa-chooser.offen { background: rgba(0,0,0,.35); }
+  .wa-chooser .blatt { width: min(420px, 100%); box-sizing: border-box; margin: 0 8px calc(8px + env(safe-area-inset-bottom));
+                       background: var(--card-background-color, #fff); color: var(--primary-text-color, #222);
+                       border-radius: 16px; padding: 8px 0; box-shadow: 0 6px 30px rgba(0,0,0,.3);
+                       transform: translateY(110%); transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+  .wa-chooser.offen .blatt { transform: none; }
+  .wa-chooser .titel { padding: 10px 18px 6px; font-size: 13px; color: var(--secondary-text-color, #666); }
+  .wa-chooser a, .wa-chooser button { display: block; width: 100%; box-sizing: border-box; padding: 14px 18px; font: inherit; font-size: 16px;
+                                      text-align: left; color: inherit; text-decoration: none; background: none; border: none; cursor: pointer; }
+  .wa-chooser a:active, .wa-chooser button:active { background: rgba(127,127,127,.15); }
+  .wa-chooser button.abbrechen { margin-top: 4px; border-top: 1px solid var(--divider-color, rgba(0,0,0,.12)); text-align: center;
+                                 color: var(--primary-color, #03a9f4); font-weight: 600; }
+`;
+
+export function showMapChooser(t, lat, lon, preferred) {
+  if (!document.getElementById('wa-chooser-css')) {
+    const style = document.createElement('style');
+    style.id = 'wa-chooser-css';
+    style.textContent = CHOOSER_CSS;
+    document.head.appendChild(style);
+  }
+  const box = document.createElement('div');
+  box.className = 'wa-chooser';
+  box.innerHTML = `<div class="blatt" role="dialog" aria-label="${escapeHtml(t('open_with'))}">
+      <div class="titel">${escapeHtml(t('open_with'))}</div>
+      ${chooserApps(preferred).map((app) => `<a href="${escapeHtml(mapLink(app, lat, lon))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t(`ed_link_${app}`))}</a>`).join('')}
+      <button class="abbrechen" type="button">${escapeHtml(t('cancel'))}</button>
+    </div>`;
+  const close = () => { box.classList.remove('offen'); setTimeout(() => box.remove(), 250); };
+  box.addEventListener('click', (e) => { if (e.target === box || e.target.closest('a, button')) close(); });
+  document.body.appendChild(box);
+  requestAnimationFrame(() => box.classList.add('offen'));
 }
 
 export function escapeHtml(text) {

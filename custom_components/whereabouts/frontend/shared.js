@@ -17,6 +17,8 @@ export const DEFAULTS_MAP = {
   map_style: 'auto', // auto | light | dark
   tiles: 'esri', // esri | osm | carto
   carto_api_key: '',
+  carto_light: 'voyager', // CARTO style in light mode (see CARTO_STYLES)
+  carto_dark: 'dark_matter', // ... and in dark mode
   map_link: 'google', // google | apple | osm | waze | here | none
   map_link_choice: true, // phones/tablets: ask which map app opens the coordinates
   show_zones: true,
@@ -81,6 +83,26 @@ export function loadLeaflet() {
   return leafletPromise;
 }
 
+// Heatmap plugin (Leaflet.heat), only loaded when the heatmap is shown.
+let heatPromise = null;
+export function loadHeat() {
+  if (window.L && window.L.heatLayer) return Promise.resolve();
+  if (!heatPromise) {
+    heatPromise = loadLeaflet().then(() => new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = `${BASE}/leaflet-heat/leaflet-heat.js${QUERY}`;
+      script.onload = resolve;
+      script.onerror = () => {
+        script.remove();
+        heatPromise = null;
+        reject(new Error('Leaflet.heat could not be loaded'));
+      };
+      document.head.appendChild(script);
+    }));
+  }
+  return heatPromise;
+}
+
 // Leaflet's CSS has to live inside the card (Home Assistant uses Shadow DOM).
 export function leafletCss() {
   return `<link rel="stylesheet" data-whereabouts-leaflet href="${BASE}/leaflet/leaflet.css">`;
@@ -110,6 +132,16 @@ export function isDark(hass, style) {
 // `notice(text)`: shows a hint (administrators only), or nothing.
 export const FALLBACK = { carto: 'esri', esri: 'osm' };
 
+// CARTO raster styles: our name -> path of the tile URL
+export const CARTO_STYLES = {
+  voyager: 'rastertiles/voyager',
+  voyager_nolabels: 'rastertiles/voyager_nolabels',
+  positron: 'light_all',
+  positron_nolabels: 'light_nolabels',
+  dark_matter: 'dark_all',
+  dark_matter_nolabels: 'dark_nolabels',
+};
+
 export function setTiles(map, layers, config, dark, container, notice) {
   const L = window.L;
   layers.splice(0).forEach((layer) => map.removeLayer(layer));
@@ -117,7 +149,9 @@ export function setTiles(map, layers, config, dark, container, notice) {
   if (oldHint) oldHint.remove();
   // OpenStreetMap refuses tiles without a Referer (Home Assistant sends none by default).
   const add = (url, options) => {
-    const layer = L.tileLayer(url, { referrerPolicy: 'strict-origin-when-cross-origin', ...options }).addTo(map);
+    // capture: tiles must be readable for the map picture (CORS).
+    const extra = config.capture ? { crossOrigin: 'anonymous' } : {};
+    const layer = L.tileLayer(url, { referrerPolicy: 'strict-origin-when-cross-origin', ...extra, ...options }).addTo(map);
     layers.push(layer);
     return layer;
   };
@@ -129,7 +163,7 @@ export function setTiles(map, layers, config, dark, container, notice) {
   let main;
   if (tiles === 'carto') {
     // CARTO delivers tiles with a key only up to zoom 18 -> scale up above.
-    const style = dark ? 'dark_all' : 'rastertiles/voyager';
+    const style = CARTO_STYLES[dark ? config.carto_dark : config.carto_light] || (dark ? 'dark_all' : 'rastertiles/voyager');
     main = add(`https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(config.carto_api_key)}`, {
       attribution: '&copy; OpenStreetMap &copy; CARTO', subdomains: 'abcd', maxNativeZoom: 18, maxZoom: 20,
     });
@@ -560,9 +594,24 @@ function inPanelView(el) {
 export function applyHeight(el, config) {
   const mode = config.height_mode || 'auto';
   if (mode === 'fill') { el.style.height = '100%'; return; } // sidebar page
-  const full = mode === 'full' || (mode === 'auto' && inPanelView(el));
-  if (full) {
+  const panel = mode === 'auto' && inPanelView(el);
+  if (panel) {
     el.style.height = CSS.supports('height', '100dvh') ? 'calc(100dvh - var(--header-height, 56px))' : 'calc(100vh - 56px)';
+  } else if (mode === 'full') {
+    // Exactly down to the bottom of the window, measured from where the card
+    // starts (a sections view adds margins the card cannot know otherwise).
+    const fit = () => {
+      if (!el.isConnected) return;
+      const top = el.getBoundingClientRect().top + (window.scrollY || 0);
+      const viewport = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      el.style.height = `${Math.max(300, Math.floor(viewport - top - 16))}px`;
+    };
+    el.style.height = CSS.supports('height', '100dvh') ? 'calc(100dvh - var(--header-height, 56px) - 32px)' : 'calc(100vh - 88px)';
+    requestAnimationFrame(() => requestAnimationFrame(fit));
+    if (!el._waFit) {
+      el._waFit = fit;
+      window.addEventListener('resize', () => el._waFit && el._waFit());
+    }
   } else {
     el.style.height = `${Math.max(200, Number(config.height) || 450)}px`;
   }
@@ -578,6 +627,14 @@ export function cardConfig(defaults, settings, raw, kind) {
     'view_live', 'view_history', 'view_settings', 'start_view'].forEach((key) => delete own[key]);
   if (interval) own.refresh_interval = interval;
   if (auto !== undefined) own.auto_refresh = auto;
+  // Zones in this map?
+  if (own.zones_in) own.show_zones = own.zones_in === 'both' || own.zones_in === kind;
+  delete own.zones_in;
+  // CARTO style of this map
+  const map = kind === 'live' ? 'live' : 'history';
+  if (own[`carto_${map}_light`]) own.carto_light = own[`carto_${map}_light`];
+  if (own[`carto_${map}_dark`]) own.carto_dark = own[`carto_${map}_dark`];
+  ['carto_live_light', 'carto_live_dark', 'carto_history_light', 'carto_history_dark'].forEach((key) => delete own[key]);
   if (!own.carto_api_key) delete own.carto_api_key;
   const persons = { ...(own.person_settings || {}) };
   Object.entries((raw && raw.person_settings) || {}).forEach(([id, entry]) => { persons[id] = { ...(persons[id] || {}), ...entry }; });

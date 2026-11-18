@@ -10,6 +10,11 @@ Stored with Home Assistant's own storage helper in ``.storage/whereabouts.settin
   "selected" only for the listed users. Locked = the user gets the defaults.
 - ``rights_default``: ``{"live"|"history"|"delete": "all"|"own"|"none"}`` for users
   without own rights; ``rights``: ``{user_id: {"live": [...], "history": [...], "delete": [...]}}``
+- ``all_flags`` / ``user_flags``: synchronise with an administrator's settings
+  (``sync``) and hide the settings tab (``hide_settings``) - for everybody, or
+  per user (a per-user value wins); ``sync.user_id``: whose settings are used
+- ``field_locks``: ``{user_id: {category: ["*"] | [key, ...]}}`` - single
+  settings (or whole categories) an administrator fixed for one user
 
 Administrators are never locked and may see and delete everything.
 """
@@ -44,6 +49,8 @@ _PERSON_SETTING = vol.Schema(
     }
 )
 
+CARTO_STYLES = ["voyager", "voyager_nolabels", "positron", "positron_nolabels", "dark_matter", "dark_matter_nolabels"]
+
 # Personal categories: key -> (default, validator). The order is the order on the page.
 CATEGORIES: dict[str, dict[str, tuple[Any, Any]]] = {
     "views": {
@@ -61,9 +68,15 @@ CATEGORIES: dict[str, dict[str, tuple[Any, Any]]] = {
         "tiles": ("esri", vol.In(["esri", "osm", "carto"])),
         "map_link": ("google", vol.In(["google", "apple", "osm", "waze", "here", "none"])),
         "map_link_choice": (True, bool),
+        # CARTO styles per map and light/dark
+        "carto_live_light": ("voyager", vol.In(CARTO_STYLES)),
+        "carto_live_dark": ("dark_matter", vol.In(CARTO_STYLES)),
+        "carto_history_light": ("voyager", vol.In(CARTO_STYLES)),
+        "carto_history_dark": ("dark_matter", vol.In(CARTO_STYLES)),
     },
     "zones": {
-        "show_zones": (True, bool),
+        # in which map the zones are drawn
+        "zones_in": ("both", vol.In(["both", "live", "history", "none"])),
         "zone_color_home": ("#2E7D32", _COLOR),
         "zone_color": ("#EF6C00", _COLOR),
         "zone_names_zoom": (14, vol.All(vol.Coerce(int), vol.Range(min=1, max=20))),
@@ -106,9 +119,11 @@ def validate_values(category: str, values: dict[str, Any]) -> dict[str, Any]:
     return schema(values)
 
 
-def _legacy_level(level: str | None) -> str:
-    """0.1.x option -> rule. Without that option (new installation): everybody sees all."""
-    if level is None or level == ACCESS_EVERYONE:
+def _legacy_level(level: str | None, new: str = "all") -> str:
+    """0.1.x option -> rule. Without that option (new installation): ``new``."""
+    if level is None:
+        return new
+    if level == ACCESS_EVERYONE:
         return "all"
     if level == ACCESS_ADMINS:
         return "none"
@@ -131,15 +146,26 @@ class Settings:
         data.setdefault("locks", {})
         data.setdefault("rights", {})
         data.setdefault("sync", {"enabled": False, "user_id": ""})
-        # 0.1.x: who may see/delete the history was one option for everybody
+        data.setdefault("user_flags", {})
+        data.setdefault("field_locks", {})
+        # 0.3: one switch "synchronise with all users"
+        data.setdefault("all_flags", {"sync": bool(data["sync"].get("enabled")), "hide_settings": False})
+        data["sync"].pop("enabled", None)
+        # 0.1.x: who may see/delete the history was one option for everybody.
+        # New installations: everybody sees everything, only administrators delete.
         data.setdefault(
             "rights_default",
             {
                 "live": "all",
                 "history": _legacy_level(legacy.get(CONF_HISTORY_ACCESS)),
-                "delete": _legacy_level(legacy.get(CONF_DELETE_ACCESS)),
+                "delete": _legacy_level(legacy.get(CONF_DELETE_ACCESS), "none"),
             },
         )
+        # 0.3: "show zones" on/off -> in which map
+        for values in [data["defaults"], *data["users"].values()]:
+            zones = values.get("zones")
+            if isinstance(zones, dict) and "show_zones" in zones:
+                zones["zones_in"] = "both" if zones.pop("show_zones") else "none"
         self.data = data
 
     async def async_save(self) -> None:
@@ -153,8 +179,15 @@ class Settings:
         return copy.deepcopy(self.data["users"].get(user_id, {}))
 
     def is_locked(self, category: str, user: User | None) -> bool:
+        """The whole category is fixed for this user (for all users, or just for them)."""
         if user is None or user.is_admin:
             return False
+        if "*" in self.field_locks(user.id).get(category, []):
+            return True
+        return self._globally_locked(category, user)
+
+    def _globally_locked(self, category: str, user: User) -> bool:
+        """Locked by the lock for all users: the user gets the defaults."""
         lock = self.data["locks"].get(category) or {}
         mode = lock.get("mode", "none")
         if mode == "all":
@@ -168,10 +201,31 @@ class Settings:
             return list(CATEGORIES)
         return [cat for cat in CATEGORIES if self.is_locked(cat, user)]
 
+    def field_locks(self, user_id: str) -> dict[str, list[str]]:
+        return copy.deepcopy(self.data["field_locks"].get(user_id, {}))
+
+    def locked_keys(self, user: User | None, category: str) -> list[str]:
+        """Single settings of a category fixed for this user ("*" = all)."""
+        if user is None or user.is_admin:
+            return []
+        if self.is_locked(category, user):
+            return ["*"]
+        return [k for k in self.field_locks(user.id).get(category, []) if k != "*"]
+
+    def flag(self, user_id: str, name: str) -> bool:
+        """Per-user value of sync / hide_settings, otherwise the value for everybody."""
+        own = self.data["user_flags"].get(user_id, {})
+        if name in own:
+            return bool(own[name])
+        return bool(self.data["all_flags"].get(name))
+
     def synced(self, user: User | None) -> bool:
         """An administrator's settings apply to this (non-admin) user right now."""
-        sync = self.data.get("sync") or {}
-        return bool(user and not user.is_admin and sync.get("enabled") and sync.get("user_id"))
+        return bool(user and not user.is_admin and self.data["sync"].get("user_id") and self.flag(user.id, "sync"))
+
+    def settings_hidden(self, user: User | None) -> bool:
+        """The settings tab is hidden for this (non-admin) user."""
+        return bool(user and not user.is_admin and (self.synced(user) or self.flag(user.id, "hide_settings")))
 
     def effective(self, user: User | None) -> dict[str, dict[str, Any]]:
         """Defaults, overwritten by the user's own values where not locked.
@@ -188,7 +242,8 @@ class Settings:
             return result
         own = self.data["users"].get(user.id, {})
         for cat in CATEGORIES:
-            if not self.is_locked(cat, user):
+            # Fixed for this user alone: the values the administrator set for them still apply.
+            if user.is_admin or not self._globally_locked(cat, user):
                 result[cat].update(copy.deepcopy(own.get(cat, {})))
         return result
 
@@ -199,21 +254,62 @@ class Settings:
             self.data["defaults"][cat] = copy.deepcopy(mine[cat])
         await self.async_save()
 
-    async def async_set_sync(self, user: User, enabled: bool) -> None:
-        self.data["sync"] = {"enabled": bool(enabled), "user_id": user.id if enabled else ""}
+    async def async_set_flags(self, admin: User, user_id: str, values: dict[str, bool], admins: set[str]) -> None:
+        """Set sync / hide_settings for one user or ("all") for everybody.
+
+        Switching synchronisation off keeps the administrator's settings:
+        for everybody they become the defaults and the users' own values are
+        removed; for one user they become that user's own values.
+        """
+        mine = self.effective(admin)
+        if "sync" in values and values["sync"]:
+            self.data["sync"]["user_id"] = admin.id
+        if user_id == "all":
+            for name, value in values.items():
+                was = bool(self.data["all_flags"].get(name))
+                self.data["all_flags"][name] = bool(value)
+                for flags in self.data["user_flags"].values():
+                    flags.pop(name, None)
+                if name == "sync" and was and not value:
+                    for cat in CATEGORIES:
+                        self.data["defaults"][cat] = copy.deepcopy(mine[cat])
+                    for uid in [uid for uid in self.data["users"] if uid not in admins]:
+                        self.data["users"].pop(uid, None)
+        else:
+            flags = self.data["user_flags"].setdefault(user_id, {})
+            for name, value in values.items():
+                was = self.flag(user_id, name)
+                flags[name] = bool(value)
+                if name == "sync" and was and not value:
+                    self.data["users"][user_id] = copy.deepcopy(mine)
         await self.async_save()
 
-    async def async_set(self, scope: str, user: User, category: str, values: dict[str, Any]) -> None:
+    async def async_set_field_lock(self, user_id: str, category: str, keys: list[str]) -> None:
+        """Fix single settings ("*" = the whole category) for one user."""
+        if category not in CATEGORIES:
+            raise vol.Invalid("unknown category")
+        valid = [k for k in keys if k == "*" or k in CATEGORIES[category]]
+        locks = self.data["field_locks"].setdefault(user_id, {})
+        if valid:
+            locks[category] = sorted(set(valid))
+        else:
+            locks.pop(category, None)
+        if not locks:
+            self.data["field_locks"].pop(user_id, None)
+        await self.async_save()
+
+    async def async_set(self, scope: str, user_id: str, category: str, values: dict[str, Any]) -> None:
+        """scope "defaults" or "own" (``user_id`` = whose values; administrators may edit any user)."""
         values = validate_values(category, values)
         if scope == "defaults":
             target = self.data["defaults"].setdefault(category, {})
         else:
-            target = self.data["users"].setdefault(user.id, {}).setdefault(category, {})
+            target = self.data["users"].setdefault(user_id, {}).setdefault(category, {})
         target.update(values)
         await self.async_save()
 
-    async def async_reset(self, scope: str, user: User, category: str | None) -> None:
-        container = self.data["defaults"] if scope == "defaults" else self.data["users"].setdefault(user.id, {})
+    async def async_reset(self, scope: str, user_id: str, category: str | None) -> None:
+        container = self.data["defaults"] if scope == "defaults" else self.data["users"].setdefault(user_id, {})
         if category is None:
             container.clear()
         else:
@@ -275,6 +371,13 @@ class Settings:
             "rights": copy.deepcopy(self.data["rights"]),
             "rights_default": dict(self.data["rights_default"]),
             "sync": dict(self.data.get("sync") or {}),
+            "all_flags": dict(self.data["all_flags"]),
+            "user_flags": copy.deepcopy(self.data["user_flags"]),
+            "field_locks": copy.deepcopy(self.data["field_locks"]),
+            # which categories/keys each user set themselves ("Gilt gerade")
+            "own_keys": {
+                uid: {cat: sorted(vals) for cat, vals in own.items()} for uid, own in self.data["users"].items()
+            },
         }
 
 

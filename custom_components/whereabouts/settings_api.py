@@ -8,6 +8,7 @@ options and the import are for administrators only.
 from __future__ import annotations
 
 import os
+import re
 from http import HTTPStatus
 from typing import Any
 
@@ -87,7 +88,10 @@ def async_register(hass: HomeAssistant) -> None:
         ws_options,
         ws_diagnostics,
         ws_promote,
-        ws_sync,
+        ws_flags,
+        ws_field_lock,
+        ws_user,
+        ws_options_reset,
         ws_check_key,
     ):
         websocket_api.async_register_command(hass, command)
@@ -174,6 +178,8 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
         "own_rights": user.id in settings.data["rights"],
         "persons": _persons(hass, base),
         "synced": settings.synced(user),
+        "settings_hidden": settings.settings_hidden(user),
+        "field_locks": {cat: settings.locked_keys(user, cat) for cat in CATEGORIES if settings.locked_keys(user, cat)},
         "carto_key_set": bool(runtime.options.get(CONF_CARTO_KEY)),
         "zones": [
             {"entity_id": z.entity_id, "name": z.name, "passive": bool(z.attributes.get("passive"))}
@@ -197,24 +203,29 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
         vol.Required("scope"): vol.In(["own", "defaults"]),
         vol.Required("category"): vol.In(list(CATEGORIES)),
         vol.Required("values"): dict,
+        # administrators: change another user's own values
+        vol.Optional("user_id"): _USER_ID,
     }
 )
 @websocket_api.async_response
 async def ws_save(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """Change personal values (own) or the defaults for everybody (administrators)."""
-    runtime = _ready(hass, connection, msg, admin=msg["scope"] == "defaults")
+    """Change personal values (own), a user's values or the defaults (administrators)."""
+    other = msg.get("user_id") and msg["user_id"] != connection.user.id
+    runtime = _ready(hass, connection, msg, admin=msg["scope"] == "defaults" or bool(other))
     if runtime is None:
         return
     user = connection.user
-    if msg["scope"] == "own" and runtime.settings.is_locked(msg["category"], user):
-        connection.send_error(msg["id"], ERR_LOCKED, "Locked by the administrator")
-        return
+    if msg["scope"] == "own" and not other:
+        locked = runtime.settings.locked_keys(user, msg["category"])
+        if "*" in locked or any(key in locked for key in msg["values"]):
+            connection.send_error(msg["id"], ERR_LOCKED, "Fixed by the administrator")
+            return
     try:
         validate_values(msg["category"], msg["values"])
     except vol.Invalid as err:
         connection.send_error(msg["id"], ERR_INVALID, str(err))
         return
-    await runtime.settings.async_set(msg["scope"], user, msg["category"], msg["values"])
+    await runtime.settings.async_set(msg["scope"], msg.get("user_id") or user.id, msg["category"], msg["values"])
     _changed(hass)
     connection.send_result(msg["id"])
 
@@ -224,15 +235,26 @@ async def ws_save(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
         vol.Required("type"): "whereabouts/settings/reset",
         vol.Required("scope"): vol.In(["own", "defaults"]),
         vol.Optional("category"): vol.In(list(CATEGORIES)),
+        vol.Optional("user_id"): _USER_ID,
     }
 )
 @websocket_api.async_response
 async def ws_reset(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """Back to the defaults (own) or to the built-in values (defaults, administrators)."""
-    runtime = _ready(hass, connection, msg, admin=msg["scope"] == "defaults")
+    """Back to the defaults (own / a user) or to the built-in values (defaults, administrators)."""
+    other = msg.get("user_id") and msg["user_id"] != connection.user.id
+    runtime = _ready(hass, connection, msg, admin=msg["scope"] == "defaults" or bool(other))
     if runtime is None:
         return
-    await runtime.settings.async_reset(msg["scope"], connection.user, msg.get("category"))
+    user = connection.user
+    if (
+        msg["scope"] == "own"
+        and not other
+        and msg.get("category")
+        and runtime.settings.locked_keys(user, msg["category"])
+    ):
+        connection.send_error(msg["id"], ERR_LOCKED, "Fixed by the administrator")
+        return
+    await runtime.settings.async_reset(msg["scope"], msg.get("user_id") or user.id, msg.get("category"))
     _changed(hass)
     connection.send_result(msg["id"])
 
@@ -370,19 +392,106 @@ async def ws_promote(hass: HomeAssistant, connection: websocket_api.ActiveConnec
 
 @websocket_api.websocket_command(
     {
-        vol.Required("type"): "whereabouts/settings/sync",
-        vol.Required("enabled"): bool,
+        vol.Required("type"): "whereabouts/settings/flags",
+        # a user's ID or "all"
+        vol.Required("user_id"): vol.Any("all", _USER_ID),
+        vol.Optional("sync"): bool,
+        vol.Optional("hide_settings"): bool,
     }
 )
 @websocket_api.require_admin
 @websocket_api.async_response
-async def ws_sync(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """My settings apply to every non-admin, live (or no longer)."""
+async def ws_flags(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Synchronise with my settings / hide the settings tab - for one user or everybody."""
     runtime = _ready(hass, connection, msg, admin=True)
     if runtime is None:
         return
-    await runtime.settings.async_set_sync(connection.user, msg["enabled"])
+    values = {key: msg[key] for key in ("sync", "hide_settings") if key in msg}
+    admins = {u.id for u in await hass.auth.async_get_users() if u.is_admin}
+    await runtime.settings.async_set_flags(connection.user, msg["user_id"], values, admins)
     _changed(hass)
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/settings/field_lock",
+        vol.Required("user_id"): _USER_ID,
+        vol.Required("category"): vol.In(list(CATEGORIES)),
+        vol.Required("keys"): vol.All([vol.All(str, vol.Length(max=60))], vol.Length(max=50)),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_field_lock(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Fix single settings (or with "*" the whole category) for one user."""
+    runtime = _ready(hass, connection, msg, admin=True)
+    if runtime is None:
+        return
+    await runtime.settings.async_set_field_lock(msg["user_id"], msg["category"], msg["keys"])
+    _changed(hass)
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/settings/user",
+        vol.Required("user_id"): _USER_ID,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_user(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """One user's settings, for an administrator editing them."""
+    runtime = _ready(hass, connection, msg, admin=True)
+    if runtime is None:
+        return
+    other = await hass.auth.async_get_user(msg["user_id"])
+    if other is None:
+        connection.send_error(msg["id"], ERR_INVALID, "Unknown user")
+        return
+    settings = runtime.settings
+    connection.send_result(
+        msg["id"],
+        {
+            "id": other.id,
+            "name": other.name,
+            "is_admin": other.is_admin,
+            "own": settings.own(other.id),
+            "effective": settings.effective(other),
+            "field_locks": settings.field_locks(other.id),
+            "synced": settings.synced(other),
+            "rights": {kind: settings.allowed(other, kind) for kind in RIGHT_KINDS},
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/settings/options_reset",
+        vol.Required("keys"): vol.All([vol.In([str(k) for k in OPTIONS_SCHEMA.schema])], vol.Length(min=1)),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_options_reset(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Back to the built-in values for some integration options (e.g. the sidebar)."""
+    from .const import DEFAULT_OPTIONS
+
+    runtime = _ready(hass, connection, msg, admin=True)
+    if runtime is None:
+        return
+    entries = hass.config_entries.async_entries(DOMAIN)
+    if not entries:
+        connection.send_error(msg["id"], ERR_NOT_SET_UP, "Whereabouts is not set up")
+        return
+    options = {**runtime.options}
+    for key in msg["keys"]:
+        if key in DEFAULT_OPTIONS:
+            options[key] = DEFAULT_OPTIONS[key]
+        else:
+            options.pop(key, None)
+    hass.config_entries.async_update_entry(entries[0], options=options)
     connection.send_result(msg["id"])
 
 
@@ -520,11 +629,16 @@ class ImportView(HomeAssistantView):
                 data = b"".join(chunks)
             elif part.name in ("person", "replace", "preview"):
                 fields[part.name] = (await part.text())[:120]
+            elif part.name == "days":
+                fields["days"] = (await part.text())[:200_000]
         if not data:
             return self.json({"error": "no_file"}, HTTPStatus.BAD_REQUEST)
         target = fields.get("person") or None
         if target and not _PERSON_RE(target):
             return self.json({"error": "unknown_person"}, HTTPStatus.BAD_REQUEST)
+        days = None
+        if "days" in fields:
+            days = [d for d in fields["days"].split(",") if re.match(r"^[a-z0-9_]{1,100}\|\d{4}-\d{2}-\d{2}$", d)]
         try:
             result = await import_bytes(
                 hass,
@@ -534,6 +648,7 @@ class ImportView(HomeAssistantView):
                 fields.get("replace") == "true",
                 float(runtime.options[CONF_SAME_PLACE_DISTANCE]),
                 preview=fields.get("preview") == "true",
+                days=days,
             )
         except ImportError_ as err:
             return self.json({"error": err.key, "detail": err.detail}, HTTPStatus.BAD_REQUEST)

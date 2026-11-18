@@ -74,8 +74,13 @@ export function defineLiveCard(S) {
       if (this._config && this._ready) S.applyHeight(this, this._config);
       if (this._ready) {
         this._startBackground();
-        if (this._map) setTimeout(() => this._map && this._map.invalidateSize(), 0);
+        this._reset();
       }
+    }
+
+    // Called by the sidebar page when its tab is shown again.
+    activate() {
+      this._reset();
     }
 
     disconnectedCallback() {
@@ -100,6 +105,12 @@ export function defineLiveCard(S) {
 
     // Called at the start and whenever the integration's options change.
     _onInfo(info) {
+      // While the integration reloads it is briefly unavailable: keep the card.
+      clearTimeout(this._gone);
+      if (!info.available && this._info && this._info.available && !info.confirmed) {
+        this._gone = setTimeout(() => this._onInfo({ ...info, confirmed: true }), 8000);
+        return;
+      }
       const sig = JSON.stringify([info.available, info.live_card, info.shown, info.settings]);
       if (sig === this._infoSig) return;
       this._infoSig = sig;
@@ -227,6 +238,12 @@ export function defineLiveCard(S) {
           .person .text { flex: 1 1 auto; }
           .haken { flex: 0 0 auto; align-self: center; display: flex; padding: 6px; margin: -6px -4px -6px 0; cursor: pointer; }
           .haken input { width: 20px; height: 20px; margin: 0; cursor: pointer; accent-color: var(--farbe); }
+          .alle-ein { pointer-events: auto; flex: 0 0 auto; align-self: center; display: inline-flex; align-items: center; gap: 6px;
+                      padding: 8px 12px; border-radius: 18px; border: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500;
+                      color: var(--primary-color); background: var(--wa-glas); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+                      box-shadow: 0 2px 10px rgba(0,0,0,.18); white-space: nowrap; }
+          .alle-ein[hidden] { display: none; }
+          .alle-ein svg { width: 18px; height: 18px; fill: currentColor; }
           .person:focus-visible { outline: 2px solid var(--farbe); outline-offset: 2px; }
           .bild { flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%; border: 3px solid var(--farbe);
                   background: var(--farbe) center/cover no-repeat; color: #fff; font-weight: 700; font-size: 20px;
@@ -279,7 +296,6 @@ export function defineLiveCard(S) {
           .infofenster.links .zipfel { left: auto !important; right: -18px; border-left-color: var(--wa-glas); }
           .infofenster a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; font-variant-numeric: tabular-nums; }
           .infofenster a:hover { color: var(--primary-color, #03a9f4); text-decoration-style: solid; }
-          .wa-live .leaflet-bottom.leaflet-right .leaflet-control-zoom { margin-bottom: 24px; }
           .statusbar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 14px;
                        font-size: 13px; color: var(--secondary-text-color, var(--wa-leise));
                        background: var(--card-background-color, var(--wa-glas));
@@ -326,7 +342,9 @@ export function defineLiveCard(S) {
                   <div class="ortung"></div>
                 </div>
                 <label class="haken" title="${S.escapeHtml(t('show_on_map'))}"><input type="checkbox" data-person="${p.key}"${this._hidden.has(p.key) ? '' : ' checked'} aria-label="${S.escapeHtml(t('show_on_map_name', { name: p.name }))}"></label>
-              </div>`).join('')}</div>` : ''}
+              </div>`).join('')}
+              <button class="alle-ein" type="button"${this._hidden.size ? '' : ' hidden'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0 8a5 5 0 0 1-5-5 5 5 0 0 1 5-5 5 5 0 0 1 5 5 5 5 0 0 1-5 5m0-12.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Z"/></svg>${S.escapeHtml(t('show_all'))}</button>
+            </div>` : ''}
           </div>
           ${c.show_status_bar ? `<div class="statusbar">
             <div class="infos">
@@ -341,10 +359,12 @@ export function defineLiveCard(S) {
           </div>` : ''}
         </div>`;
 
+      const showAll = this.querySelector('.alle-ein');
+      if (showAll) showAll.addEventListener('click', () => this._showAll());
       this.querySelectorAll('.person').forEach((b) => {
-        b.addEventListener('click', (e) => { if (!e.target.closest('.haken')) this._goTo(b.dataset.person); });
+        b.addEventListener('click', (e) => { if (!e.target.closest('.haken')) this._tileClick(b.dataset.person); });
         b.addEventListener('keydown', (e) => {
-          if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('.haken')) { e.preventDefault(); this._goTo(b.dataset.person); }
+          if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('.haken')) { e.preventDefault(); this._tileClick(b.dataset.person); }
         });
       });
       this.querySelectorAll('.haken input').forEach((box) => box.addEventListener('change', () => this._toggle(box.dataset.person, box.checked)));
@@ -458,11 +478,44 @@ export function defineLiveCard(S) {
       });
     }
 
-    // Tick in the info bar: hide or show a person on the map (only until reload).
-    _toggle(key, show) {
+    // Click on a tile: jump to the person; a hidden person is shown again first (after asking).
+    _tileClick(key) {
+      if (this._hidden.has(key)) {
+        const p = this._persons.find((x) => x.key === key);
+        // eslint-disable-next-line no-alert
+        if (!p || !window.confirm(this._t('show_again', { name: p.name }))) return;
+        this._toggle(key, true, false);
+      }
+      this._goTo(key);
+    }
+
+    _showAll() {
+      [...this._hidden].forEach((key) => this._toggle(key, true, false));
+      this._setFollow(true);
+      this._fitAll(true);
+    }
+
+    // Back on this map (other tab, other dashboard): everybody visible, map on everybody.
+    _reset() {
+      if (!this._ready) return;
+      [...this._hidden].forEach((key) => this._toggle(key, true, false));
+      this._closePanel(false);
+      if (this._map) {
+        this._setFollow(true);
+        setTimeout(() => { if (this._map) { this._map.invalidateSize(); this._fitAll(false); } }, 0);
+      }
+    }
+
+    // Tick in the info bar: hide or show a person on the map (only until the map is left).
+    // fit: zoom to everybody still shown - wherever the map is at the moment.
+    _toggle(key, show, fit = true) {
       if (show) this._hidden.delete(key); else this._hidden.add(key);
       const tile = this.querySelector(`.leiste .p-${key}`);
       if (tile) tile.classList.toggle('aus', !show);
+      const box = this.querySelector(`.leiste .p-${key} .haken input`);
+      if (box) box.checked = show;
+      const showAll = this.querySelector('.alle-ein');
+      if (showAll) showAll.hidden = !this._hidden.size;
       if (this._panel && !show) {
         const group = this._groupOf(this._panel.key);
         if (group && group.items.some((x) => x.p.key === key)) this._closePanel(false);
@@ -470,7 +523,10 @@ export function defineLiveCard(S) {
       this._renderStatus();
       if (!this._map) return;
       this._drawPersons();
-      if (this._follow) this._fitAll(true);
+      if (fit) {
+        this._setFollow(true);
+        this._fitAll(true);
+      }
     }
 
     _visible(p) {

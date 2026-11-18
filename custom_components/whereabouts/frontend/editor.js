@@ -9,6 +9,7 @@ const rgbToHex = (rgb) => (Array.isArray(rgb) && rgb.length === 3
   : undefined);
 
 const ZONE_COLORS = ['zone_color_home', 'zone_color'];
+const SELECTS = ['map_style', 'tiles', 'map_link', 'default_view', 'carto_light', 'carto_dark'];
 const HELP = ['title', 'persons', 'picture', 'map_link_choice'];
 
 // defaults: { live: LIVE_DEFAULTS, history: HISTORY_DEFAULTS } (passed in, so no module is loaded twice)
@@ -36,8 +37,10 @@ export function defineEditor(S, defaults) {
       this._render();
     }
 
+    // What this card shows without own values: built-in values < the viewer's settings page.
     get _defaults() {
-      return { ...S.DEFAULTS_MAP, ...(this.kind === 'history' ? defaults.history : defaults.live) };
+      const kind = this.kind === 'history' ? 'history' : 'live';
+      return S.cardConfig(kind === 'history' ? defaults.history : defaults.live, this._info && this._info.settings, {}, kind);
     }
 
     // Persons this card can show: Whereabouts' persons that the user may see here.
@@ -57,10 +60,22 @@ export function defineEditor(S, defaults) {
     _schema() {
       const t = this._t;
       const live = this.kind !== 'history';
-      const select = (name, values) => ({
+      const label = (name, v) => t(`ed_${name === 'map_style' ? 'style' : name === 'map_link' ? 'link' : name === 'default_view' ? 'view'
+        : name === 'height_mode' ? 'height' : name === 'carto_light' || name === 'carto_dark' ? 'carto' : name}_${v}`);
+      // First choice: as on the settings page (with what that is right now).
+      const select = (name, values, inherit = true) => ({
         name,
-        selector: { select: { mode: 'dropdown', options: values.map((v) => ({ value: v, label: t(`ed_${name === 'map_style' ? 'style' : name === 'map_link' ? 'link' : name === 'default_view' ? 'view' : name === 'height_mode' ? 'height' : name}_${v}`) })) } },
+        selector: {
+          select: {
+            mode: 'dropdown',
+            options: [
+              ...(inherit ? [{ value: '', label: t('ed_inherit', { value: label(name, this._defaults[name]) }) }] : []),
+              ...values.map((v) => ({ value: v, label: label(name, v) })),
+            ],
+          },
+        },
       });
+      const carto = ['voyager', 'voyager_nolabels', 'positron', 'positron_nolabels', 'dark_matter', 'dark_matter_nolabels'];
       const persons = this._shownPersons().map((id, index) => ({
         type: 'expandable',
         name: `ps_${index}`,
@@ -75,9 +90,11 @@ export function defineEditor(S, defaults) {
       const map = [
         select('map_style', ['auto', 'light', 'dark']),
         select('tiles', ['esri', 'osm', 'carto']),
+        ...(this._data().tiles === 'carto' || (!this._config.tiles && this._defaults.tiles === 'carto')
+          ? [select('carto_light', carto), select('carto_dark', carto)] : []),
         ...(live ? [select('map_link', ['google', 'apple', 'osm', 'waze', 'here', 'none'])] : []),
         ...(live && this._data().map_link !== 'none' ? [{ name: 'map_link_choice', selector: { boolean: {} } }] : []),
-        select('height_mode', ['auto', 'full', 'fixed']),
+        select('height_mode', ['auto', 'full', 'fixed'], false),
         ...(this._data().height_mode !== 'fixed' ? [] : [{ name: 'height', selector: { number: { min: 200, max: 2000, step: 10, mode: 'box', unit_of_measurement: 'px' } } }]),
       ];
       const display = live
@@ -117,6 +134,8 @@ export function defineEditor(S, defaults) {
     // Config -> form data (defaults filled in, person settings per index)
     _data() {
       const data = { ...this._defaults, ...this._config };
+      // Selections without an own value show "as on the settings page".
+      SELECTS.forEach((key) => { if (this._config[key] === undefined) data[key] = ''; });
       ZONE_COLORS.forEach((key) => { data[key] = hexToRgb(data[key]); });
       const settings = this._config.person_settings || {};
       (this._hass ? this._shownPersons() : []).forEach((id, index) => {
@@ -156,7 +175,7 @@ export function defineEditor(S, defaults) {
         this._alert.style.marginBottom = '12px';
         this.insertBefore(this._alert, this._form);
       }
-      this._alert.hidden = !pairs.length;
+      this._alert.style.display = pairs.length ? 'block' : 'none';
       this._alert.textContent = pairs.length
         ? this._t('ed_similar_colors', { pairs: pairs.map((p) => p.join(' / ')).join(', ') }) : '';
     }
@@ -168,7 +187,9 @@ export function defineEditor(S, defaults) {
       Object.keys(value).forEach((key) => {
         if (key.startsWith('ps_')) return;
         const v = ZONE_COLORS.includes(key) ? rgbToHex(value[key]) : value[key];
-        // keep the YAML short: leave out defaults and empty values
+        // Selections: what was chosen is kept (empty = as on the settings page).
+        if (SELECTS.includes(key)) { if (v) config[key] = v; return; }
+        // keep the YAML short: leave out what the card would show anyway and empty values
         if (v === '' || v === undefined || (Array.isArray(v) && !v.length) || v === defaults[key]) return;
         config[key] = v;
       });

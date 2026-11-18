@@ -101,13 +101,20 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
     }
 
     _onInfo(info) {
+      // While the integration reloads (every option change) it is briefly
+      // unavailable: keep the page instead of rebuilding it.
+      clearTimeout(this._gone);
+      if (!info.available && this._info && this._info.available) {
+        this._gone = setTimeout(() => this._onInfo({ ...info, confirmed: true }), 8000);
+        if (!info.confirmed) return;
+      }
       this._info = info;
       const settings = info.settings || {};
       const visible = VIEWS.filter((v) => {
         if (v.id === 'live') return settings.view_live !== false;
         if (v.id === 'history') return settings.view_history !== false;
         // Settings managed by the administrator: no tab (the address still explains it).
-        return settings.view_settings !== false && !info.synced;
+        return settings.view_settings !== false && !info.settings_hidden;
       }).map((v) => v.id);
       const sig = JSON.stringify([info.available, visible]);
       if (!this._ready || sig !== this._sig) {
@@ -212,7 +219,10 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
         b.setAttribute('aria-selected', on ? 'true' : 'false');
       });
       this._root.querySelectorAll('.wap-seite').forEach((page) => page.classList.toggle('wap-aktiv', page.dataset.view === view));
+      const changed = this._shown !== view;
+      this._shown = view;
       if (!this._pages[view]) this._pages[view] = this._createPage(view);
+      else if (changed && this._pages[view].activate) this._pages[view].activate(); // back on this tab
     }
 
     _createPage(view) {

@@ -304,23 +304,95 @@ class HistoryStorage:
         return removed
 
     # --- import / export --------------------------------------------------
-    def import_points(self, person: str, points: Iterable[Point], replace_days: bool = False) -> dict:
-        """Store imported points.
-
-        Existing rows with the same start time are kept (duplicates are
-        skipped) unless ``replace_days`` is set: then each imported day
-        replaces the stored day completely.
-        """
+    @staticmethod
+    def _by_day(points: Iterable[Point]) -> dict[str, list[Point]]:
         by_day: dict[str, list[Point]] = {}
         for point in points:
             if is_valid_date(point.date) and is_valid_time(point.time):
                 by_day.setdefault(point.date, []).append(point)
-        added = skipped = 0
+        return by_day
+
+    def _gap_points(self, rows: list[list[str]], day_points: list[Point]) -> list[Point]:
+        """Points of an imported day that fall into a gap of the stored day.
+
+        A point is new when its time span (start to end) overlaps no stored
+        stay - so nothing is stored twice and nothing stored is overwritten,
+        even when the times of the file do not match to the second.
+        """
+        stays = build_stays(rows, self.same_place_distance)
+        spans = [(stay.start, stay.end) for stay in stays]
+        new = []
+        for point in sorted(day_points, key=lambda p: p.time):
+            start = point.time
+            end = point.end if point.end and point.end > start else start
+            if any(start <= s_end and end >= s_start for s_start, s_end in spans):
+                continue
+            new.append(point)
+        return new
+
+    def import_plan(self, person: str, points: Iterable[Point], mode: str = "merge") -> list[dict]:
+        """What an import would do, per day (nothing is written)."""
+        plan = []
+        with self._lock:
+            for day, day_points in sorted(self._by_day(points).items()):
+                rows = self._read_rows(self.path(person, day))
+                existing = len(build_stays(rows, self.same_place_distance))
+                new = list(day_points) if mode == "replace" or not rows else self._gap_points(rows, day_points)
+                if not rows:
+                    status = "new"
+                elif mode == "replace":
+                    status = "replace"
+                else:
+                    status = "add" if new else "complete"
+                plan.append(
+                    {
+                        "date": day,
+                        "existing": existing,
+                        "new": len(new),
+                        "status": status,
+                        "entries": [
+                            {
+                                "start": p.time,
+                                "end": p.end if p.end and p.end > p.time else p.time,
+                                "state": clean_text(p.state),
+                                "address": clean_text(p.address) if p.state == STATE_NOT_HOME else "",
+                            }
+                            for p in new[:200]
+                        ],
+                    }
+                )
+        return plan
+
+    def import_points(
+        self,
+        person: str,
+        points: Iterable[Point],
+        replace_days: bool = False,
+        days: Iterable[str] | None = None,
+        merge: bool = True,
+    ) -> dict:
+        """Store imported points.
+
+        - ``replace_days``: each imported day replaces the stored day completely.
+        - otherwise (``merge``): only points that fall into a gap of the stored
+          day are added (see ``_gap_points``); with ``merge=False`` only rows
+          with exactly the same start time are skipped (older behaviour).
+        - ``days``: only these dates are touched (from the preview).
+        """
+        wanted = set(days) if days is not None else None
+        added = skipped = touched = 0
         with self._lock:
             self._ensure_folder()
-            for day, day_points in sorted(by_day.items()):
+            for day, day_points in sorted(self._by_day(points).items()):
+                if wanted is not None and day not in wanted:
+                    continue
+                touched += 1
                 path = self.path(person, day)
                 rows = [] if replace_days else self._read_rows(path)
+                if rows and merge:
+                    keep = self._gap_points(rows, day_points)
+                    skipped += len(day_points) - len(keep)
+                    day_points = keep
                 existing = {row[0].strip() for row in rows}
                 # Duplicates are only checked against what was stored before:
                 # a file may legitimately contain two rows with the same second.
@@ -341,7 +413,7 @@ class HistoryStorage:
                     added += 1
                 rows.sort(key=lambda r: r[0].strip())
                 self._write_rows(path, rows)
-        return {"added": added, "skipped": skipped, "days": len(by_day)}
+        return {"added": added, "skipped": skipped, "days": touched}
 
     def export_rows(self, person: str, date_from: str, date_to: str) -> list[tuple[str, Stay]]:
         """All stays of a person between two dates (inclusive)."""

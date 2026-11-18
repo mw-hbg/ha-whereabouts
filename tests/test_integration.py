@@ -221,8 +221,9 @@ async def test_admin_can_read_and_delete(hass: HomeAssistant, hass_ws_client, ha
 
 
 async def test_new_installation_lets_everybody_see_everything(hass: HomeAssistant, hass_admin_user):
+    """New installations: everybody sees everything, only administrators delete."""
     entry = await _prepare_history(hass, hass_admin_user.id)
-    assert entry.runtime_data.settings.data["rights_default"] == {"live": "all", "history": "all", "delete": "all"}
+    assert entry.runtime_data.settings.data["rights_default"] == {"live": "all", "history": "all", "delete": "none"}
 
 
 async def test_user_sees_only_own_person(hass: HomeAssistant, hass_ws_client, hass_admin_user):

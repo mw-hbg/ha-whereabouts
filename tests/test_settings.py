@@ -8,7 +8,7 @@ from homeassistant.components.frontend import DATA_PANELS
 from homeassistant.core import HomeAssistant
 
 from custom_components.whereabouts.const import PANEL_URL
-from custom_components.whereabouts.storage import Point
+from custom_components.whereabouts.storage import HistoryStorage, Point
 
 from .conftest import HOME, setup_integration
 
@@ -52,7 +52,14 @@ async def test_sidebar_page_is_registered(hass: HomeAssistant):
     await hass.async_block_till_done()
     panel = hass.data[DATA_PANELS][PANEL_URL]
     assert panel.sidebar_title is None
+    # Other options do not register the page again (an open page would be rebuilt)
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "min_interval": 120})
+    await hass.async_block_till_done()
+    assert hass.data[DATA_PANELS][PANEL_URL] is panel
+    # Unloading keeps it, removing the integration removes it
     assert await hass.config_entries.async_unload(entry.entry_id)
+    assert PANEL_URL in hass.data[DATA_PANELS]
+    await hass.config_entries.async_remove(entry.entry_id)
     assert PANEL_URL not in hass.data[DATA_PANELS]
 
 
@@ -111,7 +118,7 @@ async def test_normal_user_locks_and_admin_only_commands(hass: HomeAssistant, ha
     assert result["error"]["code"] == "locked"
     # Other categories stay open
     result = await _ws(
-        ws2, 3, type="whereabouts/settings/save", scope="own", category="zones", values={"show_zones": False}
+        ws2, 3, type="whereabouts/settings/save", scope="own", category="zones", values={"zones_in": "none"}
     )
     assert result["success"]
     # Administration is refused
@@ -243,8 +250,8 @@ async def test_history_over_a_period(hass: HomeAssistant, hass_ws_client, hass_a
     ws = await hass_ws_client(hass)
     result = await _ws(ws, 1, type="whereabouts/history", person="person.alex", date="2026-06-24", date_to="2026-06-25")
     assert [s["date"] for s in result["result"]["stays"]] == ["2026-06-24", "2026-06-25"]
-    result = await _ws(ws, 2, type="whereabouts/history", person="person.alex", date="2026-06-01", date_to="2026-07-15")
-    assert result["error"]["code"] == "invalid_range"  # more than 31 days
+    result = await _ws(ws, 2, type="whereabouts/history", person="person.alex", date="2026-01-01", date_to="2026-06-25")
+    assert result["error"]["code"] == "invalid_range"  # more than 93 days per request
 
 
 async def test_export_several_persons_and_days(hass: HomeAssistant, hass_client, hass_admin_user):
@@ -298,15 +305,84 @@ async def test_promote_and_sync(hass: HomeAssistant, hass_ws_client, hass_admin_
         id = OTHER
         is_admin = False
 
-    await settings.async_set("own", Other(), "zones", {"show_zones": False})
-    assert (await _ws(ws, 3, type="whereabouts/settings/sync", enabled=True))["success"]
+    await settings.async_set("own", OTHER, "zones", {"zones_in": "none"})
+    assert (await _ws(ws, 3, type="whereabouts/settings/flags", user_id="all", sync=True))["success"]
     await _ws(ws, 4, type="whereabouts/settings/save", scope="own", category="map", values={"map_link": "waze"})
-    assert settings.synced(Other())
+    assert settings.synced(Other()) and settings.settings_hidden(Other())
     assert settings.effective(Other())["map"]["map_link"] == "waze"  # follows the admin live
-    assert settings.effective(Other())["zones"]["show_zones"] is True
+    assert settings.effective(Other())["zones"]["zones_in"] == "both"
     assert settings.locked_categories(Other()) == list(settings.defaults())
-    await _ws(ws, 5, type="whereabouts/settings/sync", enabled=False)
-    assert settings.effective(Other())["zones"]["show_zones"] is False  # own values are back
+    # Switching off: the administrator's settings stay for everybody, own values are gone
+    await _ws(ws, 5, type="whereabouts/settings/flags", user_id="all", sync=False)
+    assert not settings.synced(Other())
+    assert settings.effective(Other())["map"]["map_link"] == "waze"
+    assert settings.effective(Other())["zones"]["zones_in"] == "both"
+    assert settings.own(OTHER) == {}
+
+
+async def test_sync_and_fixed_settings_per_user(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    entry = await _setup(hass, hass_admin_user.id)
+    settings = entry.runtime_data.settings
+    ws = await hass_ws_client(hass)
+
+    class Other:
+        id = OTHER
+        is_admin = False
+
+    await _ws(ws, 1, type="whereabouts/settings/save", scope="own", category="map", values={"tiles": "carto"})
+    assert (await _ws(ws, 2, type="whereabouts/settings/flags", user_id=OTHER, sync=True))["success"]
+    assert settings.effective(Other())["map"]["tiles"] == "carto"
+    # Off for one user: my settings become theirs
+    await _ws(ws, 3, type="whereabouts/settings/flags", user_id=OTHER, sync=False)
+    assert settings.own(OTHER)["map"]["tiles"] == "carto"
+    # Hide the settings tab only
+    await _ws(ws, 4, type="whereabouts/settings/flags", user_id=OTHER, hide_settings=True)
+    assert settings.settings_hidden(Other()) and not settings.synced(Other())
+    # An administrator edits the user's values and fixes one of them
+    result = await _ws(
+        ws, 5, type="whereabouts/settings/save", scope="own", user_id=OTHER, category="map", values={"map_link": "osm"}
+    )
+    assert result["success"]
+    await _ws(ws, 6, type="whereabouts/settings/field_lock", user_id=OTHER, category="map", keys=["map_link"])
+    assert settings.locked_keys(Other(), "map") == ["map_link"]
+    real = await hass.auth.async_create_user("Belinda")
+    await settings.async_set("own", real.id, "map", {"map_link": "osm"})
+    await settings.async_set_field_lock(real.id, "map", ["map_link"])
+    user = (await _ws(ws, 7, type="whereabouts/settings/user", user_id=real.id))["result"]
+    assert user["effective"]["map"]["map_link"] == "osm" and user["field_locks"] == {"map": ["map_link"]}
+    # The whole category fixed for this user: their (admin-set) values still apply
+    await _ws(ws, 8, type="whereabouts/settings/field_lock", user_id=OTHER, category="map", keys=["*"])
+    assert settings.is_locked("map", Other())
+    assert settings.effective(Other())["map"]["map_link"] == "osm"
+
+
+async def test_options_reset(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    entry = await _setup(hass, hass_admin_user.id)
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "panel_title": "Orte", "min_interval": 120})
+    await hass.async_block_till_done()
+    ws = await hass_ws_client(hass)
+    result = await _ws(ws, 1, type="whereabouts/settings/options_reset", keys=["panel_title", "panel", "panel_icon"])
+    assert result["success"]
+    await hass.async_block_till_done()
+    entry = hass.config_entries.async_entries("whereabouts")[0]
+    assert entry.options["panel_title"] == "" and entry.options["min_interval"] == 120
+
+
+def test_import_merges_into_gaps(tmp_path):
+    storage = HistoryStorage(str(tmp_path))
+    storage.import_points("alex", [Point("2026-06-24", "08:00:00", "home", *HOME, end="12:00:00")])
+    points = [
+        Point("2026-06-24", "08:00:05", "home", *HOME, end="11:59:00"),  # inside the stored stay
+        Point("2026-06-24", "13:00:00", "not_home", 48.1, 9.1, "Main Street 1", end="13:30:00"),  # a gap
+        Point("2026-06-25", "09:00:00", "home", *HOME),  # a new day
+    ]
+    plan = {day["date"]: day for day in storage.import_plan("alex", points)}
+    assert plan["2026-06-24"]["status"] == "add" and plan["2026-06-24"]["new"] == 1
+    assert plan["2026-06-25"]["status"] == "new"
+    outcome = storage.import_points("alex", points, days=["2026-06-24"])
+    assert outcome == {"added": 1, "skipped": 1, "days": 1}
+    assert [s.start for s in storage.read_day("alex", "2026-06-24")] == ["08:00:00", "13:00:00"]
+    assert storage.days("alex") == ["2026-06-24"]
 
 
 async def test_users_are_marked_technical(hass: HomeAssistant, hass_ws_client, hass_admin_user):

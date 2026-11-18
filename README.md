@@ -86,21 +86,23 @@ what it does; actions that delete or overwrite something ask first.
 | Views | every user | which tabs are shown, which one opens first |
 | Persons | every user | who appears, order, display name, colour, picture (address or upload), in which card (both, only "Where is…?", only "Location history"); warning for similar colours |
 | Map | every user | light/dark, map style (Esri, OpenStreetMap, CARTO, each with a link to examples; automatic fallback if a service fails) with the CARTO key right below, where coordinates open (Google Maps, Apple Maps, OpenStreetMap, Waze, HERE; choice of apps on phones) |
-| Zones, "Where is…?" display, "Location history" display | every user (advanced) | zone colours, hide single zones, own colour per zone, info bar, status bar, accuracy circle, following, start view, legend, automatic refresh and refresh interval |
+| Zones, "Where is…?" display, "Location history" display | every user (advanced) | in which card zones are shown, zone colours, hide single zones, own colour per zone, info bar, status bar, accuracy circle, following, start view, legend, automatic refresh and refresh interval |
 | Persons in Whereabouts | administrators | which Home Assistant persons Whereabouts works with at all |
 | Users and rights | administrators | rules for everybody (see live / see history / delete history: all persons (default), own person, nobody) and own rights per user; technical users (e.g. the MQTT user) hidden |
 | Sidebar | administrators | sidebar entry on/off, name, icon |
 | Recording | administrators | recorded persons, store interval (60 s), "same place" radius (50 m), deleting old history (default: never) |
 | Addresses | administrators | Companion app (geocoded location), otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; sensor per person (found automatically) |
-| Import and export | export: everybody (own rights), import: administrators | "Download location data" (day or period, persons, CSV/GPX, several files as ZIP); import with preview, format help and a prompt for converting other apps' data with an AI assistant |
+| Import and export | export: everybody (own rights), import: administrators | "Export data" (day or period, persons, CSV/GPX, several files as ZIP); import that merges into gaps of existing days (or replaces them) with a preview per day, format help and a prompt for converting other apps' data with an AI assistant |
 | Diagnostics | administrators | trackers, geocoded-location sensor and stored days per person |
 
-Administrators switch between **For me** and **Default for all users**, can make
-one category or all their settings the default, and can **synchronise their
-settings with all users** (non-admins then get the administrator's settings live
-and no settings tab; their own values are kept). Each personal category can be
-locked – for all non-admins (with exceptions) or for selected users; locked users
-see it greyed out with the defaults.
+Administrators choose whose settings they edit: **Me**, **Default for all users**
+or a single user. Under **Users and rights** a table shows per user what applies
+(default, own settings, synchronised, fixed settings), whether they see the
+settings tab, and whether they are **synchronised with the administrator's
+settings** (for single users or all, new users included); switching it off keeps
+the administrator's settings. A category can be fixed for all users (with
+exceptions) or selected users; single settings can be fixed for one user. Fixed
+settings are greyed out for the user.
 
 Switches and selections save at once; text and number fields only with **Save** or
 the Enter key. Leaving the page with unsaved fields asks first; unsaved values are
@@ -138,7 +140,7 @@ filling the page use a view of type **Panel**.
 | Per person (this card only) | display name, colour, picture, address sensor | display name, colour, picture |
 | Map | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO (own key), coordinates open in Google Maps (default), Apple Maps, OpenStreetMap, Waze or HERE; on phones and tablets a choice of apps | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO |
 | Zones | on/off, colour of Home and of the other zones, names from zoom | same |
-| Display | info bar, status bar, GPS accuracy, follow at start, automatic refresh and interval | start with map or table, legend, download button, automatic refresh and interval; one day or a period of up to 31 days |
+| Display | info bar with "Show everyone", status bar, GPS accuracy, follow at start, automatic refresh and interval | start with map or table, legend, "Export data" (also as map picture), automatic refresh and interval; a day or any period with suggestions (days without data greyed out), route or heatmap |
 | Height | automatic (full height in a panel view), full screen or fixed | same |
 
 Without a colour, a person gets the same colour in both cards automatically.
@@ -151,6 +153,8 @@ person_settings:
   person.alex: { color: "#378ADD" }
   person.sam: { name: Sam, color: "#D6409F", picture: /local/pictures/sam.jpg }
 tiles: esri          # esri | osm | carto (key on the settings page)
+carto_light: voyager # CARTO: voyager | positron | dark_matter (each also *_nolabels)
+carto_dark: dark_matter
 map_style: auto      # auto | light | dark
 map_link: google     # google | apple | osm | waze | here | none
 map_link_choice: true
@@ -188,12 +192,15 @@ background stays empty.
 Import: **Settings → Import and export** on the sidebar page (or **Configure →
 Import history**). Supported are the Whereabouts CSV
 format, GPX (tracks, routes, waypoints) and the daily files of the original
-script version (single file or ZIP). Existing entries are skipped, or whole days
-replaced if you choose so. The format is described in [FORMAT.md](FORMAT.md#english).
+script version (single file or ZIP). By default existing days are merged: only
+entries that fall into a gap (a time without a stored stay) are added; or whole
+days are replaced if you choose so. A preview shows per day what would happen,
+and you tick the days to import. The format is described in [FORMAT.md](FORMAT.md#english).
 
-Export: **Download location data** in the history card or on the settings page –
-a day or a period, one or more persons, CSV or GPX, one file or a ZIP with one
-file per day and/or person. Directly:
+Export: **Export data** in the history card or on the settings page – a day or a
+period, one or more persons, CSV or GPX, one file or a ZIP with one file per day
+and/or person; in the history card also a picture of the map (JPG) and the
+selected entries of the table. Directly:
 `/api/whereabouts/export?persons=person.x,person.y&from=2026-01-01&to=2026-01-31&format=csv`
 (optional `split_day=1`, `split_person=1`).
 
@@ -298,23 +305,24 @@ oder überschreibt, fragt vorher nach.
 | Ansichten | jeder Benutzer | welche Reiter angezeigt werden, welcher zuerst erscheint |
 | Personen | jeder Benutzer | wer erscheint, Reihenfolge, Anzeigename, Farbe, Bild (Adresse oder hochladen), in welcher Karte (beide, nur „Wo ist…?“, nur „Standortverlauf“); Warnung bei ähnlichen Farben |
 | Karte | jeder Benutzer | hell/dunkel, Kartenstil (Esri, OpenStreetMap, CARTO, jeweils mit Link zu Beispielen; automatischer Ersatz, wenn ein Dienst ausfällt) mit dem CARTO-Schlüssel direkt darunter, wohin Koordinaten führen (Google Maps, Apple Karten, OpenStreetMap, Waze, HERE; am Handy mit App-Auswahl) |
-| Zonen, Anzeige „Wo ist…?“, Anzeige „Standortverlauf“ | jeder Benutzer (erweitert) | Zonenfarben, einzelne Zonen ausblenden, eigene Farbe pro Zone, Infoleiste, Statusleiste, Genauigkeitskreis, Folgen, Startansicht, Legende, automatisch aktualisieren und Aktualisierungsintervall |
+| Zonen, Anzeige „Wo ist…?“, Anzeige „Standortverlauf“ | jeder Benutzer (erweitert) | in welcher Karte Zonen erscheinen, Zonenfarben, einzelne Zonen ausblenden, eigene Farbe pro Zone, Infoleiste, Statusleiste, Genauigkeitskreis, Folgen, Startansicht, Legende, automatisch aktualisieren und Aktualisierungsintervall |
 | Personen in Whereabouts | Administratoren | mit welchen Personen aus Home Assistant Whereabouts überhaupt arbeitet |
 | Benutzer und Rechte | Administratoren | Regeln für alle (live sehen / Verlauf sehen / Verlauf löschen: alle Personen (Standard), eigene Person, niemand) und eigene Rechte pro Benutzer; technische Benutzer (z. B. der MQTT-Benutzer) ausgeblendet |
 | Seitenleiste | Administratoren | Eintrag an/aus, Name, Symbol |
 | Aufzeichnung | Administratoren | aufgezeichnete Personen, Speicherabstand (60 s), Umkreis „derselbe Ort“ (50 m), alten Verlauf löschen (Standard: nie) |
 | Adressen | Administratoren | Companion App (Geokodierter Standort), sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; Sensor pro Person (wird automatisch gefunden) |
-| Import und Export | Export: jeder (eigene Rechte), Import: Administratoren | „Standortdaten herunterladen“ (Tag oder Zeitraum, Personen, CSV/GPX, mehrere Dateien als ZIP); Import mit Vorschau, Formathilfe und einem Text, mit dem ein KI-Assistent Daten anderer Apps umwandelt |
+| Import und Export | Export: jeder (eigene Rechte), Import: Administratoren | „Daten exportieren“ (Tag oder Zeitraum, Personen, CSV/GPX, mehrere Dateien als ZIP); Import, der Lücken vorhandener Tage ergänzt (oder sie ersetzt), mit Vorschau pro Tag, Formathilfe und einem Text, mit dem ein KI-Assistent Daten anderer Apps umwandelt |
 | Diagnose | Administratoren | Tracker, Sensor „Geokodierter Standort“ und gespeicherte Tage pro Person |
 
-Administratoren wechseln zwischen **Für mich** und **Standard für alle
-Benutzer**, können eine Kategorie oder alle ihre Einstellungen zum Standard
-machen und **ihre Einstellungen mit allen Benutzern synchronisieren**
-(Nicht-Admins bekommen dann laufend die Einstellungen des Administrators und
-keinen Einstellungen-Reiter; ihre eigenen Werte bleiben erhalten). Jede
-persönliche Kategorie lässt sich sperren – für alle Nicht-Admins (mit Ausnahmen)
-oder für ausgewählte Benutzer; gesperrte Benutzer sehen sie ausgegraut mit den
-Standardwerten.
+Administratoren wählen, wessen Einstellungen sie bearbeiten: **Mir**, **Standard
+für alle Benutzer** oder ein einzelner Benutzer. Unter **Benutzer und Rechte**
+zeigt eine Tabelle pro Benutzer, was gerade gilt (Standard, eigene Einstellungen,
+synchronisiert, festgelegte Einstellungen), ob er den Einstellungen-Reiter sieht
+und ob er **mit den Einstellungen des Administrators synchronisiert** ist (für
+einzelne oder alle Benutzer, auch neue); beim Ausschalten bleiben die
+Einstellungen des Administrators. Eine Kategorie lässt sich für alle Benutzer
+(mit Ausnahmen) oder ausgewählte festlegen, einzelne Einstellungen für einen
+Benutzer. Festgelegtes sieht der Benutzer ausgegraut.
 
 Schalter und Auswahlen speichern sofort, Text- und Zahlenfelder nur mit
 **Speichern** oder der Eingabetaste. Wer die Seite mit ungespeicherten Feldern
@@ -356,7 +364,7 @@ füllt, eine Ansicht vom Typ **Panel** verwenden.
 | Pro Person (nur diese Karte) | Anzeigename, Farbe, Bild, Adress-Sensor | Anzeigename, Farbe, Bild |
 | Karte | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO (eigener Schlüssel), Koordinaten öffnen in Google Maps (Standard), Apple Karten, OpenStreetMap, Waze oder HERE; auf Handy und Tablet mit App-Auswahl | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO |
 | Zonen | an/aus, Farbe von Zuhause und der übrigen Zonen, Namen ab Zoom | ebenso |
-| Anzeige | Infoleiste, Statusleiste, GPS-Genauigkeit, beim Start folgen, automatisch aktualisieren und Intervall | Start mit Karte oder Tabelle, Legende, Download-Knopf, automatisch aktualisieren und Intervall; ein Tag oder ein Zeitraum bis 31 Tage |
+| Anzeige | Infoleiste mit „Alle einblenden“, Statusleiste, GPS-Genauigkeit, beim Start folgen, automatisch aktualisieren und Intervall | Start mit Karte oder Tabelle, Legende, „Daten exportieren“ (auch als Kartenbild), automatisch aktualisieren und Intervall; ein Tag oder ein beliebiger Zeitraum mit Vorschlägen (Tage ohne Daten ausgegraut), Route oder Heatmap |
 | Höhe | automatisch (ganze Höhe in einer Panel-Ansicht), ganze Bildschirmhöhe oder fest | ebenso |
 
 Ohne eigene Farbe bekommt eine Person in beiden Karten automatisch dieselbe
@@ -369,6 +377,8 @@ person_settings:
   person.alex: { color: "#378ADD" }
   person.sam: { name: Sam, color: "#D6409F", picture: /local/bilder/sam.jpg }
 tiles: esri          # esri | osm | carto (Schlüssel auf der Einstellungsseite)
+carto_light: voyager # CARTO: voyager | positron | dark_matter (jeweils auch *_nolabels)
+carto_dark: dark_matter
 map_style: auto      # auto | light | dark
 map_link: google     # google | apple | osm | waze | here | none
 map_link_choice: true
@@ -406,13 +416,16 @@ bleibt leer.
 Import: **Einstellungen → Import und Export** auf der Seite in der Seitenleiste
 (oder **Konfigurieren → Verlauf importieren**). Unterstützt werden das
 Whereabouts-CSV-Format, GPX (Tracks, Routen, Wegpunkte) und die Tagesdateien
-der ursprünglichen Skript-Version (einzeln oder als ZIP). Vorhandene Einträge
-werden übersprungen oder auf Wunsch ganze Tage ersetzt. Das Format steht in
+der ursprünglichen Skript-Version (einzeln oder als ZIP). Vorhandene Tage werden
+standardmäßig abgeglichen: Nur Einträge, die in eine Lücke fallen (eine Zeit ohne
+gespeicherten Aufenthalt), kommen dazu; auf Wunsch werden ganze Tage ersetzt. Eine
+Vorschau zeigt pro Tag, was passieren würde, und du hakst die Tage an. Das Format steht in
 [FORMAT.md](FORMAT.md#deutsch).
 
-Export: **Standortdaten herunterladen** in der Verlaufskarte oder auf der
-Einstellungsseite – ein Tag oder ein Zeitraum, eine oder mehrere Personen, CSV
-oder GPX, eine Datei oder ein ZIP mit einer Datei pro Tag und/oder Person. Direkt:
+Export: **Daten exportieren** in der Verlaufskarte oder auf der Einstellungsseite –
+ein Tag oder ein Zeitraum, eine oder mehrere Personen, CSV oder GPX, eine Datei
+oder ein ZIP mit einer Datei pro Tag und/oder Person; in der Verlaufskarte auch
+ein Bild der Karte (JPG) und die ausgewählten Einträge der Tabelle. Direkt:
 `/api/whereabouts/export?persons=person.x,person.y&from=2026-01-01&to=2026-01-31&format=csv`
 (optional `split_day=1`, `split_person=1`).
 

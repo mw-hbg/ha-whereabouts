@@ -36,7 +36,7 @@ TIME_PATTERN = r"^\d{2}:\d{2}:\d{2}$"
 ERR_NOT_SET_UP = "not_set_up"
 ERR_FORBIDDEN = "forbidden"
 ERR_NOT_RECORDED = "not_recorded"
-MAX_RANGE_DAYS = 31
+MAX_RANGE_DAYS = 93  # per request; the cards load longer periods month by month
 
 
 def _runtime(hass: HomeAssistant):
@@ -130,6 +130,7 @@ def build_info(hass: HomeAssistant, user: User | None) -> dict[str, Any]:
         "settings": personal,
         "is_admin": bool(user and user.is_admin),
         "synced": settings.synced(user),
+        "settings_hidden": settings.settings_hidden(user),
         "today": dt_util.now().strftime("%Y-%m-%d"),
     }
 

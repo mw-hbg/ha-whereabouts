@@ -119,9 +119,24 @@ def panel_title(hass: HomeAssistant, options: dict) -> str:
     return "Standorte" if (hass.config.language or "").startswith("de") else "Whereabouts"
 
 
+PANEL_KEY = f"{DOMAIN}_panel"
+
+
 async def _register_panel(hass: HomeAssistant, options: dict, version: str) -> None:
-    """The sidebar page. Without the sidebar entry it stays reachable at /whereabouts."""
+    """The sidebar page. Without the sidebar entry it stays reachable at /whereabouts.
+
+    It stays registered across reloads of the integration (every change of an
+    option reloads it): Home Assistant rebuilds an open page whenever the panel
+    is registered again, so this happens only when entry, name, icon or version
+    really changed.
+    """
     show = bool(options[CONF_PANEL])
+    signature = (show, panel_title(hass, options), options[CONF_PANEL_ICON], version)
+    if hass.data.get(PANEL_KEY) == signature and PANEL_URL in hass.data.get("frontend_panels", {}):
+        return
+    if PANEL_URL in hass.data.get("frontend_panels", {}):
+        frontend.async_remove_panel(hass, PANEL_URL)
+    hass.data[PANEL_KEY] = signature
     await panel_custom.async_register_panel(
         hass,
         frontend_url_path=PANEL_URL,
@@ -170,8 +185,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     runtime.logger.stop()
     if runtime.js_url:
         remove_extra_js_url(hass, runtime.js_url)
-    if runtime.panel:
-        frontend.async_remove_panel(hass, PANEL_URL)
+    # The sidebar page stays (see _register_panel); it is removed with the entry.
     hass.data.pop(DOMAIN, None)
     async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
     return True
@@ -183,4 +197,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     The files stay in <config>/whereabouts/ and can be deleted by hand; they
     are picked up again if the integration is added back.
     """
+    if PANEL_URL in hass.data.get("frontend_panels", {}):
+        frontend.async_remove_panel(hass, PANEL_URL)
+    hass.data.pop(PANEL_KEY, None)
     _LOGGER.info("Whereabouts removed. The stored history was kept in %s", hass.config.path(STORAGE_FOLDER))

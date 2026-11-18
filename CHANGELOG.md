@@ -1,5 +1,94 @@
 # Changelog
 
+## Unreleased
+
+- Settings page: "fix" instead of "lock" throughout; the page keeps its position
+  after every change (also when Home Assistant rebuilds it); text and number
+  fields show "Saved ✓" in green; an emptied text field really goes back to the
+  default; "Reset" in Sidebar, Recording (numbers only) and Addresses; the
+  "Unsaved changes" window and the drafts hint link to the fields; in person rows
+  name, colour, picture and "Show in" are saved together; a green confirmation
+  box after synchronising, "Use my settings for everybody" and "Make default".
+- Administrators: role shown at the top; "Settings of" me, the default for all
+  users or a single user; table "Users and their settings" (what applies, settings
+  tab on/off, synchronise with me – per user or for all, new users included,
+  edit); single settings or whole categories can be fixed for one user.
+  Switching synchronisation off keeps the administrator's settings (for everybody
+  they become the default and own settings of users are removed; for one user
+  they become that user's own).
+- Map: CARTO styles per card and light/dark (Voyager, Positron, Dark Matter, each
+  also without labels); CARTO key hidden behind dots with an eye button (shown
+  for 10 seconds); "Show zones" per card (both, only one, not at all).
+- "Where is…?": "Show everyone"; every hiding/showing zooms to everybody shown;
+  coming back to the map (tab, dashboard) shows everybody and follows again;
+  zoom buttons in the same place as in the history; a hidden person can be
+  shown again by clicking the tile.
+- "Location history": person buttons with picture and eye; date picker like the
+  energy dashboard with suggestions (today, yesterday, this week, this month, last
+  month, this year, last year, last 7 days, last 4 weeks, since recording began),
+  days without data greyed out, any length (long periods are loaded month by
+  month with a warning); route or heatmap (weighted by time spent, home optional;
+  Leaflet.heat bundled); "Select entries" to export (CSV/GPX) or delete them;
+  link to the map app next to the place; "Export data" at the bottom left, also
+  as map picture (JPG, current view or the whole route/heatmap).
+- New installations: only administrators delete history by default.
+- Import: "Import belongs to"; export and import as separate sections; existing
+  days are merged (only entries in gaps) or replaced, with a preview per day to
+  tick the days.
+- Card editor: empty colour warning hidden; selections start with "As in the
+  settings (…)" and keep what is chosen (Esri could not be chosen while the
+  settings said OpenStreetMap); CARTO styles.
+- "Full screen height" measures where the card starts, so a sections view does not
+  scroll; the sidebar page is only registered again when entry, name or icon
+  change (other options no longer rebuild an open page).
+
+---
+
+- Einstellungsseite: durchgehend „festlegen“ statt „sperren“; die Seite bleibt
+  nach jeder Änderung an ihrer Stelle (auch wenn Home Assistant sie neu aufbaut);
+  Text- und Zahlenfelder zeigen grün „Gespeichert ✓“; ein geleertes Textfeld geht
+  wirklich auf den Standard zurück; „Zurücksetzen“ in Seitenleiste, Aufzeichnung
+  (nur die Zahlen) und Adressen; das Fenster „Ungespeicherte Änderungen“ und der
+  Entwurf-Hinweis verlinken auf die Felder; in Personenzeilen werden Name, Farbe,
+  Bild und „Anzeigen in“ gemeinsam gespeichert; ein grüner Bestätigungskasten nach
+  Synchronisieren, „Meine Einstellungen für alle übernehmen“ und „Als Standard
+  festlegen“.
+- Administratoren: Rolle oben sichtbar; „Einstellungen von“ mir, dem Standard für
+  alle Benutzer oder einem einzelnen Benutzer; Tabelle „Benutzer und ihre
+  Einstellungen“ (was gilt, Einstellungen-Reiter an/aus, mit mir synchronisieren –
+  pro Benutzer oder für alle, auch neue –, bearbeiten); einzelne Einstellungen oder
+  ganze Kategorien lassen sich für einen Benutzer festlegen. Beim Ausschalten der
+  Synchronisierung bleiben die Einstellungen des Administrators (für alle werden
+  sie zum Standard und eigene Einstellungen der Benutzer werden gelöscht; für einen
+  Benutzer werden sie zu dessen eigenen).
+- Karte: CARTO-Stile pro Karte und hell/dunkel (Voyager, Positron, Dark Matter,
+  jeweils auch ohne Beschriftung); CARTO-Schlüssel hinter Punkten mit Augen-Knopf
+  (10 Sekunden sichtbar); „Zonen zeigen“ pro Karte (beide, nur eine, gar nicht).
+- „Wo ist…?“: „Alle einblenden“; jedes Aus-/Einblenden zoomt auf alle Sichtbaren;
+  beim Zurückkommen auf die Karte (Reiter, Dashboard) sind wieder alle sichtbar und
+  die Karte folgt; Zoomknöpfe an derselben Stelle wie im Verlauf; eine
+  ausgeblendete Person lässt sich per Klick auf die Kachel wieder einblenden.
+- „Standortverlauf“: Personenknöpfe mit Bild und Auge; Datumswähler wie im
+  Energie-Dashboard mit Vorschlägen (heute, gestern, diese Woche, dieser Monat,
+  letzter Monat, dieses Jahr, letztes Jahr, letzte 7 Tage, letzte 4 Wochen, seit
+  Beginn der Aufzeichnung), Tage ohne Daten ausgegraut, beliebig lange Zeiträume
+  (lange werden Monat für Monat geladen, mit Hinweis); Route oder Heatmap
+  (gewichtet nach Aufenthaltsdauer, Zuhause wahlweise; Leaflet.heat mitgeliefert);
+  „Einträge auswählen“ zum Exportieren (CSV/GPX) oder Löschen; Link zur Karten-App
+  neben dem Ort; „Daten exportieren“ unten links, auch als Kartenbild (JPG,
+  aktueller Ausschnitt oder ganze Route/Heatmap).
+- Neue Installationen: Verlauf löschen standardmäßig nur Administratoren.
+- Import: „Import gehört zu“; Export und Import als getrennte Abschnitte;
+  vorhandene Tage werden abgeglichen (nur Einträge in Lücken) oder ersetzt, mit
+  Vorschau pro Tag zum Anhaken.
+- Karteneditor: leere Farbwarnung ausgeblendet; Auswahlfelder beginnen mit „Wie in
+  den Einstellungen (…)“ und behalten, was gewählt ist (Esri ließ sich nicht wählen,
+  solange in den Einstellungen OpenStreetMap stand); CARTO-Stile.
+- „Ganze Bildschirmhöhe“ misst, wo die Karte beginnt, sodass eine Abschnitte-Ansicht
+  nicht mehr scrollt; die Seite in der Seitenleiste wird nur neu angemeldet, wenn
+  sich Eintrag, Name oder Symbol ändern (andere Optionen bauen eine offene Seite
+  nicht mehr neu auf).
+
 ## 0.3.0
 
 - Set-up in two steps: first the persons Whereabouts works with (all ticked) and

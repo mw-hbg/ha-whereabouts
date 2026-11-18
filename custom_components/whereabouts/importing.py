@@ -19,8 +19,14 @@ async def import_bytes(
     replace: bool,
     same_place_distance: float,
     preview: bool = False,
+    days: list[str] | None = None,
 ) -> dict:
-    """Read a file and store its points (or only count them with preview=True)."""
+    """Read a file and store its points (or only plan it with preview=True).
+
+    Without ``replace`` the file is merged: only entries that fall into gaps
+    of stored days are added. ``days`` ("person|YYYY-MM-DD") limits the import
+    to the days ticked in the preview.
+    """
     # Zones are read here (event loop); the importer runs in the executor.
     zones = zone_snapshot(hass)
     parsed = await hass.async_add_executor_job(
@@ -50,24 +56,37 @@ async def import_bytes(
 
     total, day_count = summarize(p for points in by_person.values() for p in points)
     dates = sorted({p.date for points in by_person.values() for p in points})
+    runtime = hass.data.get(DOMAIN)
+    if runtime is None:
+        raise ImportError_("not_set_up")
+    mode = "replace" if replace else "merge"
     if preview:
+        plan = []
+        for dest, points in sorted(by_person.items()):
+            for day in await hass.async_add_executor_job(runtime.storage.import_plan, dest, points, mode):
+                plan.append({"person": dest, **day})
         return {
             "persons": sorted(by_person),
             "total": total,
             "days": day_count,
             "first": dates[0] if dates else "",
             "last": dates[-1] if dates else "",
+            "mode": mode,
+            "plan": plan,
         }
 
-    runtime = hass.data.get(DOMAIN)
-    if runtime is None:
-        raise ImportError_("not_set_up")
-    added = skipped = days = 0
+    added = skipped = day_total = 0
     for dest, points in by_person.items():
-        outcome = await hass.async_add_executor_job(runtime.storage.import_points, dest, points, replace)
+        wanted = None if days is None else [d.split("|", 1)[1] for d in days if d.split("|", 1)[0] == dest]
+        outcome = await hass.async_add_executor_job(
+            lambda dest=dest, points=points, wanted=wanted: runtime.storage.import_points(
+                dest, points, replace, wanted, True
+            )
+        )
         added += outcome["added"]
         skipped += outcome["skipped"]
-        days += outcome["days"]
+        day_total += outcome["days"]
+    days = day_total
     await runtime.async_refresh_known(hass)
     return {
         "persons": sorted(by_person),

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.1
 
 - Both maps: new button "Show everything" bottom left (back to everybody, or to
   all points of the period). Coming back to a map – tab on the sidebar page or

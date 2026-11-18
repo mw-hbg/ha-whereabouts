@@ -7,10 +7,15 @@ options and the import are for administrators only.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import re
+import secrets
+import socket
+import time
 from http import HTTPStatus
 from typing import Any
+from urllib.parse import urlparse
 
 import voluptuous as vol
 from aiohttp import web
@@ -33,6 +38,7 @@ from .const import (
     CONF_RECORD_PERSONS,
     CONF_RETENTION_DAYS,
     CONF_SAME_PLACE_DISTANCE,
+    DEFAULT_OPTIONS,
     DOMAIN,
     SIGNAL_INFO_CHANGED,
 )
@@ -40,7 +46,7 @@ from .geo import find_address_sensor
 from .importer import ImportError_
 from .importing import import_bytes
 from .logger import person_key
-from .settings import CATEGORIES, LOCK_MODES, RIGHT_KINDS, RIGHT_LEVELS, validate_values
+from .settings import CATEGORIES, LOCK_MODES, RIGHT_KINDS, RIGHT_LEVELS, category_defaults, validate_values
 
 ERR_NOT_SET_UP = "not_set_up"
 ERR_FORBIDDEN = "forbidden"
@@ -93,9 +99,14 @@ def async_register(hass: HomeAssistant) -> None:
         ws_user,
         ws_options_reset,
         ws_check_key,
+        ws_restore,
+        ws_new_users,
+        ws_retention_preview,
+        ws_image_in_use,
     ):
         websocket_api.async_register_command(hass, command)
     hass.http.register_view(ImportView())
+    hass.http.register_view(FetchImageView())
 
 
 def _ready(hass, connection, msg, admin: bool = False):
@@ -173,6 +184,8 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
         "own": settings.own(user.id),
         "effective": settings.effective(user),
         "defaults": settings.defaults(),
+        # built-in values: "Auf Standard zurücksetzen" goes back to these
+        "factory": {cat: category_defaults(cat) for cat in CATEGORIES},
         "locked": settings.locked_categories(user),
         "rights": {kind: settings.allowed(user, kind) for kind in RIGHT_KINDS},
         "own_rights": user.id in settings.data["rights"],
@@ -187,10 +200,20 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
         ],
     }
     if user.is_admin:
+        users = await _users(hass)
+        # other users that settings and rights can be made for
+        others = [u for u in users if u["id"] != user.id and not u["is_admin"] and not u["technical"] and u["active"]]
+        pending = await settings.async_note_users(user, [u["id"] for u in others])
         result["admin"] = {
             **settings.admin_view(),
-            "users": await _users(hass),
+            "pending_users": pending,
+            "has_other_users": bool(others),
+            "users": users,
             "options": {str(key): runtime.options.get(str(key)) for key in OPTIONS_SCHEMA.schema},
+            # built-in values of the options (marked "own value" where they differ)
+            "option_defaults": {
+                str(key): DEFAULT_OPTIONS.get(str(key)) for key in OPTIONS_SCHEMA.schema if str(key) in DEFAULT_OPTIONS
+            },
             "all_persons": _persons(hass),
             "address": _address_info(hass, runtime, base),
         }
@@ -236,6 +259,10 @@ async def ws_save(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
         vol.Required("scope"): vol.In(["own", "defaults"]),
         vol.Optional("category"): vol.In(list(CATEGORIES)),
         vol.Optional("user_id"): _USER_ID,
+        # back to the built-in values (not just to the defaults)
+        vol.Optional("factory", default=False): bool,
+        # administrators: also for all users and the defaults
+        vol.Optional("everyone", default=False): bool,
     }
 )
 @websocket_api.async_response
@@ -254,7 +281,88 @@ async def ws_reset(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
     ):
         connection.send_error(msg["id"], ERR_LOCKED, "Fixed by the administrator")
         return
-    await runtime.settings.async_reset(msg["scope"], msg.get("user_id") or user.id, msg.get("category"))
+    target = msg.get("user_id") or user.id
+    if msg["factory"] and msg.get("category"):
+        if msg["everyone"] and not user.is_admin:
+            connection.send_error(msg["id"], ERR_FORBIDDEN, "Only for administrators")
+            return
+        settings = runtime.settings
+        snap = settings.snapshot(msg["category"])
+        if not msg["everyone"]:
+            snap = {"only": target, "users": {target: snap["users"].get(target)}}
+        token = _remember(hass, user.id, msg["category"], snap)
+        await settings.async_factory_reset(target, msg["category"], msg["everyone"])
+        _changed(hass)
+        connection.send_result(msg["id"], {"undo": token})
+        return
+    await runtime.settings.async_reset(msg["scope"], target, msg.get("category"))
+    _changed(hass)
+    connection.send_result(msg["id"])
+
+
+UNDO_SECONDS = 35  # the page offers "restore" for 30 s
+_UNDO_KEY = f"{DOMAIN}_undo"
+
+
+def _remember(hass: HomeAssistant, user_id: str, category: str, snap: dict) -> str:
+    store: dict = hass.data.setdefault(_UNDO_KEY, {})
+    now = time.monotonic()
+    for token in [t for t, entry in store.items() if now - entry[0] > UNDO_SECONDS]:
+        store.pop(token, None)
+    token = secrets.token_hex(8)
+    store[token] = (now, user_id, category, snap)
+    return token
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/settings/restore",
+        vol.Required("token"): vol.All(str, vol.Length(max=40)),
+    }
+)
+@websocket_api.async_response
+async def ws_restore(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Undo a reset of a whole category (within 30 s)."""
+    runtime = _ready(hass, connection, msg)
+    if runtime is None:
+        return
+    entry = hass.data.get(_UNDO_KEY, {}).pop(msg["token"], None)
+    if entry is None or entry[1] != connection.user.id or time.monotonic() - entry[0] > UNDO_SECONDS:
+        connection.send_error(msg["id"], ERR_INVALID, "Too late")
+        return
+    _, _, category, snap = entry
+    settings = runtime.settings
+    if "only" in snap:
+        value = snap["users"].get(snap["only"])
+        own = settings.data["users"].setdefault(snap["only"], {})
+        if value is None:
+            own.pop(category, None)
+        else:
+            own[category] = value
+        if not own:
+            settings.data["users"].pop(snap["only"], None)
+        await settings.async_save()
+    else:
+        await settings.async_restore(category, snap)
+    _changed(hass)
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/settings/new_users",
+        vol.Required("user_ids"): vol.All([_USER_ID], vol.Length(min=1, max=100)),
+        vol.Required("action"): vol.In(["copy", "sync", "factory", "later"]),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_new_users(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Decide which settings new users start with."""
+    runtime = _ready(hass, connection, msg, admin=True)
+    if runtime is None:
+        return
+    await runtime.settings.async_decide_users(connection.user, msg["user_ids"], msg["action"])
     _changed(hass)
     connection.send_result(msg["id"])
 
@@ -363,6 +471,7 @@ def _address_info(hass: HomeAssistant, runtime, base: list[str]) -> dict[str, An
         sensor = hass.states.get(sensor_id) if sensor_id else None
         auto[entity_id] = {
             "sensor": sensor_id or "",
+            "name": sensor.name if sensor else "",
             "ok": bool(sensor and sensor.state not in ("unavailable", "unknown")),
         }
     sensors = sorted(
@@ -476,8 +585,6 @@ async def ws_user(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
 @websocket_api.async_response
 async def ws_options_reset(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Back to the built-in values for some integration options (e.g. the sidebar)."""
-    from .const import DEFAULT_OPTIONS
-
     runtime = _ready(hass, connection, msg, admin=True)
     if runtime is None:
         return
@@ -664,3 +771,115 @@ def _PERSON_RE(value: str) -> bool:  # noqa: N802
     except vol.Invalid:
         return False
     return True
+
+
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
+
+def _public_host(host: str) -> bool:
+    """Only addresses on the internet: nothing in the home network or on this machine."""
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        return False
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0])
+        if not address.is_global:
+            return False
+    return bool(infos)
+
+
+class FetchImageView(HomeAssistantView):
+    """GET /api/whereabouts/image?url=... - loads a picture from the internet once,
+    so the page can crop it. Only images, at most 10 MB, only public addresses."""
+
+    url = "/api/whereabouts/image"
+    name = "api:whereabouts:image"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+        hass: HomeAssistant = request.app["hass"]
+        if _runtime(hass) is None:
+            return self.json_message("Whereabouts is not set up", HTTPStatus.NOT_FOUND)
+        target = request.query.get("url", "")[:2000]
+        parsed = urlparse(target)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return self.json({"error": "invalid_url"}, HTTPStatus.BAD_REQUEST)
+        if not await hass.async_add_executor_job(_public_host, parsed.hostname):
+            return self.json({"error": "not_public"}, HTTPStatus.BAD_REQUEST)
+        try:
+            async with async_get_clientsession(hass).get(target, timeout=15, allow_redirects=False) as response:
+                if response.status != 200:
+                    return self.json({"error": f"http_{response.status}"}, HTTPStatus.BAD_GATEWAY)
+                if not response.content_type.startswith("image/") or response.content_type == "image/svg+xml":
+                    return self.json({"error": "not_image"}, HTTPStatus.BAD_REQUEST)
+                if (response.content_length or 0) > MAX_IMAGE_BYTES:
+                    return self.json({"error": "too_large"}, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+                chunks, size = [], 0
+                async for chunk in response.content.iter_chunked(256 * 1024):
+                    size += len(chunk)
+                    if size > MAX_IMAGE_BYTES:
+                        return self.json({"error": "too_large"}, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+                    chunks.append(chunk)
+                content_type = response.content_type
+        except Exception:  # noqa: BLE001 - any network problem means "could not load"
+            return self.json({"error": "unreachable"}, HTTPStatus.BAD_GATEWAY)
+        return web.Response(body=b"".join(chunks), content_type=content_type, headers={"Cache-Control": "no-store"})
+
+
+def _days_before(folder: str, limit: str) -> int:
+    """Number of day files older than ``limit`` (what the retention would delete)."""
+    try:
+        names = os.listdir(folder)
+    except FileNotFoundError:
+        return 0
+    count = 0
+    for name in names:
+        if name.endswith(".csv") and "_" in name and name[:-4].rsplit("_", 1)[1] < limit:
+            count += 1
+    return count
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/settings/retention_preview",
+        vol.Required("days"): vol.All(vol.Coerce(int), vol.Range(min=1, max=36500)),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_retention_preview(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """How many day files (all persons) the next nightly cleanup would delete."""
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+
+    runtime = _ready(hass, connection, msg, admin=True)
+    if runtime is None:
+        return
+    limit = (dt_util.now() - timedelta(days=msg["days"])).strftime("%Y-%m-%d")
+    count = await hass.async_add_executor_job(_days_before, runtime.storage.folder, limit)
+    connection.send_result(msg["id"], {"files": count, "before": limit})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/settings/image_in_use",
+        vol.Required("image_id"): vol.Match(r"^[a-z0-9]{1,64}$"),
+    }
+)
+@callback
+def ws_image_in_use(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Is an uploaded picture still used somewhere (any user's settings, the defaults, a person)?
+
+    The settings page deletes a replaced picture only when nobody uses it any more."""
+    runtime = _ready(hass, connection, msg)
+    if runtime is None:
+        return
+    needle = f"/api/image/serve/{msg['image_id']}/"
+    data = runtime.settings.data
+    texts = [str(data.get("defaults")), str(data.get("users"))]
+    texts += [str(state.attributes.get("entity_picture") or "") for state in hass.states.async_all("person")]
+    connection.send_result(msg["id"], {"in_use": any(needle in text for text in texts)})

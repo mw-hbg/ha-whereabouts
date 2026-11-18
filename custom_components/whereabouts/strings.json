@@ -34,8 +34,10 @@
     "step": {
       "init": {
         "title": "Whereabouts",
-        "description": "Persons, colours, pictures, rights and the sidebar are set on the settings page: [Open settings](/whereabouts/settings). There you also find everything below.",
+        "description": "Persons, colours, pictures, rights and the dashboard are set on the settings page: [Open settings](/whereabouts/settings). There you also find everything below.",
         "menu_options": {
+          "open_settings": "Open settings",
+          "dashboard": "Dashboard",
           "recording": "Recording",
           "addresses": "Addresses",
           "import_file": "Import history"
@@ -80,6 +82,20 @@
           "target_person": "Required for GPX. For CSV files, leave empty to use the person named in the file.",
           "replace": "Off: entries that already exist (same start time) are skipped. On: every day in the file replaces the stored day completely."
         }
+      },
+      "dashboard": {
+        "title": "Dashboard",
+        "description": "Whether Whereabouts appears as a dashboard in the sidebar, with which name and which icon. Hidden, it stays reachable at [/whereabouts](/whereabouts) and through \"Open settings\" here.",
+        "data": {
+          "panel_hidden": "Hide in the sidebar",
+          "panel_title": "Name of the dashboard",
+          "panel_icon": "Icon of the dashboard"
+        },
+        "data_description": {
+          "panel_hidden": "Only the sidebar entry disappears – for everybody. To hide it just for yourself: Profile → Edit sidebar (or press and hold the sidebar).",
+          "panel_title": "Empty = \"Whereabouts\" (\"Standorte\" in German).",
+          "panel_icon": "Empty = the default icon."
+        }
       }
     },
     "error": {
@@ -92,7 +108,8 @@
       "not_set_up": "Whereabouts is not running."
     },
     "abort": {
-      "import_done": "Imported for {persons}: {added} entries on {days} days ({skipped} already existed)."
+      "import_done": "Imported for {persons}: {added} entries on {days} days ({skipped} already existed).",
+      "open_settings": "[Open the Whereabouts settings](/whereabouts/settings) – this works even when the dashboard is hidden in the sidebar."
     }
   },
   "selector": {

@@ -22,12 +22,14 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_CARTO_KEY,
+    CONF_PANEL,
     CONF_RECORD_PERSONS,
     DOMAIN,
+    PANEL_URL,
     SIGNAL_INFO_CHANGED,
 )
 from .logger import person_key
-from .settings import card_settings
+from .settings import CATEGORIES, card_settings
 from .storage import Stay, export_csv_multi, is_valid_date, is_valid_key
 
 DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
@@ -118,6 +120,12 @@ def build_info(hass: HomeAssistant, user: User | None) -> dict[str, Any]:
             }
         )
     personal = card_settings(settings.effective(user))
+    # settings the user cannot change themselves (e.g. the zone switch in the legend is greyed out)
+    locked: set[str] = set()
+    fixed = settings.locked_categories(user)
+    for cat, spec in CATEGORIES.items():
+        keys = list(spec) if cat in fixed else settings.locked_keys(user, cat)
+        locked.update(spec if "*" in keys else keys)
     personal[CONF_CARTO_KEY] = runtime.options.get(CONF_CARTO_KEY, "")
     return {
         "available": True,
@@ -128,9 +136,13 @@ def build_info(hass: HomeAssistant, user: User | None) -> dict[str, Any]:
         "shown": [p for p in base if p in live_allowed],
         "persons": persons,
         "settings": personal,
+        "locked_keys": sorted(locked),
         "is_admin": bool(user and user.is_admin),
         "synced": settings.synced(user),
         "settings_hidden": settings.settings_hidden(user),
+        # administrators get a way to the settings when the dashboard or its settings view is hidden
+        "panel_shown": bool(runtime.options.get(CONF_PANEL, True)),
+        "panel_url": "/" + PANEL_URL,
         "today": dt_util.now().strftime("%Y-%m-%d"),
     }
 

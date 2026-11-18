@@ -23,6 +23,7 @@ const PERSONAL = [
     { key: 'tiles', custom: 'tiles' },
     { key: 'map_link', sel: (t) => sel(['google', 'apple', 'osm', 'waze', 'here', 'none'].map((v) => ({ value: v, label: t(`ed_link_${v}`) }))) },
     { key: 'map_link_choice', sel: B },
+    { key: 'map_link_apps', custom: 'apps', needs: 'map_link_choice', hideOff: true },
   ] },
   { id: 'zones', icon: 'mdi:map-marker-circle', weight: 'more', fields: [
     { key: 'zones_in', sel: (t) => sel(['both', 'live', 'history', 'none'].map((v) => ({ value: v, label: t(`zones_in_${v}`) }))) },
@@ -36,8 +37,11 @@ const PERSONAL = [
     { key: 'live_refresh_interval', sel: num(5, 3600, 5, 's'), needs: 'live_auto_refresh' },
   ] },
   { id: 'history', icon: 'mdi:map-clock', weight: 'more', fields: [
-    { key: 'default_view', sel: (t) => sel(['map', 'table'].map((v) => ({ value: v, label: t(`ed_view_${v}`) }))) },
-    { key: 'show_legend', sel: B }, { key: 'show_export', sel: B }, { key: 'history_auto_refresh', sel: B },
+    { key: 'default_view', sel: (t) => sel(['map', 'heat', 'table'].map((v) => ({ value: v, label: t(`ed_view_${v}`) }))) },
+    { key: 'start_period', sel: (t) => sel(['today', '3d', '7d', '4w'].map((v) => ({ value: v, label: t(`start_period_${v}`) }))) },
+    { key: 'show_legend', sel: B }, { key: 'show_export', sel: B },
+    { key: 'simplify_points', sel: num(0, 100000, 50) },
+    { key: 'history_auto_refresh', sel: B },
     { key: 'history_refresh_interval', sel: num(10, 3600, 5, 's'), needs: 'history_auto_refresh' },
   ] },
 ];
@@ -46,17 +50,21 @@ const PERSONAL = [
 const ADMIN = [
   { id: 'base', icon: 'mdi:account-group', custom: 'base' },
   { id: 'rights', icon: 'mdi:account-key', custom: 'rights' },
-  { id: 'sidebar', icon: 'mdi:dock-left', reset: ['panel', 'panel_title', 'panel_icon'], options: [
-    { key: 'panel', sel: B }, { key: 'panel_title', sel: { text: {} }, text: true },
-    { key: 'panel_icon', sel: { icon: {} }, text: true },
+  // "Dashboard": the entry in the sidebar (shown as "hide in the sidebar", stored as "panel")
+  { id: 'sidebar', icon: 'mdi:view-dashboard', reset: ['panel', 'panel_title', 'panel_icon'], options: [
+    { key: 'panel', invert: true, label: 'st_panel_hidden', info: 'si_panel_hidden', sel: B, confirm: 'panel' },
+    { key: 'panel_title', sel: { text: {} }, text: true, placeholder: 'panel_title' },
+    { key: 'panel_icon', sel: { icon: {} }, text: true, emptyIs: 'mdi:map-marker-radius' },
   ] },
   { id: 'recording', icon: 'mdi:record-rec', reset: ['min_interval', 'same_place_distance', 'retention_days'], options: [
-    { key: 'record_persons', persons: true }, { key: 'min_interval', sel: num(10, 3600, 10, 's') },
-    { key: 'same_place_distance', sel: num(10, 1000, 10, 'm') }, { key: 'retention_days', sel: num(0, 36500, 1, 'd'), confirm: 'retention' },
+    { key: 'record_persons', persons: true },
+    { key: 'min_interval', sel: num(10, 3600, 10, 's'), group: 'precision' },
+    { key: 'same_place_distance', sel: num(10, 1000, 10, 'm'), group: 'precision' },
+    { key: 'retention_days', sel: num(0, 36500, 1, 'd'), confirm: 'retention', group: 'precision' },
   ] },
   { id: 'addresses', icon: 'mdi:map-search', reset: ['address_source', 'address_max_distance', 'address_sensors'], options: [
     { key: 'address_source', sel: (t) => sel(['phone_osm', 'phone', 'osm', 'off'].map((v) => ({ value: v, label: t(`opt_address_${v}`) }))) },
-    { key: 'address_max_distance', sel: num(10, 5000, 10, 'm') },
+    { key: 'address_max_distance', sel: num(10, 5000, 10, 'm'), hideWhen: (o) => o.address_source === 'osm' || o.address_source === 'off' },
   ], custom: 'sensors' },
   { id: 'data', icon: 'mdi:swap-vertical', custom: 'data', everyone: true },
   { id: 'diagnostics', icon: 'mdi:stethoscope', custom: 'diagnostics' },
@@ -350,6 +358,92 @@ const CSS = `
   .wa-set .verwaltet { padding: 40px 16px; text-align: center; color: var(--secondary-text-color); font-size: 15px; }
   .wa-set .verwaltet ha-icon { --mdc-icon-size: 40px; display: block; margin: 0 auto 12px; }
   .wa-set .dialog ul { margin: 8px 0; padding-left: 20px; font-size: 14px; color: var(--primary-text-color); }
+  /* Empty placeholders (drafts, success, hints) take no room */
+  .wa-set main > div:empty { display: none; }
+  /* Own value: blue dot before the name, arrow back to the standard; afterwards "Restore" with a running ring */
+  .wa-set .marker { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+  .wa-set .marker:empty { display: none; }
+  .wa-set .punkt-eigen { width: 8px; height: 8px; border-radius: 50%; background: var(--primary-color); flex: 0 0 auto; margin: 0 2px; }
+  .wa-set .zurueck-pfeil { width: 28px; height: 28px; border: none; border-radius: 50%; background: none; cursor: pointer; padding: 0;
+                           color: var(--secondary-text-color); display: inline-flex; align-items: center; justify-content: center; }
+  .wa-set .zurueck-pfeil:hover { color: var(--primary-color); background: rgba(var(--rgb-primary-color, 3,169,244), .1); }
+  .wa-set .zurueck-pfeil ha-icon { --mdc-icon-size: 18px; }
+  .wa-set .wiederherstellen { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 4px;
+                              border: none; border-radius: 14px; background: rgba(var(--rgb-primary-color, 3,169,244), .1); cursor: pointer;
+                              font: inherit; font-size: 12px; font-weight: 500; color: var(--primary-color); white-space: nowrap; }
+  .wa-set .wiederherstellen svg { width: 22px; height: 22px; flex: 0 0 auto; }
+  .wa-set .wiederherstellen .ring-hg { fill: none; stroke: rgba(127,127,127,.25); stroke-width: 2.4; }
+  .wa-set .wiederherstellen .ring { fill: none; stroke: var(--primary-color); stroke-width: 2.4; stroke-linecap: round;
+                                    stroke-dasharray: 56.55; transform: rotate(-90deg); transform-origin: 11px 11px;
+                                    animation: wa-ablauf 30s linear forwards; }
+  .wa-set .wiederherstellen ha-icon { position: absolute; left: 7px; top: 7px; --mdc-icon-size: 14px; }
+  @keyframes wa-ablauf { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 56.55; } }
+  .wa-set .knopf.wiederherstellen { height: auto; padding: 7px 14px 7px 8px; border-radius: 18px; font-size: 14px; border: 1px solid var(--primary-color); }
+  .wa-set .knopf.wiederherstellen ha-icon { left: 12px; top: 50%; margin-top: -7px; }
+  /* Sub-areas that open and close (CARTO styles, zone list, accuracy, address sensors) */
+  .wa-set details.unter { grid-column: 1 / -1; border-top: 1px solid var(--divider-color); }
+  .wa-set details.unter > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 10px 16px; }
+  .wa-set details.unter > summary::-webkit-details-marker { display: none; }
+  .wa-set details.unter > summary .titel { font-size: 15px; }
+  .wa-set details.unter > summary .kurz2 { font-size: 13px; color: var(--secondary-text-color); margin-left: auto; text-align: right;
+                                           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .wa-set details.unter > summary .kurz2.warn { color: var(--warning-color, #ef6c00); }
+  .wa-set details.unter > summary .pfeil2 { flex: 0 0 auto; color: var(--secondary-text-color); transition: transform .2s; }
+  .wa-set details.unter[open] > summary .pfeil2 { transform: rotate(180deg); }
+  .wa-set details.unter[open] > summary .kurz2 { display: none; }
+  .wa-set details.unter .innen { padding: 0 0 6px; }
+  .wa-set details.unter .innen > .zeile:first-child { border-top: none; }
+  .wa-set .zeile.innen-zeile { padding-left: 32px; }
+  /* CARTO styles: 2 × 2 */
+  .wa-set .stilraster { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; align-items: center; padding: 4px 16px 12px; }
+  .wa-set .stilraster .kopf { font-size: 13px; color: var(--secondary-text-color); font-weight: 500; }
+  .wa-set .stilraster .zelle { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .wa-set .stilraster .zelle > :first-child { flex: 1 1 auto; min-width: 0; }
+  .wa-set .api { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 8px; margin-left: 6px; }
+  .wa-set .api.ok { color: var(--success-color, #43a047); background: rgba(67,160,71,.12); }
+  .wa-set .api.schlecht { color: var(--error-color, #db4437); background: rgba(219,68,55,.1); }
+  /* Map apps: a field with ticks */
+  .wa-set .mehrfach { position: relative; width: 100%; }
+  .wa-set .mehrfach > button { width: 100%; text-align: left; display: flex; align-items: center; gap: 8px; font: inherit; font-size: 14px;
+                               padding: 9px 10px; border: 1px solid var(--divider-color); border-radius: 8px; cursor: pointer;
+                               background: var(--card-background-color); color: var(--primary-text-color); }
+  .wa-set .mehrfach > button span { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wa-set .mehrfach > button:disabled { opacity: .5; cursor: default; }
+  .wa-set .mehrfach .liste { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px); padding: 6px 0;
+                             background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 8px;
+                             box-shadow: 0 4px 16px rgba(0,0,0,.2); }
+  .wa-set .mehrfach .liste label { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: 14px; cursor: pointer; }
+  .wa-set .mehrfach .liste label:hover { background: var(--secondary-background-color); }
+  .wa-set .mehrfach .liste input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary-color); }
+  /* Contrast and similar colours: cannot be clicked away */
+  .wa-set .kontrast { grid-column: 1 / -1; font-size: 13px; line-height: 1.4; padding: 6px 10px; border-radius: 8px;
+                      background: rgba(255,166,0,.14); border-left: 3px solid var(--warning-color, #ffa600); }
+  /* Profile picture: drop field, preview, crop */
+  .wa-set .bildwahl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+  .wa-set .bildwahl .ablage-klein { flex: 1 1 200px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px dashed var(--divider-color);
+                                    border-radius: 10px; color: var(--secondary-text-color); font-size: 13px; cursor: pointer; min-width: 0; }
+  .wa-set .bildwahl .ablage-klein.drueber { border-color: var(--primary-color); color: var(--primary-color); }
+  .wa-set .bildwahl .ablage-klein ha-icon { --mdc-icon-size: 20px; flex: 0 0 auto; }
+  .wa-set .bildwahl .vorschau { width: 40px; height: 40px; border-radius: 50%; background: center/cover no-repeat var(--secondary-background-color); flex: 0 0 auto; }
+  .wa-set .bildwahl a, .wa-set .bildwahl .verweis-knopf { font-size: 13px; color: var(--primary-color); cursor: pointer; background: none; border: none; padding: 4px; font-family: inherit; }
+  .wa-set .zuschnitt { position: relative; width: 280px; height: 280px; max-width: 100%; margin: 0 auto; border-radius: 12px; overflow: hidden;
+                       background: #222; touch-action: none; cursor: grab; user-select: none; }
+  .wa-set .zuschnitt canvas { display: block; width: 100%; height: 100%; }
+  .wa-set .zuschnitt .maske { position: absolute; inset: 0; pointer-events: none;
+                              background: radial-gradient(circle at center, transparent 0 44%, rgba(0,0,0,.55) 44.4%); }
+  .wa-set .zoomzeile { display: flex; align-items: center; gap: 10px; margin: 12px auto 0; max-width: 280px; }
+  .wa-set .zoomzeile input { flex: 1 1 auto; accent-color: var(--primary-color); }
+  /* Users: one table */
+  .wa-set .benutzer td .klein + .klein { margin-top: 2px; }
+  .wa-set .benutzer .spalte-recht { min-width: 120px; }
+  .wa-set .benutzer .schalterzeile { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--secondary-text-color); margin-top: 4px; white-space: nowrap; }
+  .wa-set .benutzer select.ein { width: auto; padding: 6px 8px; font-size: 13px; }
+  .wa-set .banner .fertig { margin-left: auto; }
+  .wa-set .neue-benutzer .person-recht { margin: 6px 0 12px; padding: 8px 10px; border: 1px solid var(--divider-color); border-radius: 10px; }
+  .wa-set .neue-benutzer .person-recht b { display: block; margin-bottom: 4px; }
+  .wa-set .neue-benutzer .rechtzeile { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; margin: 2px 0; }
+  .wa-set .neue-benutzer .rechtzeile > span { min-width: 110px; color: var(--secondary-text-color); }
+  .wa-set .neue-benutzer label.chip { padding: 2px 8px 2px 4px; }
   @media (max-width: 870px) {
     .wa-set { display: block; padding: 0 8px 16px; }
     .wa-set .toc { display: none; }
@@ -371,6 +465,10 @@ const CSS = `
     .wa-set .person .zweite select { max-width: none; flex: 1 1 160px; }
     .wa-set .kat { scroll-margin-top: 72px; }
     .wa-set .kat-text { padding-left: 16px; }
+    .wa-set .stilraster { grid-template-columns: minmax(0, 1fr); }
+    .wa-set .stilraster .kopf.leer, .wa-set .stilraster .kopf.spalte { display: none; }
+    .wa-set .stilraster .zeilenkopf { margin-top: 6px; }
+    .wa-set .zeile.innen-zeile { padding-left: 16px; }
   }
 `;
 
@@ -378,6 +476,9 @@ export function defineSettingsPage(S, D) {
   // Text for a key that may be missing (e.g. an error code from the server)
   const maybe = (t, key, fallback) => { const text = t(key); return text === key ? fallback : text; };
   const esc = (v) => S.escapeHtml(v);
+  // ⓘ texts: paragraphs (blank line) and **bold keywords**
+  const rich = (v) => String(v ?? '').split(/\n\s*\n/).map((part) => `<p style="margin:0 0 6px">${esc(part.trim())
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>')}</p>`).join('');
   const VIEW_KEY = 'whereabouts-settings-view';
   const KEEP_VIEW_MS = 60000; // back within a minute: same place; later: page from the top
 
@@ -390,12 +491,14 @@ export function defineSettingsPage(S, D) {
       this._pending = new Map(); // unsaved text/number fields: id -> { label, draft, save, discard }
       this._savables = new Map(); // id -> { api, row }
       this._showTechnical = false;
-      this._userFilter = 'all';
       this._import = { person: '', mode: 'merge' };
       this._lastAnchor = null; // where the page was last seen (kept while scrolling)
+      // "Restore" for 30 s after going back to the standard: one setting / a whole category
+      this._undo = new Map(); // `${scope}:${user}:${category}:${key}` -> { restore(), until }
+      this._catUndo = new Map(); // `${scope}:${user}:${category}` -> { restore(), until }
       this._onScroll = () => {
         if (this._scrollFrame) return;
-        this._scrollFrame = requestAnimationFrame(() => { this._scrollFrame = null; this._noteAnchor(); });
+        this._scrollFrame = requestAnimationFrame(() => { this._scrollFrame = null; this._noteAnchor(); if (this._tocUpdate) this._tocUpdate(); });
       };
       this._beforeUnload = (e) => {
         if (!this._pending.size) return undefined;
@@ -534,8 +637,127 @@ export function defineSettingsPage(S, D) {
     }
 
     // Are there users besides administrators (technical ones like MQTT not counted)?
+    // Without them the page shows nothing about other users (no locks, no defaults, no table).
     _hasOtherUsers() {
-      return this._data.admin.users.some((u) => u.active && !u.is_admin && !u.technical);
+      return Boolean(this._data && this._data.admin && this._data.admin.has_other_users);
+    }
+
+    // --- own value or standard ---------------------------------------------------------------------
+    _scopeKey() {
+      return `${this._scope}:${(this._scope === 'user' && this._user && this._user.id) || ''}`;
+    }
+
+    // What applies without an own value: the defaults (built-in values when editing the defaults).
+    _standard(category, key) {
+      if (this._scope === 'defaults') return (this._data.factory[category] || {})[key];
+      return (this._data.defaults[category] || {})[key];
+    }
+
+    _isOwn(category, key) {
+      if (this._scope === 'defaults') return !same(this._values(category)[key], this._standard(category, key));
+      if (this._locked(category)) return false;
+      return Object.prototype.hasOwnProperty.call(this._ownValues(category), key);
+    }
+
+    // Everything of a category at the built-in values ("Reset to standard" has nothing to do)
+    _allFactory(category) {
+      const values = this._values(category) || {};
+      const factory = this._data.factory[category] || {};
+      return Object.keys(factory).every((key) => same(values[key], factory[key]));
+    }
+
+    // Readable value for "Standard would be: …"
+    _valueText(field, value) {
+      const t = this._t;
+      if (value === undefined || value === null || value === '') return t('value_empty');
+      if (typeof value === 'boolean') return t(value ? 'value_on' : 'value_off');
+      const selector = field && (typeof field.sel === 'function' ? field.sel(t) : field.sel);
+      if (selector && selector.select) {
+        const option = selector.select.options.find((o) => o.value === value);
+        if (option) return option.label;
+      }
+      if (Array.isArray(value)) return value.length ? value.join(', ') : t('value_empty');
+      if (typeof value === 'object') return t('value_custom');
+      return `${value}${selector && selector.number && selector.number.unit_of_measurement ? ` ${selector.number.unit_of_measurement}` : ''}`;
+    }
+
+    _ringHtml() {
+      return '<svg viewBox="0 0 22 22" aria-hidden="true"><circle class="ring-hg" cx="11" cy="11" r="9"/><circle class="ring" cx="11" cy="11" r="9"/></svg>';
+    }
+
+    // Fills a marker: own value → dot + arrow; within 30 s after the arrow → "Restore" with a ring.
+    // spec: { undoKey, own, standardText, back: async () => bool, restore: async () => bool, redraw() }
+    _fillMarker(holder, spec) {
+      if (!holder) return;
+      const t = this._t;
+      holder.innerHTML = '';
+      holder.classList.add('marker');
+      const pending = this._undo.get(spec.undoKey);
+      if (pending && pending.until > Date.now()) {
+        const left = (pending.until - Date.now()) / 1000;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'wiederherstellen';
+        button.title = t('restore_title');
+        button.innerHTML = `${this._ringHtml()}<ha-icon icon="mdi:undo"></ha-icon>${esc(t('restore'))}`;
+        button.querySelector('.ring').style.animationDelay = `-${Math.max(0, 30 - left)}s`;
+        button.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          button.disabled = true;
+          this._undo.delete(spec.undoKey);
+          if (await pending.restore() === false) button.disabled = false;
+          spec.redraw();
+        });
+        holder.appendChild(button);
+        return;
+      }
+      if (!spec.own) return;
+      const dot = document.createElement('span');
+      dot.className = 'punkt-eigen';
+      const title = spec.standardText !== undefined ? t('own_value_hint', { value: spec.standardText }) : t('own_value');
+      dot.title = title;
+      dot.setAttribute('role', 'img');
+      dot.setAttribute('aria-label', title);
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'zurueck-pfeil';
+      back.title = t('back_to_standard');
+      back.setAttribute('aria-label', `${t('back_to_standard')} (${title})`);
+      back.innerHTML = '<ha-icon icon="mdi:undo-variant"></ha-icon>';
+      back.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        back.disabled = true;
+        const restore = spec.restore;
+        if (await spec.back() === false) { back.disabled = false; return; }
+        const until = Date.now() + 30000;
+        this._undo.set(spec.undoKey, { restore, until });
+        setTimeout(() => {
+          const entry = this._undo.get(spec.undoKey);
+          if (entry && entry.until <= Date.now()) { this._undo.delete(spec.undoKey); spec.redraw(); }
+        }, 30100);
+        spec.redraw();
+      });
+      holder.append(dot, back);
+    }
+
+    // Marker of a normal setting (personal category)
+    _settingMarker(holder, category, key, field) {
+      const current = this._values(category)[key];
+      const standard = this._standard(category, key);
+      this._fillMarker(holder, {
+        undoKey: `${this._scopeKey()}:${category}:${key}`,
+        own: this._isOwn(category, key),
+        standardText: this._valueText(field, standard),
+        back: () => this._savePersonal(category, key, JSON.parse(JSON.stringify(standard ?? null))),
+        restore: () => this._savePersonal(category, key, current),
+        redraw: () => this._redrawCategory(category),
+      });
+    }
+
+    // After a change of one setting: the category again, but nothing else on the page
+    _redrawCategory(category) {
+      if (PERSONAL.some((c) => c.id === category)) this._rerenderCategory(category);
+      else this._redrawAdmin(category);
     }
 
     _editableUsers() {
@@ -664,8 +886,14 @@ export function defineSettingsPage(S, D) {
       return [
         { title: t('grp_main'), items: PERSONAL.filter((c) => c.weight === 'main') },
         { title: t('grp_more'), items: PERSONAL.filter((c) => c.weight === 'more') },
-        { title: t('grp_admin'), items: ADMIN.filter((c) => this._admin || c.everyone || c.id === 'rights') },
+        { title: t('grp_admin'), items: ADMIN.filter((c) => this._showAdminCategory(c)) },
       ].filter((g) => g.items.length);
+    }
+
+    // "Users" only with other users (administrators) or as "your rights" (everybody else).
+    _showAdminCategory(c) {
+      if (c.id === 'rights') return this._admin ? this._hasOtherUsers() : true;
+      return this._admin || c.everyone;
     }
 
     _render() {
@@ -686,17 +914,16 @@ export function defineSettingsPage(S, D) {
         ? '<ha-icon class="schloss" icon="mdi:lock"></ha-icon>' : '');
       const all = groups.flatMap((g) => g.items.map((c) => c.id));
       const allOpen = all.every((id) => this._open.has(id));
-      const users = this._admin ? this._editableUsers() : [];
       this.innerHTML = `${S.leafletCss()}<style>${CSS}</style>
         <div class="wa-set">
           <nav class="toc" aria-label="${esc(t('toc'))}">
             ${groups.map((g) => `<div class="gruppe">${esc(g.title)}</div>
-              ${g.items.map((c) => `<a data-ziel="${c.id}"><ha-icon icon="${c.icon}"></ha-icon><span>${esc(t(`cat_${c.id}`))}</span>${lockIcon(c.id)}</a>`).join('')}`).join('')}
+              ${g.items.map((c) => `<a data-ziel="${c.id}"><ha-icon icon="${c.icon}"></ha-icon><span>${esc(this._catTitle(c.id))}</span>${lockIcon(c.id)}</a>`).join('')}`).join('')}
           </nav>
           <main>
             <div class="sprung"><select class="ein" aria-label="${esc(t('toc'))}">
               ${groups.map((g) => `<optgroup label="${esc(g.title)}">
-                ${g.items.map((c) => `<option value="${c.id}">${esc(t(`cat_${c.id}`))}</option>`).join('')}</optgroup>`).join('')}
+                ${g.items.map((c) => `<option value="${c.id}">${esc(this._catTitle(c.id))}</option>`).join('')}</optgroup>`).join('')}
             </select></div>
             <div class="oben">
               <h1>${esc(t('settings_title'))}</h1>
@@ -706,24 +933,17 @@ export function defineSettingsPage(S, D) {
             </div>
             <div class="entwuerfe"></div>
             <div class="erfolg-oben"></div>
-            ${this._admin && (this._hasOtherUsers() || this._scope !== 'own') ? `<div class="wessen">
-              <label for="wa-wessen" class="hinweis">${esc(t('settings_of'))}</label>
-              <select class="ein" id="wa-wessen">
-                <option value="own"${this._scope === 'own' ? ' selected' : ''}>${esc(t('scope_own'))}</option>
-                <option value="defaults"${this._scope === 'defaults' ? ' selected' : ''}${this._syncAll ? ' disabled' : ''}>${esc(t('scope_defaults'))}</option>
-                ${users.length ? `<optgroup label="${esc(t('scope_users'))}">${users.map((u) => `<option value="user:${esc(u.id)}"${this._scope === 'user' && this._user && this._user.id === u.id ? ' selected' : ''}>${esc(u.name)}</option>`).join('')}</optgroup>` : ''}
-              </select>
-              ${this._scope === 'own' ? `<button class="knopf uebernehmen" type="button"${this._syncAll ? ' disabled' : ''}><ha-icon icon="mdi:account-multiple-check"></ha-icon>${esc(t('promote_all'))}</button>` : ''}
-            </div>` : ''}
-            ${this._scope === 'defaults' ? `<div class="banner standard"><ha-icon icon="mdi:account-multiple"></ha-icon><span class="text">${esc(t('editing_defaults'))}</span></div>` : ''}
-            ${this._scope === 'user' && this._user ? `<div class="banner standard"><ha-icon icon="mdi:account-edit"></ha-icon><span class="text">${esc(t('editing_user', { name: this._user.name }))}${this._flag(this._user.id, 'hide_settings') ? ` ${esc(t('editing_user_hidden', { name: this._user.name }))}` : ''}${this._user.synced ? ` ${esc(t('editing_user_synced', { name: this._user.name }))}` : ''}</span></div>` : ''}
+            ${this._scope === 'defaults' ? `<div class="banner standard"><ha-icon icon="mdi:account-multiple"></ha-icon><span class="text">${esc(t('editing_defaults'))}</span><button class="knopf voll fertig" type="button">${esc(t('done'))}</button></div>` : ''}
+            ${this._scope === 'user' && this._user ? `<div class="banner standard"><ha-icon icon="mdi:account-edit"></ha-icon><span class="text">${esc(t('editing_user', { name: this._user.name }))}${this._flag(this._user.id, 'hide_settings') ? ` ${esc(t('editing_user_hidden', { name: this._user.name }))}` : ''}${this._user.synced ? ` ${esc(t('editing_user_synced', { name: this._user.name }))}` : ''}</span><button class="knopf voll fertig" type="button">${esc(t('done'))}</button></div>` : ''}
             <div class="kopfhinweise"${this._headInfo ? '' : ' hidden'}>
-              <p class="hinweis">${esc(this._scope === 'defaults' ? t('scope_defaults_text') : this._scope === 'user' ? t('scope_user_text') : t('scope_own_text'))}</p>
-              ${this._admin && this._scope !== 'user' ? `<p class="hinweis">${esc(t('lock_explain'))}${this._hasOtherUsers() ? ` ${esc(t('lock_explain_users'))}` : ''}</p>` : ''}
+              <p class="hinweis">${esc(this._scope === 'defaults' ? t('scope_defaults_text') : this._scope === 'user' ? t('scope_user_text') : t(this._hasOtherUsers() || !this._admin ? 'scope_own_text' : 'scope_own_text_single'))}</p>
+              <p class="hinweis">${esc(t('marker_explain'))}</p>
+              ${this._admin && this._scope !== 'user' && this._hasOtherUsers() ? `<p class="hinweis">${esc(t('lock_explain'))} ${esc(t('lock_explain_users'))}</p>` : ''}
+              ${this._admin && !this._hasOtherUsers() ? `<p class="hinweis">${esc(t('single_user_hint'))}</p>` : ''}
             </div>
             ${!this._admin && (d.locked.length || Object.keys(d.field_locks || {}).length) ? `<div class="banner"><ha-icon icon="mdi:lock"></ha-icon><span class="text">${esc(t('locked_hint'))}</span></div>` : ''}
             ${PERSONAL.map((c) => this._categoryHtml(c, true)).join('')}
-            ${ADMIN.filter((c) => this._admin || c.everyone || c.id === 'rights').map((c) => this._categoryHtml(c, false)).join('')}
+            ${ADMIN.filter((c) => this._showAdminCategory(c)).map((c) => this._categoryHtml(c, false)).join('')}
             ${this._scope === 'own' ? `<div class="fuss"><button class="knopf gefahr alles-zurueck"><ha-icon icon="mdi:restore"></ha-icon>${esc(t('reset_all'))}</button></div>` : ''}
             <p class="hinweis klein">Whereabouts ${esc(d.version)}</p>
           </main>
@@ -731,6 +951,7 @@ export function defineSettingsPage(S, D) {
       this._wire();
       this._showDrafts();
       this._showSuccess();
+      this._askNewUsers();
       requestAnimationFrame(() => { this._restoreAnchor(anchor); this._noteAnchor(); });
     }
 
@@ -738,12 +959,12 @@ export function defineSettingsPage(S, D) {
       const t = this._t;
       const locked = personal && this._locked(c.id);
       const closed = !this._open.has(c.id);
-      const lock = personal && this._admin && this._scope !== 'user' ? this._lockState(c.id) : null;
+      const lock = personal && this._admin && this._scope !== 'user' && this._hasOtherUsers() ? this._lockState(c.id) : null;
       const userWhole = personal && this._scope === 'user' && this._userLocks(c.id).includes('*');
       return `<ha-card class="kat${closed ? ' zu' : ''}${locked ? ' gesperrt' : ''}" id="kat-${c.id}" data-kat="${c.id}">
         <div class="kat-kopf" role="button" tabindex="0" aria-expanded="${closed ? 'false' : 'true'}">
           <ha-icon class="symbol" icon="${c.icon}"></ha-icon>
-          <div class="titelblock"><h2>${esc(t(`cat_${c.id}`))}</h2><div class="kurz">${esc(this._summary(c.id))}</div></div>
+          <div class="titelblock"><h2>${esc(this._catTitle(c.id))}</h2><div class="kurz">${esc(this._summary(c.id))}</div></div>
           ${locked ? `<span class="marke"><ha-icon icon="mdi:lock"></ha-icon>${esc(t('locked_badge'))}</span>` : ''}
           ${personal && this._scope === 'user' ? `<button class="knopf ganz${userWhole ? ' voll' : ''}" type="button" data-kat="${c.id}"><ha-icon icon="${userWhole ? 'mdi:lock' : 'mdi:lock-open-variant-outline'}"></ha-icon>${esc(t(userWhole ? 'fix_category_off' : 'fix_category', { name: this._user.name }))}</button>` : ''}
           ${lock ? `<button class="knopf rund sperre" title="${esc(this._lockTitle(c.id))}" aria-label="${esc(this._lockTitle(c.id))}"${this._syncAll ? ' disabled' : ''}><ha-icon icon="${lock === 'none' ? 'mdi:lock-open-variant-outline' : 'mdi:lock'}"></ha-icon></button>` : ''}
@@ -751,22 +972,32 @@ export function defineSettingsPage(S, D) {
           <ha-icon class="pfeil" icon="mdi:chevron-down"></ha-icon>
         </div>
         <div class="kat-inhalt">
-          <p class="kat-text">${esc(t(`cd_${c.id}`))}</p>
+          <p class="kat-text">${esc(t(c.id === 'rights' && !this._admin ? 'cd_rights_self' : `cd_${c.id}`))}</p>
           <div class="felder" data-kat="${c.id}"></div>
           ${personal ? this._footHtml(c.id, locked) : this._adminFootHtml(c)}
         </div>
       </ha-card>`;
     }
 
+    // "For all users" (administrators with other users) and "Reset to standard" (= built-in values,
+    // greyed out when everything is standard; afterwards 30 s "Restore own values").
+    _catTitle(id) {
+      return this._t(id === 'rights' && !this._admin ? 'cat_rights_self' : `cat_${id}`);
+    }
+
     _footHtml(category, locked) {
       const t = this._t;
-      const own = this._ownValues(category);
-      const canReset = !locked && (this._scope === 'defaults' ? true : own && Object.keys(own).length);
       const promote = this._admin && this._scope === 'own' && this._hasOtherUsers();
-      if (!canReset && !promote) return '<div class="fuss" hidden></div>';
+      const undo = this._catUndo.get(`${this._scopeKey()}:${category}`);
+      const restoring = undo && undo.until > Date.now();
+      const plain = this._allFactory(category);
+      if (locked && !promote) return '<div class="fuss" hidden></div>';
+      const left = restoring ? Math.max(0, 30 - (undo.until - Date.now()) / 1000) : 0;
       return `<div class="fuss">
-        ${promote ? `<button class="knopf standard-setzen" data-kat="${category}"${this._syncAll ? ' disabled' : ''}><ha-icon icon="mdi:account-multiple-check"></ha-icon>${esc(t('make_default'))}</button>` : ''}
-        ${canReset ? `<button class="knopf gefahr zurueck" data-kat="${category}"><ha-icon icon="mdi:restore"></ha-icon>${esc(t('reset_category'))}</button>` : ''}
+        ${promote ? `<button class="knopf standard-setzen" data-kat="${category}"${this._syncAll ? ' disabled' : ''}><ha-icon icon="mdi:account-multiple-check"></ha-icon>${esc(t('promote_category'))}</button>` : ''}
+        ${locked ? '' : restoring
+    ? `<button class="knopf wiederherstellen kat-wieder" data-kat="${category}" data-left="${left}">${this._ringHtml()}<ha-icon icon="mdi:undo"></ha-icon>${esc(t('restore_own_values'))}</button>`
+    : `<button class="knopf gefahr zurueck" data-kat="${category}"${plain ? ` disabled title="${esc(t('all_standard'))}"` : ''}><ha-icon icon="mdi:restore"></ha-icon>${esc(t('reset_category'))}</button>`}
       </div>`;
     }
 
@@ -789,6 +1020,17 @@ export function defineSettingsPage(S, D) {
     _wireFoot(root) {
       const t = this._t;
       root.querySelectorAll('.zurueck').forEach((b) => b.addEventListener('click', () => this._resetCategory(b.dataset.kat)));
+      root.querySelectorAll('.kat-wieder').forEach((b) => {
+        b.querySelector('.ring').style.animationDelay = `-${b.dataset.left}s`;
+        b.addEventListener('click', async () => {
+          const key = `${this._scopeKey()}:${b.dataset.kat}`;
+          const undo = this._catUndo.get(key);
+          this._catUndo.delete(key);
+          b.disabled = true;
+          if (undo) await undo.restore();
+          await this._load();
+        });
+      });
       root.querySelectorAll('.standard-setzen').forEach((b) => b.addEventListener('click', async () => {
         const name = t(`cat_${b.dataset.kat}`);
         if (!await this._confirm(t('make_default'), t('confirm_make_default', { name }), t('make_default'), false)) return;
@@ -845,24 +1087,29 @@ export function defineSettingsPage(S, D) {
         case 'persons': {
           const all = this._selectablePersons();
           const shown = (v.persons || []).filter((x) => all.some((p) => p.entity_id === x));
-          return t('sum_persons', { n: shown.length || all.length, of: all.length });
+          const ids = shown.length ? shown : all.map((p) => p.entity_id);
+          const colorOf = (x) => ((v.person_settings || {})[x] || {}).color || S.personColor(this._hass, {}, x);
+          const weak = ids.filter((x) => this._contrastHint(colorOf(x))).length;
+          return `${t('sum_persons', { n: ids.length, of: all.length })}${weak ? ` · ${t('sum_contrast', { n: weak })}` : ''}`;
         }
         case 'map': return `${t(`ed_tiles_${v.tiles}`)} · ${t(`ed_style_${v.map_style}`)}`;
         case 'zones': {
           const zones = this._zoneList();
           const hidden = zones.filter((z) => (v.hidden_zones || []).includes(z.entity_id)).length;
           const count = hidden ? t('sum_zones_hidden', { n: zones.length, h: hidden }) : t('sum_zones', { n: zones.length });
-          return `${count} · ${t(`zones_in_${v.zones_in || 'both'}`)}`;
+          const colorOf = (z) => (v.zone_colors || {})[z.entity_id] || (z.entity_id === 'zone.home' ? v.zone_color_home : v.zone_color);
+          const weak = v.zones_in === 'none' ? 0 : zones.filter((z) => !(v.hidden_zones || []).includes(z.entity_id) && this._contrastHint(colorOf(z))).length;
+          return `${count} · ${t(`zones_in_${v.zones_in || 'both'}`)}${weak ? ` · ${t('sum_contrast', { n: weak })}` : ''}`;
         }
         case 'live': return every(v.live_auto_refresh, v.live_refresh_interval);
-        case 'history': return `${every(v.history_auto_refresh, v.history_refresh_interval)} · ${t(`ed_view_${v.default_view}`)}`;
+        case 'history': return `${t(`ed_view_${v.default_view}`)} · ${t(`start_period_${v.start_period || 'today'}`)} · ${every(v.history_auto_refresh, v.history_refresh_interval)}`;
         case 'base': return d.admin ? t('sum_persons', { n: d.persons.length, of: d.admin.all_persons.length }) : '';
         case 'rights': {
-          if (!d.admin) return '';
+          if (!d.admin) return ['live', 'history', 'delete'].map((k) => `${t(`sum_right_${k}`)}: ${(d.rights[k] || []).length}`).join(' · ');
           const r = d.admin.rights_default;
           return ['live', 'history', 'delete'].map((k) => `${t(`sum_right_${k}`)}: ${t(`level_${r[k]}`)}`).join(' · ');
         }
-        case 'sidebar': return o.panel === false ? t('sum_no_entry') : t('sum_entry', { name: o.panel_title || t('panel_title') });
+        case 'sidebar': return o.panel === false ? t('sum_no_entry') : t('sum_entry', { name: o.panel_title || this._placeholder({ placeholder: 'panel_title' }) });
         case 'recording': {
           const n = (o.record_persons || []).length;
           return n ? t('sum_recording', { n }) : t('sum_recording_none');
@@ -877,7 +1124,7 @@ export function defineSettingsPage(S, D) {
       return lock.mode || 'none';
     }
 
-    // "Fixed for all users except Belinda" – shown as tooltip on the lock.
+    // "Fixed for all users except Robin" – shown as tooltip on the lock.
     _lockTitle(category) {
       const t = this._t;
       const lock = (this._data.admin && this._data.admin.locks[category]) || {};
@@ -892,15 +1139,14 @@ export function defineSettingsPage(S, D) {
       this.querySelectorAll('.toc a').forEach((a) => a.addEventListener('click', () => this._jump(a.dataset.ziel)));
       const jump = this.querySelector('.sprung select');
       jump.addEventListener('change', () => this._jump(jump.value));
-      const whose = this.querySelector('#wa-wessen');
-      if (whose) {
-        whose.addEventListener('change', async () => {
-          const value = whose.value;
-          if (!await this.confirmLeave()) { this._render(); return; }
-          if (value.startsWith('user:')) await this._loadUser(value.slice(5));
-          else { this._scope = value; this._user = null; this._render(); }
-        });
-      }
+      this.querySelectorAll('.fertig').forEach((b) => b.addEventListener('click', async () => {
+        if (!await this.confirmLeave()) return;
+        this._scope = 'own';
+        this._user = null;
+        this._open.add('rights');
+        this._render();
+        requestAnimationFrame(() => this._jump('rights'));
+      }));
       this.querySelectorAll('.kat-kopf').forEach((head) => {
         const toggle = (e) => {
           if (e.target.closest('button')) return;
@@ -925,16 +1171,6 @@ export function defineSettingsPage(S, D) {
         this._setFieldLock(b.dataset.kat, whole ? [] : ['*']);
       }));
       this._wireFoot(this);
-      const promote = this.querySelector('.uebernehmen');
-      if (promote) {
-        promote.addEventListener('click', async () => {
-          if (!await this._confirm(t('promote_all'), t('confirm_promote_all'), t('promote_all'), false)) return;
-          if (await this._ws({ type: 'whereabouts/settings/promote' }, true) !== null) {
-            this._setSuccess(t('success_promote_all'));
-            await this._load();
-          }
-        });
-      }
       const all = this.querySelector('.alles-zurueck');
       if (all) {
         all.addEventListener('click', async () => {
@@ -944,23 +1180,106 @@ export function defineSettingsPage(S, D) {
         });
       }
       PERSONAL.forEach((c) => this._fillPersonal(c));
-      ADMIN.forEach((c) => {
-        const box = this.querySelector(`.felder[data-kat="${c.id}"]`);
-        if (!box) return;
-        if (this._admin && c.options) {
-          const options = this._data.admin.options;
-          c.options.forEach((f) => box.appendChild(f.persons
-            ? this._personsOption(f)
-            : this._row(f, options[f.key], false, (value) => this._saveOption(f, value),
-              { kind: 'option', key: f.key, label: t(`st_${f.key}`) })));
-        }
-        if (c.custom === 'base' && this._admin) this._base(box);
-        if (c.custom === 'rights') this._rights(box);
-        if (c.custom === 'sensors' && this._admin) this._sensors(box);
-        if (c.custom === 'data') this._dataSection(box);
-        if (c.custom === 'diagnostics' && this._open.has('diagnostics')) this._loadDiagnostics();
-      });
+      ADMIN.forEach((c) => this._fillAdmin(c));
       this._watchToc();
+    }
+
+    _redrawAdmin(id) {
+      const c = ADMIN.find((x) => x.id === id);
+      if (c) this._fillAdmin(c);
+    }
+
+    // An administration category: integration options (with markers), persons, rights, data ...
+    _fillAdmin(c) {
+      const t = this._t;
+      const box = this.querySelector(`.felder[data-kat="${c.id}"]`);
+      if (!box) return;
+      box.innerHTML = '';
+      if (this._admin && c.options) {
+        const options = this._data.admin.options;
+        let group = null;
+        c.options.forEach((f) => {
+          if (f.hideWhen && f.hideWhen(options)) return;
+          let row;
+          if (f.persons) row = this._personsOption(f);
+          else {
+            const shown = f.invert ? !options[f.key] : options[f.key];
+            const field = { ...f, label: f.label ? t(f.label) : undefined, info: f.info ? t(f.info) : undefined };
+            row = this._row(field, shown, false, (value) => this._saveOption(f, f.invert ? !value : value),
+              { kind: 'option', key: f.key, label: field.label || t(`st_${f.key}`) });
+            this._optionMarker(row, c.id, f);
+          }
+          if (f.group) {
+            if (!group) {
+              group = this._subsection(`sub_${f.group}`, t(`sub_${f.group}`), this._groupSummary(f.group));
+              box.appendChild(group.el);
+            }
+            group.inner.appendChild(row);
+          } else box.appendChild(row);
+        });
+      }
+      if (c.custom === 'base' && this._admin) this._base(box);
+      if (c.custom === 'rights') this._rights(box);
+      if (c.custom === 'sensors' && this._admin) this._sensors(box);
+      if (c.custom === 'data') this._dataSection(box);
+      if (c.custom === 'diagnostics' && this._open.has('diagnostics')) {
+        if (this._diag) this._showDiagnostics(); else this._loadDiagnostics();
+      }
+    }
+
+    // Marker for an integration option: differs from its built-in value?
+    _optionMarker(row, category, f, existing = null) {
+      const options = this._data.admin.options;
+      const defaults = this._data.admin.option_defaults || {};
+      if (!(f.key in defaults)) return;
+      const norm = (v) => (f.emptyIs && !v ? f.emptyIs : v);
+      const current = options[f.key];
+      const standard = defaults[f.key];
+      let holder = existing;
+      if (!holder) {
+        holder = document.createElement('span');
+        holder.dataset.opt = f.key;
+        const label = row.querySelector('.beschriftung');
+        label.insertBefore(holder, label.querySelector('.info'));
+      }
+      this._fillMarker(holder, {
+        undoKey: `option:${f.key}`,
+        own: !same(norm(current), norm(standard)),
+        standardText: this._valueText(f, f.invert ? !standard : (standard === '' && f.placeholder ? this._placeholder(f) : standard)),
+        back: () => this._saveOption({ ...f, confirm: null }, JSON.parse(JSON.stringify(standard ?? null))),
+        restore: () => this._saveOption({ ...f, confirm: null }, current),
+        // text and number fields: the whole category again (the field shows the new value)
+        redraw: () => this._redrawAdmin(category),
+      });
+    }
+
+    _refreshOptionMarker(key) {
+      const holder = this.querySelector(`.marker[data-opt="${window.CSS.escape(key)}"]`);
+      const owner = ADMIN.find((c) => (c.options || []).some((f) => f.key === key));
+      if (!holder || !owner) return;
+      this._optionMarker(holder.closest('.zeile'), owner.id, owner.options.find((f) => f.key === key), holder);
+    }
+
+    // A sub-area that opens and closes; stays open/closed across redraws.
+    _subsection(id, title, summary, warn = false) {
+      this._subOpen = this._subOpen || new Set();
+      const el = document.createElement('details');
+      el.className = 'unter';
+      el.open = this._subOpen.has(id);
+      el.innerHTML = `<summary><span class="titel">${esc(title)}</span><span class="kurz2${warn ? ' warn' : ''}">${esc(summary || '')}</span>
+        <ha-icon class="pfeil2" icon="mdi:chevron-down"></ha-icon></summary><div class="innen"></div>`;
+      el.addEventListener('toggle', () => { if (el.open) this._subOpen.add(id); else this._subOpen.delete(id); });
+      return { el, inner: el.querySelector('.innen'), summary: el.querySelector('.kurz2') };
+    }
+
+    _groupSummary(group) {
+      const t = this._t;
+      const o = (this._data.admin && this._data.admin.options) || {};
+      if (group === 'precision') {
+        return [t('sum_interval', { n: o.min_interval }), t('sum_same_place', { n: o.same_place_distance }),
+          Number(o.retention_days) > 0 ? t('sum_keep_days', { n: o.retention_days }) : t('sum_keep_forever')].join(' · ');
+      }
+      return '';
     }
 
     _setOpen(id, open) {
@@ -970,7 +1289,8 @@ export function defineSettingsPage(S, D) {
       card.querySelector('.kat-kopf').setAttribute('aria-expanded', open ? 'true' : 'false');
       if (open) {
         this._open.add(id);
-        if (id === 'diagnostics') this._loadDiagnostics();
+        // only the first time: a click on the open area must not load (and flicker) again
+        if (id === 'diagnostics' && !this._diag) this._loadDiagnostics();
       } else this._open.delete(id);
       const ids = [...this.querySelectorAll('.kat')].map((c) => c.dataset.kat);
       const allOpen = ids.every((x) => this._open.has(x));
@@ -989,21 +1309,40 @@ export function defineSettingsPage(S, D) {
       const card = this.querySelector(`#kat-${id}`);
       if (!card) return;
       this._setOpen(id, true);
+      // The clicked entry stays marked until the user scrolls himself
+      this._tocChosen = id;
+      this._markToc(id);
       this._scrollTo(card, 'start');
     }
 
-    // Highlights the category that is in view.
+    _markToc(id) {
+      this.querySelectorAll('.toc a').forEach((a) => a.classList.toggle('aktiv', a.dataset.ziel === id));
+      const jump = this.querySelector('.sprung select');
+      if (jump && document.activeElement !== jump) jump.value = id;
+    }
+
+    // Highlights the category that is in view (at the very bottom: the lowest visible one).
     _watchToc() {
       if (this._observer) this._observer.disconnect();
       if (!window.IntersectionObserver) return;
       const visible = new Map();
+      const own = () => { this._tocChosen = null; };
+      if (!this._tocListeners) {
+        this._tocListeners = true;
+        ['wheel', 'touchmove'].forEach((ev) => window.addEventListener(ev, own, { passive: true, capture: true }));
+        window.addEventListener('keydown', (e) => { if (/^(Arrow|Page|Home|End| )/.test(e.key)) own(); }, { capture: true });
+      }
+      this._tocUpdate = () => {
+        if (this._tocChosen) { this._markToc(this._tocChosen); return; }
+        const scroller = this._scroller();
+        const atBottom = scroller && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 4;
+        const shown = [...visible.entries()].filter(([, top]) => top !== null).sort((a, b) => a[1] - b[1]);
+        const best = atBottom ? shown[shown.length - 1] : shown[0];
+        if (best) this._markToc(best[0]);
+      };
       this._observer = new IntersectionObserver((entries) => {
         entries.forEach((e) => visible.set(e.target.dataset.kat, e.isIntersecting ? e.boundingClientRect.top : null));
-        const best = [...visible.entries()].filter(([, top]) => top !== null).sort((a, b) => a[1] - b[1])[0];
-        if (!best) return;
-        this.querySelectorAll('.toc a').forEach((a) => a.classList.toggle('aktiv', a.dataset.ziel === best[0]));
-        const jump = this.querySelector('.sprung select');
-        if (jump && document.activeElement !== jump) jump.value = best[0];
+        this._tocUpdate();
       }, { rootMargin: '0px 0px -60% 0px' });
       this.querySelectorAll('.kat').forEach((card) => this._observer.observe(card));
     }
@@ -1020,18 +1359,45 @@ export function defineSettingsPage(S, D) {
         let row;
         if (f.custom === 'tiles') row = this._tiles(c.id);
         else if (f.custom === 'zones') row = this._zones(c.id);
+        else if (f.custom === 'apps') row = this._apps(c.id);
         else {
           const fixed = locked || this._fixedKey(c.id, f.key);
-          row = this._row(f, values[f.key], fixed, (value) => this._savePersonal(c.id, f.key, value),
+          row = this._row(f, values[f.key], fixed, (value) => this._savePersonalChecked(c.id, f.key, value),
             { kind: 'personal', scope: this._scope, user: this._user && this._user.id, category: c.id, key: f.key, label: t(`st_${f.key}`) });
           if (fixed && !locked) row.classList.add('fest');
         }
         row.dataset.key = f.key;
         if (f.needs) row.dataset.needs = f.needs;
-        this._fieldLockButton(row, c.id, f.custom === 'tiles' ? ['tiles'] : f.custom === 'zones' ? ['hidden_zones', 'zone_colors'] : [f.key]);
+        if (f.hideOff) row.dataset.verstecken = '1';
+        this._fieldLockButton(row, c.id, f.custom === 'tiles' ? ['tiles'] : f.custom === 'zones' ? ['hidden_zones', 'zone_colors'] : f.custom === 'apps' ? ['map_link_apps'] : [f.key]);
         box.appendChild(row);
       });
       this._applyNeeds(c.id);
+      this._fillMarkers(c.id);
+      this._colorWarnings(c.id);
+    }
+
+    // Colour settings (zone colours): a hint that cannot be clicked away while the contrast is too low.
+    _colorWarnings(category) {
+      const box = this.querySelector(`.felder[data-kat="${category}"]`);
+      if (!box) return;
+      const values = this._values(category);
+      box.querySelectorAll(':scope > .zeile[data-key]').forEach((row) => {
+        const c = PERSONAL.find((x) => x.id === category);
+        const field = c && c.fields && c.fields.find((f) => f.key === row.dataset.key);
+        if (!field || !field.color) return;
+        let note = row.querySelector(':scope > .kontrast');
+        const text = values.zones_in === 'none' ? '' : this._contrastHint(values[field.key]);
+        if (!note) { note = document.createElement('div'); note.className = 'kontrast'; row.appendChild(note); }
+        note.hidden = !text;
+        note.textContent = text;
+      });
+    }
+
+    _fillMarkers(category) {
+      const keys = new Set([...this.querySelectorAll(`.felder[data-kat="${category}"] .marker[data-mk]`)]
+        .map((m) => m.dataset.mk.split('|')[1]));
+      keys.forEach((key) => this._updateOrigin(category, key));
     }
 
     // Scope "user": a lock per setting fixes it for this user.
@@ -1097,6 +1463,7 @@ export function defineSettingsPage(S, D) {
       box.querySelectorAll('[data-needs]').forEach((row) => {
         const value = values[row.dataset.needs];
         const off = value === false || value === 'none';
+        if (row.dataset.verstecken) { row.hidden = off; return; }
         row.classList.toggle('aus', off);
         row.querySelectorAll('ha-selector, input, select, button.knopf').forEach((el) => {
           if (el.dataset.immer) return;
@@ -1107,20 +1474,19 @@ export function defineSettingsPage(S, D) {
       if (zones) zones.classList.toggle('aus', values.zones_in === 'none');
     }
 
-    // Origin of a value: the default or an own value (for me / for a user).
+    // Place for the marker (own value / restore) of a setting; filled by _updateOrigin.
     _originHtml(category, key) {
-      if (this._scope === 'defaults' || !PERSONAL.some((c) => c.id === category)) return '';
-      const own = this._ownValues(category);
-      const mine = Object.prototype.hasOwnProperty.call(own, key) && !this._locked(category);
-      return `<span class="herkunft${mine ? ' eigen' : ''}">${esc(this._t(mine ? 'origin_own' : 'origin_default'))}</span>`;
+      if (!PERSONAL.some((c) => c.id === category)) return '';
+      return `<span class="marker" data-mk="${esc(`${category}|${key}`)}"></span>`;
     }
 
     _updateOrigin(category, key) {
-      const box = this.querySelector(`.felder[data-kat="${category}"] [data-key="${key}"] .herkunft`);
-      if (!box) return;
-      const holder = document.createElement('span');
-      holder.innerHTML = this._originHtml(category, key);
-      if (holder.firstElementChild) box.replaceWith(holder.firstElementChild);
+      this.querySelectorAll(`.felder[data-kat="${category}"] .marker[data-mk="${window.CSS.escape(`${category}|${key}`)}"]`).forEach((holder) => {
+        const c = PERSONAL.find((x) => x.id === category);
+        const field = c && c.fields ? c.fields.find((f) => f.key === key) : null;
+        const extra = { key, sel: field && field.sel };
+        this._settingMarker(holder, category, key, field || (key.startsWith('carto_') ? { sel: (tt) => sel(CARTO_STYLES.map((v) => ({ value: v, label: tt(`ed_carto_${v}`) }))) } : extra));
+      });
     }
 
     // --- one setting: label, ⓘ, control -----------------------------------------------------
@@ -1138,7 +1504,7 @@ export function defineSettingsPage(S, D) {
       row.innerHTML = `<div class="beschriftung"><span>${esc(label)}</span>${origin}${fixedNote}
           <button class="info" type="button" aria-expanded="false" title="${esc(t('more_info'))}" aria-label="${esc(t('more_info'))}: ${esc(label)}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
         <div class="steuer${isSwitch ? ' schalter' : ''}"></div>
-        <div class="infotext" hidden>${esc(field.info || t(`si_${field.key}`))}</div>`;
+        <div class="infotext" hidden>${rich(field.info || t(`si_${field.key}`))}</div>`;
       this._infoToggle(row);
       const typed = Boolean(field.text || 'number' in selector);
       if (!typed) {
@@ -1271,9 +1637,16 @@ export function defineSettingsPage(S, D) {
         el.required = 'select' in selector;
         el.addEventListener('value-changed', (e) => { e.stopPropagation(); el.value = e.detail.value; out(e.detail.value); });
         if (field.color) el.classList.add('farbfeld');
+        if (field.placeholder) el.placeholder = this._placeholder(field);
         return el;
       }
       return this._plainControl(selector, field, value, disabled, out);
+    }
+
+    _placeholder(field) {
+      // the dashboard's name: what Home Assistant shows when the field is empty
+      if (field.placeholder === 'panel_title') return String((this._hass.config && this._hass.config.language) || '').startsWith('de') ? 'Standorte' : 'Whereabouts';
+      return this._t(field.placeholder);
     }
 
     // Without Home Assistant's form elements: plain inputs.
@@ -1301,6 +1674,7 @@ export function defineSettingsPage(S, D) {
         el.type = 'number' in selector ? 'number' : 'text';
         if ('number' in selector) { el.min = selector.number.min; el.max = selector.number.max; el.step = selector.number.step; }
         el.value = value === undefined || value === null ? '' : value;
+        if (field.placeholder) el.placeholder = this._placeholder(field);
         el.addEventListener('input', () => emit('number' in selector ? Number(el.value) : el.value));
       }
       el.disabled = disabled;
@@ -1359,43 +1733,97 @@ export function defineSettingsPage(S, D) {
       return message;
     }
 
+    // Hiding the settings view: say how to come back (administrators: gear in the maps).
+    async _savePersonalChecked(category, key, value) {
+      const t = this._t;
+      if (key === 'view_settings' && value === false && this._scope === 'own') {
+        if (!await this._confirm(t('st_view_settings'), t(this._admin ? 'confirm_hide_settings_admin' : 'confirm_hide_settings'), t('hide'), false)) {
+          this._rerenderCategory(category);
+          return false;
+        }
+      }
+      return this._savePersonal(category, key, value);
+    }
+
     async _savePersonal(category, key, value) {
       const ok = await this._ws(this._saveMessage(category, { [key]: value }));
       if (ok === null) return false;
+      // Like the server: a value equal to the standard is no own value.
+      const standard = this._standard(category, key);
+      const plain = same(value, standard);
+      const mirror = (own) => {
+        const next = { ...(own[category] || {}) };
+        if (plain) delete next[key]; else next[key] = value;
+        if (Object.keys(next).length) own[category] = next; else delete own[category];
+      };
       if (this._scope === 'defaults') this._data.defaults[category][key] = value;
       else if (this._scope === 'user' && this._user) {
-        this._user.own[category] = { ...(this._user.own[category] || {}), [key]: value };
+        mirror(this._user.own);
         this._user.effective[category][key] = value;
       } else {
-        this._data.own[category] = { ...(this._data.own[category] || {}), [key]: value };
+        mirror(this._data.own);
         this._data.effective[category][key] = value;
       }
       this._refreshFoot(category);
       this._updateOrigin(category, key);
       this._applyNeeds(category);
       this._updateSummary(category);
+      this._colorWarnings(category);
+      if (category === 'map' && key === 'map_style') { this._rerenderCategory('persons'); this._rerenderCategory('zones'); }
       return true;
     }
 
+    // Whole category back to the built-in values; administrators with other users may do it for everybody.
     async _resetCategory(category) {
       const t = this._t;
       const name = t(`cat_${category}`);
       const text = this._scope === 'defaults' ? t('confirm_reset_defaults', { name })
         : this._scope === 'user' ? t('confirm_reset_user', { name, user: this._user.name })
           : t('confirm_reset_category', { name });
-      if (!await this._confirm(t('reset_category'), text, t('reset'), true)) return;
+      const everyoneBox = this._admin && this._scope === 'own' && this._hasOtherUsers()
+        ? `<label style="margin-top:12px"><input type="checkbox" class="fuer-alle">${esc(t('reset_for_everyone'))}</label>` : '';
+      const result = await this._dialog(`<h3>${esc(t('reset_category'))}</h3><div class="text">${esc(text)}</div>${everyoneBox}`,
+        t('reset'), true, (win) => ({ everyone: Boolean(win.querySelector('.fuer-alle') && win.querySelector('.fuer-alle').checked) }));
+      if (!result) return;
       this._discardIn(category);
-      const message = { type: 'whereabouts/settings/reset', scope: this._scope === 'defaults' ? 'defaults' : 'own', category };
-      if (this._scope === 'user') message.user_id = this._user.id;
-      await this._ws(message, true);
+      const key = `${this._scopeKey()}:${category}`;
+      let restore = null;
+      if (this._scope === 'defaults') {
+        // the defaults: back to the built-in values; restore = save the old defaults again
+        const before = JSON.parse(JSON.stringify(this._data.defaults[category]));
+        if (await this._ws({ type: 'whereabouts/settings/reset', scope: 'defaults', category }, true) === null) return;
+        restore = () => this._ws({ type: 'whereabouts/settings/save', scope: 'defaults', category, values: before }, true);
+      } else {
+        const message = { type: 'whereabouts/settings/reset', scope: 'own', category, factory: true, everyone: result.everyone };
+        if (this._scope === 'user') message.user_id = this._user.id;
+        const answer = await this._ws(message, true);
+        if (answer === null) return;
+        const token = answer && answer.undo;
+        if (token) restore = () => this._ws({ type: 'whereabouts/settings/restore', token }, true);
+      }
+      if (restore) {
+        this._catUndo.set(key, { restore, until: Date.now() + 30000 });
+        setTimeout(() => {
+          const entry = this._catUndo.get(key);
+          if (entry && entry.until <= Date.now()) { this._catUndo.delete(key); this._refreshFoot(category); }
+        }, 30100);
+      }
       await this._load();
     }
 
     async _saveOption(field, value) {
       const t = this._t;
       if (field.confirm === 'retention' && Number(value) > 0) {
-        const ok = await this._confirm(t('st_retention_days'), t('confirm_retention', { n: value }), t('save'), true);
-        if (!ok) return false;
+        // how many days would disappear tonight
+        let files = null;
+        try { files = (await this._hass.callWS({ type: 'whereabouts/settings/retention_preview', days: Number(value) })).files; } catch (err) { files = null; }
+        const text = files ? t('confirm_retention_count', { n: value, files }) : t('confirm_retention', { n: value });
+        const ok = await this._confirm(t('st_retention_days'), text, t('save'), true);
+        if (!ok) { this._redrawAdmin('recording'); return false; }
+      }
+      if (field.confirm === 'panel' && value === false) {
+        const ok = await this._confirm(t('st_panel_hidden'), t('confirm_hide_panel'), t('hide'), false);
+        if (!ok) { this._redrawAdmin('sidebar'); return false; }
       }
       this._noteAnchor(); // the sidebar entry may make Home Assistant rebuild the page
       this._storeView();
@@ -1403,6 +1831,17 @@ export function defineSettingsPage(S, D) {
       if (ok === null) return false;
       this._data.admin.options[field.key] = value;
       ['sidebar', 'recording', 'addresses'].forEach((id) => this._updateSummary(id));
+      // fields that depend on this one (e.g. the distance only with the phone as source), markers
+      const owner = ADMIN.find((c) => (c.options || []).some((f) => f.key === field.key));
+      const typed = field.text || 'number' in ((typeof field.sel === 'function' ? field.sel(t) : field.sel) || {});
+      if (owner && !typed) this._redrawAdmin(owner.id);
+      else {
+        this._refreshOptionMarker(field.key);
+        const group = owner && (owner.options.find((f) => f.key === field.key) || {}).group;
+        const summary = group && this.querySelector(`#kat-${owner.id} details.unter .kurz2`);
+        if (summary) summary.textContent = this._groupSummary(group);
+      }
+      if (field.key === 'address_sensors' || field.key === 'address_source') this._redrawAdmin('addresses');
       return true;
     }
 
@@ -1442,8 +1881,12 @@ export function defineSettingsPage(S, D) {
         const target = this._values(category);
         target.persons = allInOrder ? [] : list;
         target.person_settings = cleaned();
-        if (scope === 'own') this._data.own[category] = { persons: target.persons, person_settings: target.person_settings };
-        if (scope === 'user' && this._user) this._user.own[category] = { persons: target.persons, person_settings: target.person_settings };
+        // like the server: only what differs from the standard is an own value
+        const mine = {};
+        if (!same(target.persons, this._standard(category, 'persons'))) mine.persons = target.persons;
+        if (!same(target.person_settings, this._standard(category, 'person_settings'))) mine.person_settings = target.person_settings;
+        const store = scope === 'own' ? this._data.own : scope === 'user' && this._user ? this._user.own : null;
+        if (store) { if (Object.keys(mine).length) store[category] = mine; else delete store[category]; }
         this._refreshFoot(category);
         this._updateSummary(category);
         warn();
@@ -1480,16 +1923,21 @@ export function defineSettingsPage(S, D) {
             </div>
             <div class="bild"></div>
             <div class="mitte">
-              <label class="chip${shown.has(id) ? ' an' : ''}" style="margin-bottom:8px"><input type="checkbox" class="zeigen"${shown.has(id) ? ' checked' : ''}${locked ? ' disabled' : ''}>${esc(p.name)}</label>
+              <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;flex-wrap:wrap"><label class="chip${shown.has(id) ? ' an' : ''}"><input type="checkbox" class="zeigen"${shown.has(id) ? ' checked' : ''}${locked ? ' disabled' : ''}>${esc(p.name)}</label><span class="pmarke"></span></div>
               <div class="felder">
                 <input class="ein name" placeholder="${esc(t('ps_name_placeholder', { name: p.name }))}" aria-label="${esc(t('ed_name'))}" value="${esc(own.name || '')}" maxlength="60" ${locked ? 'disabled' : ''}>
                 <input class="ein farbe" type="color" aria-label="${esc(t('ed_color'))}" value="${esc(colorOf(id).toLowerCase())}" ${locked ? 'disabled' : ''}>
-                <div class="bildzeile">
-                  <input class="ein bildurl" placeholder="${esc(t('ps_picture_placeholder'))}" aria-label="${esc(t('ed_picture'))}" value="${esc(own.picture || '')}" ${locked ? 'disabled' : ''}>
-                  <button class="knopf rund hochladen" title="${esc(t('upload_picture'))}" aria-label="${esc(t('upload_picture'))}" ${locked ? 'disabled' : ''}><ha-icon icon="mdi:upload"></ha-icon></button>
+                <div class="bildwahl">
+                  <input class="bildurl" type="hidden" value="${esc(own.picture || '')}">
+                  <span class="vorschau" hidden></span>
+                  <button class="knopf aendern-bild" type="button" hidden ${locked ? 'disabled' : ''}>${esc(t('picture_change'))}</button>
+                  <button class="knopf gefahr entfernen-bild" type="button" hidden ${locked ? 'disabled' : ''}>${esc(t('picture_remove'))}</button>
+                  <div class="ablage-klein" role="button" tabindex="0"${locked ? ' aria-disabled="true"' : ''}><ha-icon icon="mdi:image-plus"></ha-icon><span>${esc(t('picture_upload'))}</span></div>
+                  <button class="verweis-knopf aus-netz" type="button" ${locked ? 'disabled' : ''}>${esc(t('picture_from_web'))}</button>
                   <input type="file" accept="image/*" hidden>
                 </div>
               </div>
+              <div class="kontrast" hidden></div>
               <div class="zweite">
                 <label>${esc(t('show_in'))}
                   <select class="ein zeigen-in" ${locked ? 'disabled' : ''}>
@@ -1498,16 +1946,29 @@ export function defineSettingsPage(S, D) {
               </div>
             </div>
             <button class="info" type="button" title="${esc(t('more_info'))}" aria-label="${esc(t('more_info'))}" aria-expanded="false"><ha-icon icon="mdi:information-outline"></ha-icon></button>
-            <div class="infotext" hidden style="grid-column:1/-1">${esc(t('si_person'))}</div>`;
+            <div class="infotext" hidden style="grid-column:1/-1">${rich(t('si_person'))}</div>`;
           const nameInput = row.querySelector('.name');
           const urlInput = row.querySelector('.bildurl');
           const colorInput = row.querySelector('.farbe');
           const showInput = row.querySelector('.zeigen-in');
           const picture = () => {
-            const url = S.safeUrl(urlInput.value.trim()) || S.safeUrl(p.picture);
+            const ownUrl = S.safeUrl(urlInput.value.trim());
+            const url = ownUrl || S.safeUrl(p.picture);
             const el = row.querySelector('.bild');
             el.style.backgroundImage = url ? `url("${url}")` : '';
             el.textContent = url ? '' : (nameInput.value.trim() || p.name).charAt(0);
+            // own picture: preview with "Change" / "Remove"; otherwise the drop field
+            const preview = row.querySelector('.vorschau');
+            preview.hidden = !ownUrl;
+            preview.style.backgroundImage = ownUrl ? `url("${ownUrl}")` : '';
+            row.querySelector('.aendern-bild').hidden = !ownUrl;
+            row.querySelector('.entfernen-bild').hidden = !ownUrl;
+            row.querySelector('.ablage-klein').hidden = Boolean(ownUrl);
+            row.querySelector('.aus-netz').hidden = Boolean(ownUrl);
+            const note = row.querySelector('.kontrast');
+            const text = shown.has(id) ? this._contrastHint(colorInput.value) : '';
+            note.hidden = !text;
+            note.textContent = text;
           };
           picture();
           // Name, colour, picture and "Show in": one "Save" for the row (or Enter).
@@ -1524,9 +1985,12 @@ export function defineSettingsPage(S, D) {
             initial: read(),
             draft: { kind: 'person', scope, user: this._user && this._user.id, category, person: id, label },
             save: async (v) => {
+              const old = (settings[id] && settings[id].picture) || '';
               settings[id] = { ...settings[id], ...v };
               row.style.setProperty('--farbe', v.color);
-              return save();
+              const ok = await save();
+              if (ok && old && old !== v.picture) this._deleteImage(old);
+              return ok;
             },
           });
           savable.reset = (v) => {
@@ -1551,13 +2015,44 @@ export function defineSettingsPage(S, D) {
             await save();
           });
           const file = row.querySelector('input[type="file"]');
-          row.querySelector('.hochladen').addEventListener('click', () => file.click());
-          file.addEventListener('change', async () => {
-            if (!file.files.length) return;
-            const url = await this._upload(file.files[0]);
+          const drop = row.querySelector('.ablage-klein');
+          const take = async (blob) => {
+            if (!blob || locked) return;
+            const cropped = await this._cropImage(blob);
+            if (!cropped) return;
+            const url = await this._upload(cropped);
             if (!url) return;
             urlInput.value = url;
             changed();
+          };
+          drop.addEventListener('click', () => { if (!locked) file.click(); });
+          drop.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && !locked) { e.preventDefault(); file.click(); } });
+          drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drueber'); });
+          drop.addEventListener('dragleave', () => drop.classList.remove('drueber'));
+          drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('drueber'); take(e.dataTransfer.files[0]); });
+          row.querySelector('.aendern-bild').addEventListener('click', () => file.click());
+          row.querySelector('.entfernen-bild').addEventListener('click', () => { urlInput.value = ''; changed(); });
+          row.querySelector('.aus-netz').addEventListener('click', async () => take(await this._imageFromWeb()));
+          file.addEventListener('change', async () => {
+            const chosenFile = file.files[0];
+            file.value = '';
+            if (chosenFile) take(chosenFile);
+          });
+          // own settings for this person (name, colour, picture, map) or the standard
+          const standardAll = this._standard(category, 'person_settings') || {};
+          const standardEntry = standardAll[id] || null;
+          const before = settings[id] ? JSON.parse(JSON.stringify(settings[id])) : null;
+          const ownRow = Boolean(before) && !same(before, standardEntry) && !(scope !== 'defaults' && this._locked(category));
+          this._fillMarker(row.querySelector('.pmarke'), {
+            undoKey: `${this._scopeKey()}:persons:${id}`,
+            own: ownRow && (scope === 'defaults' || Object.prototype.hasOwnProperty.call(this._ownValues(category), 'person_settings')),
+            standardText: standardEntry ? t('value_custom') : t('person_standard'),
+            back: async () => {
+              if (standardEntry) settings[id] = JSON.parse(JSON.stringify(standardEntry)); else delete settings[id];
+              return save();
+            },
+            restore: async () => { settings[id] = before; return save(); },
+            redraw: () => this._redrawCategory(category),
           });
           const move = async (delta) => {
             if ([...this._pending.keys()].some((k) => k.startsWith(`person:${scope}:`))) {
@@ -1589,18 +2084,146 @@ export function defineSettingsPage(S, D) {
       draw();
     }
 
-    async _upload(fileObject) {
+    // Only the small cropped picture (256 × 256) goes to Home Assistant, never the original.
+    async _upload(blob) {
       const form = new FormData();
-      form.append('file', fileObject);
+      form.append('file', blob, 'profile.jpg');
       try {
         const response = await this._hass.fetchWithAuth('/api/image/upload', { method: 'POST', body: form });
         if (!response.ok) throw new Error(`${response.status}`);
         const item = await response.json();
-        return `/api/image/serve/${item.id}/512x512`;
+        return `/api/image/serve/${item.id}/256x256`;
       } catch (err) {
         this._toast(this._t('upload_failed'), true);
         return null;
       }
+    }
+
+    // A replaced or removed picture that was uploaded here is deleted - unless it is still used somewhere.
+    async _deleteImage(url) {
+      const m = /^\/api\/image\/serve\/([a-z0-9]+)\//.exec(url || '');
+      if (!m) return;
+      try {
+        const { in_use: inUse } = await this._hass.callWS({ type: 'whereabouts/settings/image_in_use', image_id: m[1] });
+        if (!inUse) await this._hass.callWS({ type: 'image/delete', image_id: m[1] });
+      } catch (err) {
+        // not allowed (non-administrators) or already gone: nothing to do
+      }
+    }
+
+    // "Picture from the internet": Home Assistant loads it once (max. 10 MB, only pictures).
+    async _imageFromWeb() {
+      const t = this._t;
+      const url = await this._dialog(`<h3>${esc(t('picture_from_web'))}</h3><div class="text">${esc(t('picture_from_web_text'))}</div>
+        <input class="ein netzadresse" type="url" placeholder="https://…" style="margin-top:12px" autocomplete="off">`, t('picture_load'), false,
+      (win) => win.querySelector('.netzadresse').value.trim());
+      if (!url) return null;
+      if (!/^https?:\/\//i.test(url)) { this._toast(t('picture_bad_url'), true); return null; }
+      try {
+        const response = await this._hass.fetchWithAuth(`/api/whereabouts/image?url=${encodeURIComponent(url)}`);
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          this._toast(maybe(t, `picture_error_${body.error}`, t('picture_load_failed')), true);
+          return null;
+        }
+        return await response.blob();
+      } catch (err) {
+        this._toast(t('picture_load_failed'), true);
+        return null;
+      }
+    }
+
+    // Crop window: move and zoom the picture under a round mask; result 256 × 256 JPEG.
+    _cropImage(blob) {
+      const t = this._t;
+      return new Promise((resolve) => {
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onerror = () => { URL.revokeObjectURL(url); this._toast(t('picture_not_image'), true); resolve(null); };
+        img.onload = async () => {
+          const SIZE = 560; // drawing size of the crop area (shown at 280 px)
+          const view = { scale: 1, x: 0, y: 0 };
+          const fit = Math.max(SIZE / img.width, SIZE / img.height);
+          view.scale = fit;
+          view.x = (SIZE - img.width * fit) / 2;
+          view.y = (SIZE - img.height * fit) / 2;
+          let canvas = null;
+          const draw = () => {
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, 0, SIZE, SIZE);
+            ctx.drawImage(img, view.x, view.y, img.width * view.scale, img.height * view.scale);
+          };
+          // keep the circle covered
+          const clamp = () => {
+            const w = img.width * view.scale;
+            const h = img.height * view.scale;
+            const r = SIZE * 0.44;
+            view.x = Math.min(SIZE / 2 - r, Math.max(SIZE / 2 + r - w, view.x));
+            view.y = Math.min(SIZE / 2 - r, Math.max(SIZE / 2 + r - h, view.y));
+          };
+          const zoomTo = (scale, cx = SIZE / 2, cy = SIZE / 2) => {
+            const min = (SIZE * 0.88) / Math.min(img.width, img.height);
+            const next = Math.max(min, Math.min(min * 8, scale));
+            view.x = cx - ((cx - view.x) * next) / view.scale;
+            view.y = cy - ((cy - view.y) * next) / view.scale;
+            view.scale = next;
+            clamp();
+            draw();
+          };
+          const minScale = (SIZE * 0.88) / Math.min(img.width, img.height);
+          const result = this._dialog(`<h3>${esc(t('picture_crop'))}</h3><div class="text">${esc(t('picture_crop_text'))}</div>
+            <div class="zuschnitt" style="margin-top:12px"><canvas width="${SIZE}" height="${SIZE}"></canvas><div class="maske"></div></div>
+            <div class="zoomzeile"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon><input type="range" class="zoom" min="0" max="100" value="${Math.round(((fit / minScale - 1) / 7) * 100)}" aria-label="${esc(t('picture_zoom'))}"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></div>`,
+          t('picture_use'), false, () => {
+            const out = document.createElement('canvas');
+            out.width = 256;
+            out.height = 256;
+            const ctx = out.getContext('2d');
+            const r = SIZE * 0.44;
+            const factor = 256 / (2 * r);
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, 256, 256);
+            ctx.drawImage(img, (view.x - (SIZE / 2 - r)) * factor, (view.y - (SIZE / 2 - r)) * factor,
+              img.width * view.scale * factor, img.height * view.scale * factor);
+            return out;
+          });
+          await new Promise((r) => requestAnimationFrame(r));
+          const win = this.querySelector('.dialog .zuschnitt');
+          if (win) {
+            canvas = win.querySelector('canvas');
+            clamp();
+            draw();
+            const ratio = () => SIZE / win.clientWidth;
+            let drag = null;
+            win.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; win.setPointerCapture(e.pointerId); });
+            win.addEventListener('pointermove', (e) => {
+              if (!drag) return;
+              view.x += (e.clientX - drag.x) * ratio();
+              view.y += (e.clientY - drag.y) * ratio();
+              drag = { x: e.clientX, y: e.clientY };
+              clamp();
+              draw();
+            });
+            win.addEventListener('pointerup', () => { drag = null; });
+            win.addEventListener('wheel', (e) => {
+              e.preventDefault();
+              const rect = win.getBoundingClientRect();
+              zoomTo(view.scale * (e.deltaY < 0 ? 1.1 : 0.9), (e.clientX - rect.left) * ratio(), (e.clientY - rect.top) * ratio());
+              const slider = this.querySelector('.dialog .zoom');
+              if (slider) slider.value = Math.round(((view.scale / minScale - 1) / 7) * 100);
+            }, { passive: false });
+            const slider = this.querySelector('.dialog .zoom');
+            slider.addEventListener('input', () => zoomTo(minScale * (1 + (Number(slider.value) / 100) * 7)));
+          }
+          const out = await result;
+          URL.revokeObjectURL(url);
+          if (!out) { resolve(null); return; }
+          out.toBlob((jpeg) => resolve(jpeg), 'image/jpeg', 0.88);
+        };
+        img.src = url;
+      });
     }
 
     // --- map style, CARTO styles and the CARTO key --------------------------------------------------
@@ -1612,11 +2235,11 @@ export function defineSettingsPage(S, D) {
       row.className = 'zeile breit';
       row.innerHTML = `<div class="beschriftung"><span>${esc(t('st_tiles'))}</span>${this._originHtml(category, 'tiles')}
           <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
-        <div class="infotext" hidden>${esc(t('si_tiles'))}</div>
+        <div class="infotext" hidden>${rich(t('si_tiles'))}</div>
         <div class="stile" role="radiogroup" aria-label="${esc(t('st_tiles'))}">
           ${['esri', 'osm', 'carto'].map((v) => `<label class="stil${values.tiles === v ? ' gewaehlt' : ''}">
               <input type="radio" name="kartenstil-${this._scope}" value="${v}"${values.tiles === v ? ' checked' : ''}${locked ? ' disabled' : ''}>
-              <span class="name">${esc(t(`ed_tiles_${v}`))}</span>
+              <span class="name">${esc(t(`ed_tiles_${v}`))}${v === 'carto' ? '<span class="api-status"></span>' : ''}</span>
               <span class="klein">${esc(t(`tiles_note_${v}`))}</span>
               <a href="${TILE_LINKS[v]}" target="_blank" rel="noopener noreferrer"><ha-icon icon="mdi:open-in-new"></ha-icon>${esc(t('tiles_examples'))}</a>
             </label>${v === 'carto' ? '<div class="schluessel"></div>' : ''}`).join('')}
@@ -1628,45 +2251,86 @@ export function defineSettingsPage(S, D) {
         const ok = await this._savePersonal(category, 'tiles', input.value);
         if (!ok) { this._fillPersonal(PERSONAL.find((c) => c.id === category)); return; }
         row.querySelectorAll('.stil').forEach((l) => l.classList.toggle('gewaehlt', l.querySelector('input').checked));
-        styles.hidden = input.value !== 'carto';
+        stylesHolder.hidden = input.value !== 'carto';
+        keyBox.hidden = input.value !== 'carto' && this._keyState !== 'bad' && this._keyState !== 'none';
       }));
       const keyBox = row.querySelector('.schluessel');
-      this._cartoKey(keyBox);
-      // Which CARTO style in which map, light and dark
-      const styles = document.createElement('div');
-      styles.className = 'carto-stile';
-      styles.hidden = values.tiles !== 'carto';
-      CARTO_FIELDS.forEach((key) => {
-        const field = { key, sel: (tt) => sel(CARTO_STYLES.map((v) => ({ value: v, label: tt(`ed_carto_${v}`) }))) };
-        const r = this._row(field, values[key], locked || this._fixedKey(category, key), (value) => this._savePersonal(category, key, value),
-          { kind: 'personal', scope: this._scope, user: this._user && this._user.id, category, key, label: t(`st_${key}`) });
-        r.dataset.key = key;
-        this._fieldLockButton(r, category, [key]);
-        styles.appendChild(r);
+      this._cartoKey(keyBox, row.querySelector('.api-status'));
+      keyBox.hidden = values.tiles !== 'carto' && this._keyState !== 'bad' && this._keyState !== 'none';
+      // Which CARTO style in which map, light and dark: a sub-area, closed at the start
+      const stylesHolder = document.createElement('div');
+      stylesHolder.hidden = values.tiles !== 'carto';
+      const label = (v) => t(`ed_carto_${v}`);
+      const sub = this._subsection('sub_carto', t('sub_carto'),
+        t('sum_carto', { live: label(values.carto_live_light), history: label(values.carto_history_light) }));
+      const grid = document.createElement('div');
+      grid.className = 'stilraster';
+      grid.innerHTML = `<span class="kopf leer"></span><span class="kopf spalte">${esc(t('carto_light'))}</span><span class="kopf spalte">${esc(t('carto_dark'))}</span>`;
+      [['live', 'live_title'], ['history', 'history_title']].forEach(([map, title]) => {
+        const head = document.createElement('span');
+        head.className = 'kopf zeilenkopf';
+        head.textContent = t(title);
+        grid.appendChild(head);
+        ['light', 'dark'].forEach((mode) => {
+          const key = `carto_${map}_${mode}`;
+          const field = { key, sel: (tt) => sel(CARTO_STYLES.map((v) => ({ value: v, label: tt(`ed_carto_${v}`) }))) };
+          const cell = document.createElement('div');
+          cell.className = 'zelle';
+          const fixed = locked || this._fixedKey(category, key);
+          const control = this._control(typeof field.sel === 'function' ? field.sel(t) : field.sel, field, values[key], fixed,
+            (value) => this._savePersonal(category, key, value).then((ok) => { this._updateOrigin(category, key); return ok; }));
+          control.setAttribute('aria-label', `${t(title)} – ${t(`carto_${mode}`)}`);
+          cell.appendChild(control);
+          cell.insertAdjacentHTML('beforeend', this._originHtml(category, key));
+          cell.dataset.key = key;
+          grid.appendChild(cell);
+        });
       });
-      keyBox.after(styles);
+      sub.inner.appendChild(grid);
+      stylesHolder.appendChild(sub.el);
+      row.appendChild(stylesHolder);
       return row;
     }
 
-    _cartoKey(box) {
+    // Administrators: the CARTO key. Open field only without a key; a valid key: "API ✓" next to CARTO
+    // and "Change key"; a refused key: "API ✗" and the field opens.
+    _cartoKey(box, badge) {
       const t = this._t;
       const d = this._data;
+      const setBadge = () => {
+        if (!badge) return;
+        const state = this._keyState;
+        badge.innerHTML = state === 'ok' ? `<span class="api ok" title="${esc(t('carto_key_ok'))}">API ✓</span>`
+          : state === 'bad' ? `<span class="api schlecht" title="${esc(t('carto_key_rejected'))}">API ✗</span>` : '';
+      };
       if (!this._admin) {
         box.innerHTML = `<span class="klein">${esc(d.carto_key_set ? t('carto_key_set') : t('carto_key_missing'))}</span>`;
         return;
       }
       const current = d.admin.options.carto_api_key || '';
-      box.innerHTML = `<div class="kopfzeile">${esc(t('st_carto_api_key'))}
-          <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
-        <div class="infotext" hidden>${esc(t('si_carto_api_key'))}</div>
+      if (!current) this._keyState = 'none';
+      else if (!this._keyState || this._keyState === 'none') {
+        this._keyState = 'checking';
+        this._checkKey(null).then(() => { setBadge(); this._redrawCategory('map'); });
+      }
+      setBadge();
+      const open = !current || this._keyState === 'bad' || this._keyOpen;
+      box.innerHTML = `<div class="kopfzeile">${esc(t('st_carto_api_key'))}<span class="marker" data-opt-key="1"></span>
+          <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button>
+          ${open ? '' : `<button class="knopf aendern" type="button" style="margin-left:auto"><ha-icon icon="mdi:key-change"></ha-icon>${esc(t('carto_change_key'))}</button>`}</div>
+        <div class="infotext" hidden>${rich(t('si_carto_api_key'))}</div>
+        <div class="feldbereich"${open ? '' : ' hidden'}>
         <div class="reihe">
           <span class="augen"><input class="ein schluesselfeld" type="password" autocomplete="off" spellcheck="false" placeholder="cb1_…" value="${esc(current)}" aria-label="${esc(t('st_carto_api_key'))}">
             <button class="knopf rund auge" type="button" data-immer="1" title="${esc(t('show_key'))}" aria-label="${esc(t('show_key'))}"><ha-icon icon="mdi:eye"></ha-icon></button></span>
           <button class="knopf gefahr entfernen" type="button"${current ? '' : ' hidden'}><ha-icon icon="mdi:delete-outline"></ha-icon>${esc(t('carto_remove'))}</button>
         </div>
-        <div class="reihe"><span class="klein status">${esc(current ? t('carto_key_set') : '')}</span>
-          <a class="verweis" style="margin-left:auto" href="https://carto.com/basemaps/apikey/" target="_blank" rel="noopener noreferrer"><ha-icon icon="mdi:open-in-new"></ha-icon>${esc(t('carto_get_key'))}</a></div>`;
+        <div class="reihe"><span class="klein status ${this._keyState === 'bad' ? 'schlecht' : this._keyState === 'ok' ? 'ok' : ''}">${esc(this._keyState === 'bad' ? t('carto_key_rejected') : this._keyState === 'checking' ? t('carto_key_checking') : this._keyState === 'ok' ? t('carto_key_ok') : '')}</span>
+          <a class="verweis" style="margin-left:auto" href="https://carto.com/basemaps/apikey/" target="_blank" rel="noopener noreferrer"><ha-icon icon="mdi:open-in-new"></ha-icon>${esc(t('carto_get_key'))}</a></div>
+        </div>`;
       this._infoToggle(box);
+      const change = box.querySelector('.aendern');
+      if (change) change.addEventListener('click', () => { this._keyOpen = true; this._cartoKey(box, badge); box.querySelector('.schluesselfeld').focus(); });
       const input = box.querySelector('.schluesselfeld');
       const eye = box.querySelector('.auge');
       const status = box.querySelector('.status');
@@ -1680,16 +2344,19 @@ export function defineSettingsPage(S, D) {
       };
       eye.addEventListener('click', () => show(input.type === 'password'));
       const holder = document.createElement('div');
-      box.insertBefore(holder, box.children[3]);
+      box.querySelector('.feldbereich').appendChild(holder);
       const store = async (key) => {
-        const ok = await this._saveOption({ key: 'carto_api_key' }, key);
+        const ok = await this._saveOption({ key: 'carto_api_key', text: true }, key);
         if (!ok) return false;
         d.carto_key_set = Boolean(key);
+        this._keyOpen = false;
+        this._keyState = key ? 'checking' : 'none';
         input.value = key;
         remove.hidden = !key;
         status.className = 'klein status';
         status.textContent = key ? t('carto_key_checking') : '';
-        if (key) this._checkKey(status);
+        setBadge();
+        if (key) this._checkKey(status).then(() => { setBadge(); setTimeout(() => this._redrawCategory('map'), 1500); });
         return true;
       };
       const savable = this._savable(holder, {
@@ -1712,20 +2379,75 @@ export function defineSettingsPage(S, D) {
         savable.set('');
         await savable.save();
       });
+      // own value: a key is set; back = remove it (30 s to restore)
+      this._fillMarker(box.querySelector('[data-opt-key]'), {
+        undoKey: 'option:carto_api_key',
+        own: Boolean(current),
+        standardText: t('value_empty'),
+        back: async () => {
+          if (!await this._confirm(t('carto_remove_title'), t('confirm_carto_remove'), t('carto_remove'), true)) return false;
+          return store('');
+        },
+        restore: () => store(current),
+        redraw: () => this._redrawCategory('map'),
+      });
     }
 
-    // One small request to CARTO after saving; the integration reloads meanwhile.
+    // One small request to CARTO (after saving: the integration reloads meanwhile).
     async _checkKey(status) {
       const t = this._t;
       let result = null;
-      for (const wait of [1500, 2500, 4000]) {
+      for (const wait of status ? [1500, 2500, 4000] : [0, 2000]) {
         await new Promise((r) => setTimeout(r, wait));
         try { result = await this._hass.callWS({ type: 'whereabouts/settings/check_key' }); break; } catch (err) { result = null; }
       }
-      if (!status.isConnected) return;
-      if (result && result.ok) { status.className = 'klein status ok'; status.textContent = t('carto_key_ok'); return; }
+      if (result && result.ok) this._keyState = 'ok';
+      else if (result && /^http_4/.test(result.reason || '')) this._keyState = 'bad';
+      else this._keyState = 'unchecked';
+      if (!status || !status.isConnected) return;
+      if (this._keyState === 'ok') { status.className = 'klein status ok'; status.textContent = t('carto_key_ok'); return; }
       status.className = 'klein status schlecht';
-      status.textContent = result && /^http_4/.test(result.reason || '') ? t('carto_key_rejected') : t('carto_key_unchecked');
+      status.textContent = this._keyState === 'bad' ? t('carto_key_rejected') : t('carto_key_unchecked');
+    }
+
+    // Map apps offered on phones and tablets: a field with ticks (at least one).
+    _apps(category) {
+      const t = this._t;
+      const values = this._values(category);
+      const locked = this._locked(category) || this._fixedKey(category, 'map_link_apps');
+      const chosen = new Set(Array.isArray(values.map_link_apps) ? values.map_link_apps : ['apple', 'google']);
+      const apps = ['google', 'apple', 'osm', 'waze', 'here'];
+      const row = document.createElement('div');
+      row.className = 'zeile';
+      row.innerHTML = `<div class="beschriftung"><span>${esc(t('st_map_link_apps'))}</span>${this._originHtml(category, 'map_link_apps')}
+          <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
+        <div class="steuer"><div class="mehrfach"><button type="button" aria-haspopup="true" aria-expanded="false"${locked ? ' disabled' : ''}><span></span><ha-icon icon="mdi:menu-down"></ha-icon></button>
+          <div class="liste" hidden>${apps.map((a) => `<label><input type="checkbox" value="${a}"${chosen.has(a) ? ' checked' : ''}>${esc(t(`ed_link_${a}`))}</label>`).join('')}</div></div></div>
+        <div class="infotext" hidden>${rich(t('si_map_link_apps'))}</div>`;
+      this._infoToggle(row);
+      const button = row.querySelector('.mehrfach > button');
+      const list = row.querySelector('.mehrfach .liste');
+      const text = () => { button.querySelector('span').textContent = apps.filter((a) => chosen.has(a)).map((a) => t(`ed_link_${a}`)).join(', '); };
+      text();
+      const close = (e) => {
+        if (e && row.contains(e.target)) return;
+        list.hidden = true;
+        button.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('click', close, true);
+      };
+      button.addEventListener('click', () => {
+        list.hidden = !list.hidden;
+        button.setAttribute('aria-expanded', list.hidden ? 'false' : 'true');
+        if (!list.hidden) document.addEventListener('click', close, true);
+      });
+      list.querySelectorAll('input').forEach((box) => box.addEventListener('change', async () => {
+        if (box.checked) chosen.add(box.value); else chosen.delete(box.value);
+        if (!chosen.size) { box.checked = true; chosen.add(box.value); this._toast(t('apps_need_one'), true); return; }
+        text();
+        await this._savePersonal(category, 'map_link_apps', apps.filter((a) => chosen.has(a)));
+        this._updateOrigin(category, 'map_link_apps');
+      }));
+      return row;
     }
 
     // --- zones: hide single zones, own colours ------------------------------------------------------
@@ -1733,48 +2455,100 @@ export function defineSettingsPage(S, D) {
       return (this._data.zones || []).filter((z) => !z.passive);
     }
 
+    // Too little contrast against the map backgrounds in use (light and/or dark)? Text of the hint, or ''.
+    _contrastHint(color) {
+      const t = this._t;
+      const style = (this._values('map') || {}).map_style || 'auto';
+      const modes = style === 'auto' ? ['light', 'dark'] : [style];
+      const bad = modes.filter((m) => S.contrastRatio(color, S.MAP_BACKGROUNDS[m]) < S.MIN_MAP_CONTRAST);
+      if (!bad.length) return '';
+      return t(bad.length === 2 ? 'contrast_both' : `contrast_${bad[0]}`);
+    }
+
     _zones(category) {
       const t = this._t;
       const locked = this._locked(category) || this._fixedKey(category, 'hidden_zones');
       const values = this._values(category);
-      const row = document.createElement('div');
-      row.className = 'zeile breit';
       const zones = this._zoneList();
       const hidden = new Set(values.hidden_zones || []);
       const colors = { ...(values.zone_colors || {}) };
+      const standardHidden = new Set(this._standard(category, 'hidden_zones') || []);
+      const standardColors = this._standard(category, 'zone_colors') || {};
       const base = (id) => (id === 'zone.home' ? values.zone_color_home : values.zone_color);
-      row.innerHTML = `<div class="beschriftung"><span>${esc(t('st_zone_list'))}</span>${this._originHtml(category, 'hidden_zones')}
+      const colorOf = (id) => colors[id] || base(id) || '#888888';
+      const visible = zones.filter((z) => !hidden.has(z.entity_id));
+      const warnings = visible.filter((z) => this._contrastHint(colorOf(z.entity_id))).length;
+      const summary = `${t('sum_zone_list', { n: visible.length, of: zones.length, c: zones.filter((z) => colors[z.entity_id]).length })}${warnings ? ` · ${t('sum_contrast', { n: warnings })}` : ''}`;
+      const row = document.createElement('div');
+      row.className = 'zeile breit';
+      row.style.padding = '0';
+      const sub = this._subsection('sub_zones', t('sub_zones'), summary, warnings > 0);
+      row.appendChild(sub.el);
+      sub.inner.innerHTML = `<div class="zeile breit" style="border-top:none"><div class="beschriftung"><span class="klein">${esc(t('zone_list_intro'))}</span>${this._originHtml(category, 'hidden_zones')}
           <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
-        <div class="infotext" hidden>${esc(t('si_zone_list'))}</div>
+        <div class="infotext" hidden>${rich(t('si_zone_list'))}</div>
         <div class="zonen${values.zones_in === 'none' ? ' aus' : ''}">
           ${zones.length ? zones.map((z) => `<div class="zonenzeile" data-zone="${esc(z.entity_id)}">
             <label class="zname"><input type="checkbox" class="zeigen"${hidden.has(z.entity_id) ? '' : ' checked'}${locked ? ' disabled' : ''}>
-              <span class="tupfer" style="background:${S.safeColor(colors[z.entity_id] || base(z.entity_id), '#888')}"></span>${esc(z.name)}</label>
+              <span class="tupfer" style="background:${S.safeColor(colorOf(z.entity_id), '#888')}"></span>${esc(z.name)}</label>
+            <span class="zmarke"></span>
             <label class="farbwahl"><input type="checkbox" class="eigen"${colors[z.entity_id] ? ' checked' : ''}${locked ? ' disabled' : ''}>${esc(t('zone_own_color'))}</label>
-            <input type="color" class="farbe" value="${esc((colors[z.entity_id] || base(z.entity_id) || '#888888').toLowerCase())}"${colors[z.entity_id] ? '' : ' hidden'}${locked ? ' disabled' : ''} aria-label="${esc(t('zone_own_color'))}: ${esc(z.name)}">
+            <input type="color" class="farbe" value="${esc(colorOf(z.entity_id).toLowerCase())}"${colors[z.entity_id] ? '' : ' hidden'}${locked ? ' disabled' : ''} aria-label="${esc(t('zone_own_color'))}: ${esc(z.name)}">
+            <div class="kontrast" hidden style="flex:1 1 100%"></div>
           </div>`).join('') : `<span class="klein">${esc(t('no_zones'))}</span>`}
-        </div>`;
-      this._infoToggle(row);
-      const saveHidden = () => this._savePersonal(category, 'hidden_zones', [...hidden]);
-      const saveColors = () => this._savePersonal(category, 'zone_colors', { ...colors });
+        </div></div>`;
+      this._infoToggle(sub.inner);
+      // remove the general marker of the list (single zones have their own)
+      const general = sub.inner.querySelector('.marker[data-mk]');
+      if (general) general.remove();
+      const save = () => this._savePersonal(category, 'hidden_zones', [...hidden])
+        .then((ok) => ok && this._savePersonal(category, 'zone_colors', { ...colors }));
+      const redraw = () => this._redrawCategory(category);
       row.querySelectorAll('.zonenzeile').forEach((line) => {
         const id = line.dataset.zone;
         const dot = line.querySelector('.tupfer');
         const picker = line.querySelector('.farbe');
+        const note = line.querySelector('.kontrast');
+        const check = () => {
+          const text = hidden.has(id) ? '' : this._contrastHint(colorOf(id));
+          note.hidden = !text;
+          note.textContent = text;
+        };
+        check();
+        const own = hidden.has(id) !== standardHidden.has(id) || (colors[id] || '') !== (standardColors[id] || '');
+        const before = { hidden: hidden.has(id), color: colors[id] };
+        const apply = (state) => {
+          if (state.hidden) hidden.add(id); else hidden.delete(id);
+          if (state.color) colors[id] = state.color; else delete colors[id];
+          return save();
+        };
+        this._fillMarker(line.querySelector('.zmarke'), {
+          undoKey: `${this._scopeKey()}:zones:zone:${id}`,
+          own,
+          standardText: `${standardHidden.has(id) ? t('zone_hidden') : t('zone_shown')}${standardColors[id] ? `, ${standardColors[id]}` : ''}`,
+          back: () => apply({ hidden: standardHidden.has(id), color: standardColors[id] }),
+          restore: () => apply(before),
+          redraw,
+        });
         line.querySelector('.zeigen').addEventListener('change', async (e) => {
           if (e.target.checked) hidden.delete(id); else hidden.add(id);
-          if (!await saveHidden()) e.target.checked = !e.target.checked;
+          if (!await this._savePersonal(category, 'hidden_zones', [...hidden])) { e.target.checked = !e.target.checked; return; }
+          redraw();
         });
         line.querySelector('.eigen').addEventListener('change', async (e) => {
           if (e.target.checked) colors[id] = picker.value.toUpperCase(); else delete colors[id];
           picker.hidden = !e.target.checked;
-          dot.style.background = colors[id] || base(id);
-          await saveColors();
+          dot.style.background = colorOf(id);
+          check();
+          await this._savePersonal(category, 'zone_colors', { ...colors });
+          redraw();
         });
+        picker.addEventListener('input', () => { dot.style.background = picker.value; colors[id] = picker.value.toUpperCase(); check(); });
         picker.addEventListener('change', async () => {
           colors[id] = picker.value.toUpperCase();
           dot.style.background = colors[id];
-          await saveColors();
+          await this._savePersonal(category, 'zone_colors', { ...colors });
+          redraw();
         });
       });
       return row;
@@ -1791,7 +2565,7 @@ export function defineSettingsPage(S, D) {
       row.className = 'zeile breit';
       row.innerHTML = `<div class="beschriftung"><span>${esc(t('st_persons'))}</span>
           <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
-        <div class="infotext" hidden>${esc(t('si_persons'))}</div>`;
+        <div class="infotext" hidden>${rich(t('si_persons'))}</div>`;
       this._infoToggle(row);
       row.appendChild(this._checkList(all, chosen, false, async (list) => {
         if (!list.length) { this._toast(t('base_needs_one'), true); return false; }
@@ -1811,76 +2585,11 @@ export function defineSettingsPage(S, D) {
       row.className = 'zeile breit';
       row.innerHTML = `<div class="beschriftung"><span>${esc(t(`st_${field.key}`))}</span>
           <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
-        <div class="infotext" hidden>${esc(t(`si_${field.key}`))}</div>`;
+        <div class="infotext" hidden>${rich(t(`si_${field.key}`))}</div>`;
       this._infoToggle(row);
       const chosen = (d.admin.options[field.key] || []).filter((id) => d.persons.some((p) => p.entity_id === id));
       row.appendChild(this._checkList(d.persons, chosen, false, (list) => this._saveOption(field, list)));
       return row;
-    }
-
-    // --- users and their settings (administrators, in "Users and rights") -----------------------------
-    _usersTable(box) {
-      const t = this._t;
-      const admin = this._data.admin;
-      const technical = admin.users.filter((u) => u.active && u.technical && !u.is_admin).length;
-      const wrap = document.createElement('div');
-      wrap.className = 'benutzer';
-      const statusOf = (u) => {
-        const parts = [];
-        if (this._flag(u.id, 'sync') && admin.sync && admin.sync.user_id) {
-          parts.push(`<span class="status sync">${esc(admin.sync.user_id === this._data.user.id ? t('state_synced_me') : t('state_synced', { name: this._userName(admin.sync.user_id) }))}</span>`);
-        } else {
-          const own = Object.keys((admin.own_keys || {})[u.id] || {});
-          parts.push(own.length ? `<span class="status eigen">${esc(t('state_own', { cats: own.map((c) => t(`cat_${c}`)).join(', ') }))}</span>`
-            : `<span class="status standard">${esc(t('state_default'))}</span>`);
-        }
-        const locks = (admin.field_locks || {})[u.id] || {};
-        const fixed = Object.values(locks).reduce((n, keys) => n + (keys.includes('*') ? 1 : keys.length), 0);
-        if (fixed) parts.push(`<span class="status fest">${esc(t('state_fixed', { n: fixed }))}</span>`);
-        return parts.join('');
-      };
-      const users = this._editableUsers().filter((u) => {
-        if (this._userFilter === 'own') return Object.keys((admin.own_keys || {})[u.id] || {}).length > 0;
-        if (this._userFilter === 'synced') return this._flag(u.id, 'sync');
-        return true;
-      });
-      wrap.innerHTML = `<div class="kopf"><b>${esc(t('users_settings'))}</b>
-          <select class="ein filter" aria-label="${esc(t('users_filter'))}">
-            ${['all', 'own', 'synced'].map((v) => `<option value="${v}"${this._userFilter === v ? ' selected' : ''}>${esc(t(`users_filter_${v}`))}</option>`).join('')}
-          </select>
-          ${technical ? `<label class="klein"><input type="checkbox" class="technisch"${this._showTechnical ? ' checked' : ''}> ${esc(t('show_technical', { n: technical }))}</label>` : ''}
-          <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button>
-        </div>
-        <div class="infotext" hidden style="margin:8px 12px">${esc(t('si_users_settings'))}</div>
-        <div class="tabellenrahmen" style="padding:0"><table>
-          <thead><tr><th>${esc(t('user'))}</th><th>${esc(t('users_state'))}</th><th>${esc(t('users_tab'))}</th><th>${esc(t('users_sync'))}</th><th></th></tr></thead>
-          <tbody>
-            <tr class="alle"><td>${esc(t('users_all'))}</td><td class="klein">${esc(t('users_all_hint'))}</td>
-              <td><input type="checkbox" class="schalter-klein" data-flag="hide_settings" data-user="all"${admin.all_flags.hide_settings ? '' : ' checked'} aria-label="${esc(t('users_tab'))}"></td>
-              <td><input type="checkbox" class="schalter-klein" data-flag="sync" data-user="all"${admin.all_flags.sync ? ' checked' : ''} aria-label="${esc(t('users_sync'))}"></td><td></td></tr>
-            ${users.map((u) => `<tr><td>${esc(u.name)}${u.technical ? `<div class="klein">${esc(t('technical_user'))}</div>` : ''}</td>
-              <td>${statusOf(u)}</td>
-              <td><input type="checkbox" class="schalter-klein" data-flag="hide_settings" data-user="${esc(u.id)}"${this._flag(u.id, 'hide_settings') || this._flag(u.id, 'sync') ? '' : ' checked'}${this._flag(u.id, 'sync') ? ' disabled' : ''} aria-label="${esc(t('users_tab'))}: ${esc(u.name)}"></td>
-              <td><input type="checkbox" class="schalter-klein" data-flag="sync" data-user="${esc(u.id)}"${this._flag(u.id, 'sync') ? ' checked' : ''} aria-label="${esc(t('users_sync'))}: ${esc(u.name)}"></td>
-              <td><button class="knopf bearbeiten" type="button" data-user="${esc(u.id)}"${this._flag(u.id, 'sync') ? ' disabled' : ''}><ha-icon icon="mdi:pencil"></ha-icon>${esc(t('edit'))}</button></td></tr>`).join('')}
-            ${users.length ? '' : `<tr><td colspan="5" class="klein">${esc(t('no_users'))}</td></tr>`}
-          </tbody></table></div>`;
-      wrap.querySelector('.info').addEventListener('click', (e) => {
-        const text = wrap.querySelector('.infotext');
-        text.hidden = !text.hidden;
-        e.currentTarget.setAttribute('aria-expanded', text.hidden ? 'false' : 'true');
-      });
-      wrap.querySelector('.filter').addEventListener('change', (e) => { this._userFilter = e.target.value; this._redrawRights(); });
-      const tech = wrap.querySelector('.technisch');
-      if (tech) tech.addEventListener('change', () => { this._showTechnical = tech.checked; this._render(); });
-      wrap.querySelectorAll('[data-flag]').forEach((box2) => box2.addEventListener('change', () => this._setFlag(box2)));
-      wrap.querySelectorAll('.bearbeiten').forEach((b) => b.addEventListener('click', async () => {
-        if (!await this.confirmLeave()) return;
-        await this._loadUser(b.dataset.user);
-        const scroller = this._scroller();
-        if (scroller) scroller.scrollTop = 0;
-      }));
-      box.appendChild(wrap);
     }
 
     async _setFlag(input) {
@@ -1926,39 +2635,65 @@ export function defineSettingsPage(S, D) {
           </table></div><p class="kat-text klein">${esc(t('rights_by_admin'))}</p>`;
         return;
       }
-      if (this._hasOtherUsers()) this._usersTable(box);
+      this._usersTable(box);
+    }
+
+    // Users: one table. First row: the rules and settings for all users (the standard),
+    // then every user with rights, settings state and "Edit".
+    _usersTable(box) {
+      const t = this._t;
+      const d = this._data;
       const admin = d.admin;
+      const kinds = ['live', 'history', 'delete'];
       const levels = ['all', 'own', 'none'];
-      ['live', 'history', 'delete'].forEach((kind) => {
-        box.appendChild(this._row({ key: `rights_default_${kind}`, sel: sel(levels.map((v) => ({ value: v, label: t(`level_${v}`) }))) },
-          admin.rights_default[kind], false, async (value) => {
-            const before = admin.rights_default[kind];
-            if (levels.indexOf(value) > levels.indexOf(before)
-              && !await this._confirm(t('rights_title'), t('confirm_rights_less'), t('save'), true)) { this._redrawRights(); return false; }
-            if (await this._ws({ type: 'whereabouts/settings/rights_default', levels: { [kind]: value } }) === null) return false;
-            admin.rights_default[kind] = value;
-            this._redrawRights();
-            this._updateSummary('rights');
-            return true;
-          }));
-      });
-      const users = admin.users.filter((u) => u.active && (this._showTechnical || !u.technical || u.is_admin));
-      const table = document.createElement('div');
-      table.className = 'tabellenrahmen';
-      table.innerHTML = `<table class="tabelle"><thead><tr><th>${esc(t('user'))}</th><th>${esc(t('rights_own'))}</th>
-        ${['live', 'history', 'delete'].map((k) => `<th>${esc(t(`right_${k}`))}</th>`).join('')}</tr></thead><tbody></tbody></table>`;
-      const body = table.querySelector('tbody');
+      const builtIn = { live: 'all', history: 'all', delete: 'none' };
+      const technical = admin.users.filter((u) => u.active && u.technical && !u.is_admin).length;
+      const users = admin.users.filter((u) => u.active && u.id !== d.user.id && (this._showTechnical || !u.technical || u.is_admin));
+      const syncedTo = admin.sync && admin.sync.user_id;
+      const stateOf = (u) => {
+        if (this._flag(u.id, 'sync') && syncedTo) {
+          return `<span class="status sync">${esc(syncedTo === d.user.id ? t('state_synced_me') : t('state_synced', { name: this._userName(syncedTo) }))}</span>`;
+        }
+        if ((admin.pending_users || []).includes(u.id)) return `<span class="status sync">${esc(t('state_pending'))}</span>`;
+        const own = Object.keys((admin.own_keys || {})[u.id] || {});
+        const locks = (admin.field_locks || {})[u.id] || {};
+        const fixed = Object.values(locks).reduce((n, keys) => n + (keys.includes('*') ? 1 : keys.length), 0);
+        return `${own.length ? `<span class="status eigen">${esc(t('state_own', { cats: own.map((c) => t(`cat_${c}`)).join(', ') }))}</span>`
+          : `<span class="status standard">${esc(t('state_default'))}</span>`}${fixed ? `<span class="status fest">${esc(t('state_fixed', { n: fixed }))}</span>` : ''}`;
+      };
+      const switches = (userId, synced) => `
+        <label class="schalterzeile"><input type="checkbox" class="schalter-klein" data-flag="hide_settings" data-user="${esc(userId)}"${(userId === 'all' ? admin.all_flags.hide_settings : this._flag(userId, 'hide_settings') || synced) ? '' : ' checked'}${synced && userId !== 'all' ? ' disabled' : ''}>${esc(t('users_tab'))}</label>
+        <label class="schalterzeile"><input type="checkbox" class="schalter-klein" data-flag="sync" data-user="${esc(userId)}"${(userId === 'all' ? admin.all_flags.sync : this._flag(userId, 'sync')) ? ' checked' : ''}>${esc(t('users_sync'))}</label>`;
+      const wrap = document.createElement('div');
+      wrap.className = 'benutzer';
+      wrap.innerHTML = `<div class="kopf"><b>${esc(t('users_table'))}</b>
+          ${technical ? `<label class="klein"><input type="checkbox" class="technisch"${this._showTechnical ? ' checked' : ''}> ${esc(t('show_technical', { n: technical }))}</label>` : ''}
+          <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button>
+        </div>
+        <div class="infotext" hidden style="margin:8px 12px">${rich(t('si_users_table'))}</div>
+        <div class="tabellenrahmen" style="padding:0"><table>
+          <thead><tr><th>${esc(t('user'))}</th>${kinds.map((k) => `<th class="spalte-recht">${esc(t(`right_${k}`))}</th>`).join('')}<th>${esc(t('users_settings_col'))}</th></tr></thead>
+          <tbody>
+            <tr class="alle"><td>${esc(t('users_all'))}<div class="klein">${esc(t('users_all_hint'))}</div>
+              <button class="knopf bearbeiten" type="button" data-user="defaults" style="margin-top:6px"${this._syncAll ? ' disabled' : ''}><ha-icon icon="mdi:pencil"></ha-icon>${esc(t('edit'))}</button></td>
+              ${kinds.map((k) => `<td><select class="ein regel" data-kind="${k}" aria-label="${esc(t(`right_${k}`))}">${levels.map((v) => `<option value="${v}"${admin.rights_default[k] === v ? ' selected' : ''}>${esc(t(`level_${v}`))}</option>`).join('')}</select><span class="regelmarke" data-kind="${k}"></span></td>`).join('')}
+              <td>${switches('all', false)}</td></tr>
+          </tbody></table></div>
+        <p class="kat-text klein" style="margin-top:8px">${esc(t('admins_see_all'))}</p>`;
+      const body = wrap.querySelector('tbody');
       users.forEach((u) => {
         const tr = document.createElement('tr');
         if (u.is_admin) {
-          tr.innerHTML = `<td>${esc(u.name)}</td><td colspan="4" class="klein">${esc(t('admin_all'))}</td>`;
+          tr.innerHTML = `<td>${esc(u.name)}<div class="klein">${esc(t('role_admin_short'))}</div></td><td colspan="4" class="klein">${esc(t('admin_all'))}</td>`;
           body.appendChild(tr);
           return;
         }
         const own = admin.rights[u.id];
-        tr.innerHTML = `<td>${esc(u.name)}${u.technical ? `<div class="klein">${esc(t('technical_user'))}</div>` : ''}</td>
-          <td><input type="checkbox" class="eigen"${own ? ' checked' : ''} aria-label="${esc(t('rights_own'))}"></td>`;
-        ['live', 'history', 'delete'].forEach((kind) => {
+        const synced = this._flag(u.id, 'sync');
+        tr.innerHTML = `<td>${esc(u.name)}<span class="rmarke"></span>${u.technical ? `<div class="klein">${esc(t('technical_user'))}</div>` : ''}
+            <label class="schalterzeile"><input type="checkbox" class="eigen"${own ? ' checked' : ''}>${esc(t('rights_own'))}</label>
+            <button class="knopf bearbeiten" type="button" data-user="${esc(u.id)}" style="margin-top:6px"${synced ? ` disabled title="${esc(t('edit_synced'))}"` : ''}><ha-icon icon="mdi:pencil"></ha-icon>${esc(t('edit'))}</button></td>`;
+        kinds.forEach((kind) => {
           const td = document.createElement('td');
           const chips = document.createElement('div');
           chips.className = 'chips';
@@ -1989,12 +2724,15 @@ export function defineSettingsPage(S, D) {
           if (!own) td.insertAdjacentHTML('beforeend', `<div class="regelhinweis">${esc(t('by_rule'))}</div>`);
           tr.appendChild(td);
         });
+        tr.insertAdjacentHTML('beforeend', `<td>${stateOf(u)}${switches(u.id, synced)}</td>`);
+        const rulesFor = () => {
+          const start = {};
+          kinds.forEach((kind) => { start[kind] = d.persons.filter((p) => this._ruleAllows(kind, u, p)).map((p) => p.entity_id); });
+          return start;
+        };
         tr.querySelector('.eigen').addEventListener('change', async (e) => {
           if (e.target.checked) {
-            const start = {};
-            ['live', 'history', 'delete'].forEach((kind) => {
-              start[kind] = d.persons.filter((p) => this._ruleAllows(kind, u, p)).map((p) => p.entity_id);
-            });
+            const start = rulesFor();
             if (await this._ws({ type: 'whereabouts/settings/rights', user_id: u.id, rights: start }) !== null) admin.rights[u.id] = start;
           } else {
             if (!await this._confirm(t('rights_title'), t('confirm_rights_rules', { user: u.name }), t('save'), true)) {
@@ -2005,9 +2743,70 @@ export function defineSettingsPage(S, D) {
           }
           this._redrawRights();
         });
+        // own rights: dot + arrow back to the rules for all users
+        const before = own ? JSON.parse(JSON.stringify(own)) : null;
+        this._fillMarker(tr.querySelector('.rmarke'), {
+          undoKey: `rights:${u.id}`,
+          own: Boolean(own),
+          standardText: t('rights_rules'),
+          back: async () => {
+            if (await this._ws({ type: 'whereabouts/settings/rights', user_id: u.id, rights: null }) === null) return false;
+            delete admin.rights[u.id];
+            return true;
+          },
+          restore: async () => {
+            if (await this._ws({ type: 'whereabouts/settings/rights', user_id: u.id, rights: before }) === null) return false;
+            admin.rights[u.id] = before;
+            return true;
+          },
+          redraw: () => this._redrawRights(),
+        });
         body.appendChild(tr);
       });
-      box.appendChild(table);
+      if (!users.some((u) => !u.is_admin)) body.insertAdjacentHTML('beforeend', `<tr><td colspan="5" class="klein">${esc(t('no_users'))}</td></tr>`);
+      // rules for all users
+      wrap.querySelectorAll('select.regel').forEach((select) => {
+        const kind = select.dataset.kind;
+        const current = admin.rights_default[kind];
+        select.addEventListener('change', async () => {
+          const value = select.value;
+          if (levels.indexOf(value) > levels.indexOf(current)
+            && !await this._confirm(t('rights_title'), t('confirm_rights_less'), t('save'), true)) { select.value = current; return; }
+          if (await this._ws({ type: 'whereabouts/settings/rights_default', levels: { [kind]: value } }) === null) { select.value = current; return; }
+          admin.rights_default[kind] = value;
+          this._redrawRights();
+          this._updateSummary('rights');
+        });
+        const setLevel = async (value) => {
+          if (await this._ws({ type: 'whereabouts/settings/rights_default', levels: { [kind]: value } }) === null) return false;
+          admin.rights_default[kind] = value;
+          this._updateSummary('rights');
+          return true;
+        };
+        this._fillMarker(wrap.querySelector(`.regelmarke[data-kind="${kind}"]`), {
+          undoKey: `rule:${kind}`,
+          own: current !== builtIn[kind],
+          standardText: t(`level_${builtIn[kind]}`),
+          back: () => setLevel(builtIn[kind]),
+          restore: () => setLevel(current),
+          redraw: () => this._redrawRights(),
+        });
+      });
+      wrap.querySelector('.kopf .info').addEventListener('click', (e) => {
+        const text = wrap.querySelector('.infotext');
+        text.hidden = !text.hidden;
+        e.currentTarget.setAttribute('aria-expanded', text.hidden ? 'false' : 'true');
+      });
+      const tech = wrap.querySelector('.technisch');
+      if (tech) tech.addEventListener('change', () => { this._showTechnical = tech.checked; this._redrawRights(); });
+      wrap.querySelectorAll('[data-flag]').forEach((input) => input.addEventListener('change', () => this._setFlag(input)));
+      wrap.querySelectorAll('.bearbeiten').forEach((b) => b.addEventListener('click', async () => {
+        if (!await this.confirmLeave()) return;
+        if (b.dataset.user === 'defaults') { this._scope = 'defaults'; this._user = null; this._render(); } else await this._loadUser(b.dataset.user);
+        const scroller = this._scroller();
+        if (scroller) scroller.scrollTop = 0;
+      }));
+      box.appendChild(wrap);
     }
 
     _ruleAllows(kind, user, person) {
@@ -2044,35 +2843,77 @@ export function defineSettingsPage(S, D) {
       }
     }
 
-    // --- address sensors (administrators) --------------------------------------------------------------------
+    // --- address sensors (administrators): sub-area "Address sensor per person" ---------------------------
     _sensors(box) {
       const t = this._t;
       const options = this._data.admin.options;
+      if (options.address_source !== 'phone_osm' && options.address_source !== 'phone') return;
       const address = this._data.admin.address || { auto: {}, sensors: [] };
       const sensors = { ...(options.address_sensors || {}) };
-      this._data.persons.forEach((p) => {
-        const known = address.sensors.map((s) => ({ value: s.entity_id, label: `${s.name} (${s.entity_id})` }));
-        const current = sensors[p.entity_id] || '';
-        if (current && !known.some((o) => o.value === current)) known.push({ value: current, label: current });
-        const choices = [{ value: '', label: t('address_auto') }, ...known];
-        const row = this._row({ key: 'address_sensor', sel: sel(choices), label: t('st_address_sensor_for', { name: p.name }) },
-          current, false, async (value) => {
-            sensors[p.entity_id] = value || null;
-            const ok = await this._saveOption({ key: 'address_sensors' }, sensors);
-            note.hidden = Boolean(value);
-            return ok;
-          });
+      const persons = this._data.persons.filter((p) => (options.record_persons || []).includes(p.entity_id));
+      const missing = persons.filter((p) => {
+        const chosen = sensors[p.entity_id];
         const auto = address.auto[p.entity_id] || {};
-        const note = document.createElement('div');
-        note.className = 'klein';
-        note.style.gridColumn = '1 / -1';
-        note.textContent = auto.sensor
-          ? `${t('address_auto_found', { id: auto.sensor })}${auto.ok ? ' ✓' : ` – ${t('address_auto_off')}`}`
-          : t('address_auto_missing');
-        if (!auto.sensor || !auto.ok) note.classList.add('schlecht');
-        note.hidden = Boolean(current);
-        row.appendChild(note);
-        box.appendChild(row);
+        return !(chosen || auto.sensor);
+      });
+      const manual = persons.filter((p) => sensors[p.entity_id]).length;
+      const summary = !persons.length ? t('sum_sensors_none')
+        : missing.length ? t('sum_sensors_missing', { n: missing.length })
+          : manual ? t('sum_sensors_manual', { n: persons.length, m: manual }) : t('sum_sensors_auto', { n: persons.length });
+      const sub = this._subsection('sub_sensors', t('sub_sensors'), summary, missing.length > 0);
+      box.appendChild(sub.el);
+      const intro = document.createElement('div');
+      intro.className = 'zeile breit';
+      intro.style.borderTop = 'none';
+      intro.innerHTML = `<div class="beschriftung"><span class="klein">${esc(t('sensors_intro'))}</span>
+          <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
+        <div class="infotext" hidden>${rich(t('si_sensors'))}</div>`;
+      this._infoToggle(intro);
+      sub.inner.appendChild(intro);
+      if (!persons.length) return;
+      persons.forEach((p) => {
+        const auto = address.auto[p.entity_id] || {};
+        // the person's own phone first, then all other sensors that deliver addresses
+        const known = address.sensors.filter((x) => x.entity_id !== auto.sensor).map((x) => ({ value: x.entity_id, label: `${x.name} (${x.entity_id})` }));
+        const current = sensors[p.entity_id] || '';
+        if (current && current !== auto.sensor && !known.some((o) => o.value === current)) known.unshift({ value: current, label: current });
+        const autoLabel = auto.sensor ? t('address_auto_named', { name: auto.name || auto.sensor }) : t('address_auto');
+        const choices = [{ value: '', label: autoLabel }];
+        if (auto.sensor) choices.push({ value: auto.sensor, label: `${auto.name || auto.sensor} (${auto.sensor})` });
+        choices.push(...known);
+        const field = { key: 'address_sensor', sel: sel(choices), label: p.name, info: t('si_address_sensor_for', { name: p.name }) };
+        const row = this._row(field, current, false, async (value) => {
+          const before = sensors[p.entity_id] || null;
+          sensors[p.entity_id] = value || null;
+          const ok = await this._saveOption({ key: 'address_sensors' }, sensors);
+          if (!ok) sensors[p.entity_id] = before;
+          return ok;
+        });
+        row.classList.add('innen-zeile');
+        const holder = document.createElement('span');
+        const label = row.querySelector('.beschriftung');
+        label.insertBefore(holder, label.querySelector('.info'));
+        this._fillMarker(holder, {
+          undoKey: `sensor:${p.entity_id}`,
+          own: Boolean(current),
+          standardText: autoLabel,
+          back: async () => { sensors[p.entity_id] = null; return this._saveOption({ key: 'address_sensors' }, sensors); },
+          restore: async () => { sensors[p.entity_id] = current; return this._saveOption({ key: 'address_sensors' }, sensors); },
+          redraw: () => this._redrawAdmin('addresses'),
+        });
+        if (!current && !auto.sensor) {
+          const note = document.createElement('div');
+          note.className = 'kontrast';
+          note.textContent = t('address_auto_missing');
+          row.appendChild(note);
+        } else if (!current && !auto.ok) {
+          const note = document.createElement('div');
+          note.className = 'klein schlecht';
+          note.style.gridColumn = '1 / -1';
+          note.textContent = t('address_auto_off');
+          row.appendChild(note);
+        }
+        sub.inner.appendChild(row);
       });
     }
 
@@ -2094,7 +2935,7 @@ export function defineSettingsPage(S, D) {
       exportRow.innerHTML = `<div class="beschriftung"><span>${esc(t('export_data'))}</span>
           <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
         <div class="steuer"><button class="knopf voll laden" style="width:auto"${viewable.length ? '' : ' disabled'}><ha-icon icon="mdi:download"></ha-icon>${esc(t('export_data'))}</button></div>
-        <div class="infotext" hidden>${esc(t('si_export'))}</div>`;
+        <div class="infotext" hidden>${rich(t('si_export'))}</div>`;
       this._infoToggle(exportRow);
       exportRow.querySelector('.laden').addEventListener('click', async () => {
         const persons = viewable.map((p) => {
@@ -2119,7 +2960,7 @@ export function defineSettingsPage(S, D) {
       importHead.style.borderTop = 'none';
       importHead.innerHTML = `<div class="beschriftung"><span class="klein">${esc(t('import_intro'))}</span>
           <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
-        <div class="infotext" hidden>${esc(t('si_import'))}</div>`;
+        <div class="infotext" hidden>${rich(t('si_import'))}</div>`;
       this._infoToggle(importHead);
       box.appendChild(importHead);
       box.appendChild(this._row({ key: 'import_person', label: t('import_person'), info: t('si_import_person'),
@@ -2189,7 +3030,7 @@ export function defineSettingsPage(S, D) {
         <details class="hilfe"><summary>${esc(t('ai_help'))}</summary>
           <div class="reihe"><span style="flex:1 1 200px">${esc(t('ai_help_text'))}</span>
             <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
-          <div class="infotext" hidden>${esc(t('ai_privacy'))}</div>
+          <div class="infotext" hidden>${rich(t('ai_privacy'))}</div>
           <pre class="prompt">${esc(t('ai_prompt'))}</pre>
           <div class="reihe"><button class="knopf kopieren" type="button"><ha-icon icon="mdi:content-copy"></ha-icon>${esc(t('copy'))}</button></div>
         </details>`;
@@ -2298,14 +3139,27 @@ export function defineSettingsPage(S, D) {
       const box = this.querySelector('.felder[data-kat="diagnostics"]');
       if (!box || !this._admin) return;
       const t = this._t;
-      box.innerHTML = `<p class="kat-text">${esc(t('loading'))}</p>`;
-      let diag;
-      try { diag = await this._hass.callWS({ type: 'whereabouts/settings/diagnostics' }); } catch (err) {
+      if (!this._diag) box.innerHTML = `<p class="kat-text">${esc(t('loading'))}</p>`;
+      const button = box.querySelector('.diag-neu');
+      if (button) button.disabled = true;
+      try { this._diag = await this._hass.callWS({ type: 'whereabouts/settings/diagnostics' }); } catch (err) {
         box.innerHTML = `<p class="kat-text schlecht">${esc(t('load_failed'))}</p>`;
         return;
       }
+      this._diag.at = new Date();
+      this._showDiagnostics();
+    }
+
+    _showDiagnostics() {
+      const box = this.querySelector('.felder[data-kat="diagnostics"]');
+      const diag = this._diag;
+      if (!box || !diag) return;
+      const t = this._t;
       const kb = (bytes) => `${Math.max(1, Math.round(bytes / 1024))} KB`;
-      box.innerHTML = `${diag.osm_paused ? `<div class="warnung">${esc(t('osm_paused'))}</div>` : ''}
+      box.innerHTML = `<div class="zeile breit" style="border-top:none"><div class="beschriftung" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <span class="klein">${esc(t('diag_as_of', { time: S.clock(this._hass, diag.at, true) }))}</span>
+          <button class="knopf diag-neu" type="button"><ha-icon icon="mdi:refresh"></ha-icon>${esc(t('refresh'))}</button></div></div>
+        ${diag.osm_paused ? `<div class="warnung">${esc(t('osm_paused'))}</div>` : ''}
         <div class="tabellenrahmen"><table class="tabelle"><thead><tr>
           <th>${esc(t('col_person'))}</th><th>${esc(t('diag_trackers'))}</th><th>${esc(t('diag_address'))}</th><th>${esc(t('diag_history'))}</th>
         </tr></thead><tbody>
@@ -2318,6 +3172,7 @@ export function defineSettingsPage(S, D) {
             : `<span class="klein">${esc(p.recorded ? t('diag_no_history_yet') : t('diag_not_recorded'))}</span>`}</td>
         </tr>`).join('')}</tbody></table></div>
         <p class="kat-text klein">${esc(t('diag_folder', { folder: diag.folder }))}</p>`;
+      box.querySelector('.diag-neu').addEventListener('click', () => this._loadDiagnostics());
     }
 
     // --- unsaved changes ---------------------------------------------------------------------------------------
@@ -2447,6 +3302,46 @@ export function defineSettingsPage(S, D) {
           values: { persons: values.persons || [], person_settings: settings } })) !== null;
       }
       return true;
+    }
+
+    // --- new users: which settings they start with, and their rights ---------------------------------------
+    async _askNewUsers() {
+      const t = this._t;
+      const admin = this._data.admin;
+      if (!admin || this._askedNew || this._scope !== 'own' || !this._hasOtherUsers()) return;
+      const ids = (admin.pending_users || []).filter((id) => admin.users.some((u) => u.id === id));
+      if (!ids.length) return;
+      this._askedNew = true; // once per opening of the page ("Later" asks again next time)
+      const users = ids.map((id) => admin.users.find((u) => u.id === id));
+      const kinds = ['live', 'history', 'delete'];
+      const persons = this._data.persons;
+      const rightsHtml = users.map((u) => `<div class="person-recht" data-user="${esc(u.id)}"><b>${esc(u.name)}</b>
+        ${kinds.map((kind) => `<div class="rechtzeile"><span>${esc(t(`right_${kind}`))}</span><span class="chips">${persons.map((p) => `<label class="chip"><input type="checkbox" data-kind="${kind}" value="${esc(p.entity_id)}"${this._ruleAllows(kind, u, p) ? ' checked' : ''}>${esc(p.name)}</label>`).join('')}</span></div>`).join('')}</div>`).join('');
+      const html = `<h3>${esc(t(users.length > 1 ? 'new_users_title_many' : 'new_users_title', { name: users[0].name, n: users.length }))}</h3>
+        <div class="text">${esc(t('new_users_text', { names: users.map((u) => u.name).join(', ') }))}</div>
+        <div class="neue-benutzer" style="margin-top:10px">
+          ${['copy', 'sync', 'factory', 'later'].map((v, i) => `<label><input type="radio" name="start" value="${v}"${i === 0 ? ' checked' : ''}>${esc(t(`new_users_${v}`))}</label>`).join('')}
+          <div class="klein" style="margin:10px 0 4px">${esc(t('new_users_rights'))}</div>
+          ${rightsHtml}
+        </div>`;
+      const result = await this._dialog(html, t('save'), false, (win) => ({
+        action: win.querySelector('input[name="start"]:checked').value,
+        rights: Object.fromEntries([...win.querySelectorAll('.person-recht')].map((el) => [el.dataset.user,
+          Object.fromEntries(kinds.map((kind) => [kind, [...el.querySelectorAll(`input[data-kind="${kind}"]:checked`)].map((i) => i.value)]))])),
+      }));
+      const action = result ? result.action : 'later';
+      if (action !== 'later') await this._ws({ type: 'whereabouts/settings/new_users', user_ids: ids, action }, true);
+      if (result) {
+        for (const u of users) {
+          const wanted = result.rights[u.id];
+          const rules = Object.fromEntries(kinds.map((kind) => [kind, persons.filter((p) => this._ruleAllows(kind, u, p)).map((p) => p.entity_id)]));
+          if (wanted && !same(wanted, rules)) await this._ws({ type: 'whereabouts/settings/rights', user_id: u.id, rights: wanted }, true);
+        }
+      }
+      if (result) {
+        this._setSuccess(t(action === 'later' ? 'new_users_later_done' : 'new_users_done'), 'rights');
+        await this._load();
+      }
     }
 
     // --- dialogs ---------------------------------------------------------------------------------------------------

@@ -5,7 +5,9 @@
 export const HISTORY_DEFAULTS = {
   title: '',
   persons: [],
-  default_view: 'map', // map | table
+  default_view: 'map', // map (route) | heat | table
+  start_period: 'today', // today | 3d | 7d | 4w
+  simplify_points: 400, // points hidden from this many entries on (0 = always shown)
   show_legend: true,
   show_export: true,
   auto_refresh: true,
@@ -18,6 +20,7 @@ const CLOSE = '<svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 
 const EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0 8a5 5 0 0 1-5-5 5 5 0 0 1 5-5 5 5 0 0 1 5 5 5 5 0 0 1-5 5m0-12.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Z"/></svg>';
 const EYE_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.83,9L15,12.16C15,12.11 15,12.05 15,12A3,3 0 0,0 12,9C11.94,9 11.89,9 11.83,9M7.53,9.8L9.08,11.35C9.03,11.56 9,11.77 9,12A3,3 0 0,0 12,15C12.22,15 12.44,14.97 12.65,14.92L14.2,16.47C13.53,16.8 12.79,17 12,17A5,5 0 0,1 7,12C7,11.21 7.2,10.47 7.53,9.8M2,4.27L4.28,6.55L4.73,7C3.08,8.3 1.78,10 1,12C2.73,16.39 7,19.5 12,19.5C13.55,19.5 15.03,19.2 16.38,18.66L16.81,19.08L19.73,22L21,20.73L3.27,3M12,7A5,5 0 0,1 17,12C17,12.64 16.87,13.26 16.64,13.82L19.57,16.75C21.07,15.5 22.27,13.86 23,12C21.27,7.61 17,4.5 12,4.5C10.6,4.5 9.26,4.75 8,5.2L10.17,7.35C10.74,7.13 11.35,7 12,7Z"/></svg>';
 const CALENDAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 19H5V8h14m-3-7v2H8V1H6v2H5c-1.11 0-2 .89-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-1V1m-1 11h-5v5h5v-5Z"/></svg>';
+const SEP = '<span class="trenner">·</span>'; // the same separator as in "Where is…?"
 const LINK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7Z"/></svg>';
 
 export function defineHistoryCard(S, D) {
@@ -43,7 +46,7 @@ export function defineHistoryCard(S, D) {
       this._to = this._date; // last day
       this._unit = 'day'; // day | days | week | month | year (how the arrows move)
       this._mode = 'route'; // route | heat
-      this._withHome = false; // heatmap: include home
+      this._withHome = true; // heatmap: include home
       this._points = [];
       this._map = null;
       this._tiles = [];
@@ -70,7 +73,37 @@ export function defineHistoryCard(S, D) {
 
     _applyConfig() {
       this._config = S.cardConfig(HISTORY_DEFAULTS, this._info && this._info.settings, this._raw, 'history');
-      this._tableView = this._config.default_view === 'table';
+      // Zone switch in the legend while a card setting fixes it: only shown differently until leaving
+      if (this._zonesShown !== undefined) this._config.show_zones = this._zonesShown;
+      // Start view and period: at the start and whenever they are changed
+      const start = `${this._config.default_view}|${this._config.start_period}`;
+      if (start !== this._startSig) {
+        this._startSig = start;
+        this._applyStart(true);
+      }
+    }
+
+    // Start view (route / heat map / table) and start period - also what "Today" returns to.
+    _applyStart(withPeriod = true) {
+      const view = this._config.default_view;
+      this._tableView = view === 'table' && !this._mapError;
+      this._mode = view === 'heat' ? 'heat' : 'route';
+      this._withHome = true;
+      if (withPeriod) {
+        const [from, to] = this._startRange();
+        this._date = from;
+        this._to = to;
+        this._unit = from === to ? 'day' : 'days';
+      }
+    }
+
+    _startRange() {
+      const today = this._todayStr();
+      const back = { '3d': 2, '7d': 6, '4w': 27 }[this._config.start_period] || 0;
+      const d = new Date();
+      d.setDate(d.getDate() - back);
+      const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return [from, today];
     }
 
     set hass(hass) {
@@ -136,8 +169,18 @@ export function defineHistoryCard(S, D) {
         this._gone = setTimeout(() => this._onInfo({ ...info, confirmed: true }), 8000);
         return;
       }
-      const sig = JSON.stringify([info.available, info.history_card, info.persons, info.settings]);
-      if (sig === this._infoSig) return;
+      const sig = JSON.stringify([info.available, info.history_card, info.persons, { ...(info.settings || {}), zones_in: null },
+        info.panel_shown, info.is_admin, info.locked_keys]);
+      if (sig === this._infoSig) {
+        // only the zones were switched (e.g. in the legend): no rebuild
+        if (this._ready && info.settings && this._info && info.settings.zones_in !== (this._info.settings || {}).zones_in) {
+          this._info = info;
+          this._applyConfig();
+          this._zoneSignature = '';
+          if (this._map) { this._drawZones(); this._showLegend(); }
+        }
+        return;
+      }
       this._infoSig = sig;
       this._info = info;
       this._applyConfig();
@@ -247,6 +290,8 @@ export function defineHistoryCard(S, D) {
       ring.style.strokeDashoffset = (length * (1 - this._rest / this._interval)).toFixed(2);
       rest.textContent = auto ? t('reload_in', { n: this._rest })
         : (this._loadedAt ? t('data_as_of', { when: S.standText(this._hass, t, this._loadedAt) }) : '');
+      // fixed width: the numbers counting down do not move anything
+      rest.style.minWidth = auto ? `${t('reload_in', { n: this._interval }).length}ch` : '';
     }
 
     _autoRefresh() {
@@ -303,17 +348,19 @@ export function defineHistoryCard(S, D) {
       this._setPeriod(from, to, this._unit);
     }
 
-    // "Today": a period → only today; only today already → everything as after opening the page.
+    // "Today": first only today; only today already → everything as after opening
+    // the page (start view and start period).
     _today() {
       const today = this._todayStr();
       if (this._date === today && this._to === today) {
         this._hidden.clear();
-        this._mode = 'route';
-        this._withHome = false;
         if (this._selectMode) this._setSelectMode(false);
-        if (this._tableView && !this._mapError) this._tableView = false;
+        this._applyStart(false);
         this._updatePersonButtons();
         this._updateView();
+        const [from, to] = this._startRange();
+        this._setPeriod(from, to, from === to ? 'day' : 'days');
+        return;
       }
       this._setPeriod(today, today, 'day');
     }
@@ -401,7 +448,7 @@ export function defineHistoryCard(S, D) {
       S.applyHeight(this, c);
       const personCss = this._persons.map((p) => `
           .personWahl .person.p-${p.key} { --farbe: ${p.color}; }
-          .statusbar .wer.p-${p.key} { color: ${p.color}; }`).join('');
+          .statusbar .wer.p-${p.key} { color: ${S.readableColor(p.color, S.cardBackground(this._hass))}; }`).join('');
       this.innerHTML = `
         ${S.leafletCss()}
         <ha-card class="wa-history${c.height_mode === 'fill' ? ' flach' : ''}" style="height: 100%; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;${c.height_mode === 'fill' ? ' border-radius: 0; border: none; box-shadow: none;' : ''}">
@@ -496,6 +543,12 @@ export function defineHistoryCard(S, D) {
             .legende .verlauf { width: 160px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, blue, cyan, lime, yellow, red); }
             .legende .skala { display: flex; justify-content: space-between; font-size: 12px; color: var(--secondary-text-color, #666); }
             .legende label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; margin-top: 4px; }
+            .legende .zonen { margin-top: 6px; padding-top: 4px; border-top: 1px solid var(--divider-color, rgba(0,0,0,.12)); }
+            .legende .zonen.fest { cursor: default; opacity: .55; }
+            .legende input { margin: 0; accent-color: var(--primary-color); }
+            .wa-dark .legende { background: #2b2d30; color: #e8e8e8; }
+            .wa-dark .legende .hinweis, .wa-dark .legende .skala { color: #b0b4b9; }
+            .wa-dark .legende .zonen { border-top-color: rgba(255,255,255,.15); }
             .routenSymbol { background: none; border: none; }
             .routenSymbol svg { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45)); cursor: pointer; }
             .wa-map { flex: 1 1 auto; min-height: 300px; width: 100%; position: relative; overflow: hidden; }
@@ -505,6 +558,13 @@ export function defineHistoryCard(S, D) {
             .wa-history.niedrig .legende .hinweis { display: none; }
             .wa-history.niedrig .statusbar { padding: 2px 8px; line-height: 1.3; }
             .wa-history.niedrig .controls { padding-top: 6px; padding-bottom: 6px; }
+            .wa-map .punkte-hinweis { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 900; max-width: calc(100% - 120px);
+                                      display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 16px; border: none; cursor: pointer;
+                                      font: inherit; font-size: 13px; background: var(--card-background-color, #fff); color: var(--primary-text-color);
+                                      box-shadow: 0 2px 8px rgba(0,0,0,.25); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .wa-map .punkte-hinweis[hidden] { display: none; }
+            .wa-map .punkte-hinweis svg { flex: 0 0 auto; width: 18px; height: 18px; fill: var(--primary-color); }
+            .wa-map.wa-dark .punkte-hinweis { background: #2b2d30; color: #e8e8e8; }
             .wa-map .niemand-hinweis { position: absolute; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; pointer-events: none; }
             .wa-map .niemand-hinweis span { background: var(--card-background-color, #fff); color: var(--primary-text-color); padding: 10px 16px;
                                             border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.25); font-size: 15px; }
@@ -532,7 +592,11 @@ export function defineHistoryCard(S, D) {
             .statusbar { display: flex; align-items: center; gap: 8px; text-align: center; font-size: 13px;
                          color: var(--secondary-text-color); padding: 4px 8px; line-height: 1.6; border-top: 1px solid var(--divider-color); }
             .statusbar .infos { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
-            .statusbar .rest { font-variant-numeric: tabular-nums; }
+            .statusbar .rest { flex: 0 0 auto; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+            .statusbar .trenner { margin: 0 6px; opacity: .6; }
+            /* Full height (dashboard): keep clear of rounded screen corners and the home bar */
+            .wa-history.flach .statusbar { padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right));
+                                           padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
             .statusbar.fehler .status { color: var(--error-color, #db4437); }
             .statusbar .wer { font-weight: 600; }
             .statusbar .export { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 500;
@@ -606,13 +670,14 @@ export function defineHistoryCard(S, D) {
             <button class="exportGpx">${esc(t('export_selected', { format: 'GPX' }))}</button>
             <button class="loeschenBtn loeschen" disabled>${esc(t('delete'))}</button>
           </div>
-          <div class="wa-map"></div>
+          <div class="wa-map"><button class="punkte-hinweis" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5m-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14m.5-7H9v2H7v1h2v2h1v-2h2V9h-2V7Z"/></svg><span class="text"></span></button></div>
           <div class="tabelle"></div>
           <div class="leer" style="display:none;"></div>
           <div class="niemand" hidden>${esc(t('no_person_selected'))}</div>
           <div class="statusbar">
             ${c.show_export ? `<button class="export" type="button" title="${esc(t('export_data'))}" aria-label="${esc(t('export_data'))}">${DOWNLOAD_ICON}<span class="text">${esc(t('export_data'))}</span></button>` : ''}
-            <div class="infos"><span class="status"></span><span class="rest"></span></div>
+            <div class="infos"><span class="status"></span></div>
+            <span class="rest"></span>
             <button class="neuladen" title="${esc(t('reload_now'))}" aria-label="${esc(t('reload_now'))}">
               <svg class="ringe" viewBox="0 0 34 34" aria-hidden="true"><circle class="ring-hg" cx="17" cy="17" r="15"/><circle class="ring" cx="17" cy="17" r="15"/></svg>
               <svg class="pfeil" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
@@ -653,6 +718,9 @@ export function defineHistoryCard(S, D) {
       this.querySelector('.loeschenBtn').addEventListener('click', () => this._deleteSelected());
       const exportButton = this.querySelector('.statusbar .export');
       if (exportButton) exportButton.addEventListener('click', () => this._download());
+      this.querySelector('.punkte-hinweis').addEventListener('click', () => {
+        if (this._map) this._map.setZoom(Math.max(13, this._map.getZoom() + 1));
+      });
       this._initMap();
     }
 
@@ -679,6 +747,8 @@ export function defineHistoryCard(S, D) {
         this._map = window.L.map(mapDiv, { zoomControl: false }).setView([home.latitude || 0, home.longitude || 0], 14);
         window.L.control.zoom({ position: 'bottomright', zoomInTitle: this._t('zoom_in'), zoomOutTitle: this._t('zoom_out') }).addTo(this._map);
         this._overviewButton = S.overviewControl(this._map, this._t('overview'), () => this._fit());
+        this._gear = {};
+        S.updateGear(this._map, this._gear, this._info, this._t('open_settings'));
         S.compactAttribution(this._map);
         this._setTiles(S.isDark(this._hass, this._config.map_style));
         S.watchZoneNames(this._map, mapDiv, this._config);
@@ -694,10 +764,13 @@ export function defineHistoryCard(S, D) {
     }
 
     _setTiles(dark) {
+      const changed = this._dark !== null && this._dark !== dark;
       this._dark = dark;
       const box = this.querySelector('.wa-map');
       const notice = this._info && this._info.is_admin ? S.fallbackNotice(box, this._t) : null;
       this._tiles = S.setTiles(this._map, this._tiles, this._config, dark, box, notice);
+      // start/end symbols and points follow light/dark
+      if (changed && this._points.length) this._drawMap(false);
     }
 
     _drawZones() {
@@ -822,17 +895,17 @@ export function defineHistoryCard(S, D) {
       if (!persons.length && !failed.length) parts.push(esc(t('no_person_selected')));
       else if (!points.length) { if (!failed.length) parts.push(esc(t(this._multiDay() ? 'no_data_range' : 'no_data'))); }
       else if (this._persons.length > 1) {
-        parts.push(persons.map((p) => `<span class="wer p-${p.key}">${esc(p.name)}:</span> ${esc(this._countText(points.filter((x) => x.person === p.id).length))}`).join(' · '));
+        parts.push(persons.map((p) => `<span class="wer p-${p.key}">${esc(p.name)}:</span> ${esc(this._countText(points.filter((x) => x.person === p.id).length))}`).join(SEP));
       } else parts.push(esc(this._countText(points.length)));
       let text = parts.join('');
       if (this._multiDay()) {
-        text += `<span class="zeit">${text ? ' — ' : ''}${esc(P.rangeText(S.language(this._hass), this._date, this._to))}</span>`;
+        text += `<span class="zeit">${text ? SEP : ''}${esc(P.rangeText(S.language(this._hass), this._date, this._to))}</span>`;
       } else if (points.length) {
         const end = points.reduce((max, p) => ((p.end || p.time) > max ? (p.end || p.time) : max), '');
-        text += `<span class="zeit"> — ${esc(t('time', { time: t('range', { from: points[0].time.slice(0, 5), to: end.slice(0, 5) }) }))}</span>`;
+        text += `<span class="zeit">${SEP}${esc(t('time', { time: t('range', { from: points[0].time.slice(0, 5), to: end.slice(0, 5) }) }))}</span>`;
       }
-      if (failed.length) text += (text ? ' · ' : '') + esc(t('error_for', { names: failed.join(', ') }));
-      if (this._mapError) text += (text ? ' · ' : '') + esc(t('map_unavailable'));
+      if (failed.length) text += (text ? SEP : '') + esc(t('error_for', { names: failed.join(', ') }));
+      if (this._mapError) text += (text ? SEP : '') + esc(t('map_unavailable'));
       status.innerHTML = text;
     }
 
@@ -864,16 +937,24 @@ export function defineHistoryCard(S, D) {
       return map.offsetWidth > 0 && map.offsetHeight > 0;
     }
 
-    // Long periods: the small points only when zoomed in.
+    // Many entries: the small points only when zoomed in (setting "hide points from … entries", 0 = always shown).
     _large() {
-      return this._visiblePoints().length > 400;
+      const limit = Number(this._config.simplify_points);
+      if (!(limit > 0)) return false;
+      return this._visiblePoints().length >= limit;
     }
 
     _simplify() {
-      if (!this._map || !this._markerLayer) return;
+      const plaque = this.querySelector('.punkte-hinweis');
+      if (!this._map || !this._markerLayer) { if (plaque) plaque.hidden = true; return; }
       const show = !this._large() || this._map.getZoom() >= 13;
       if (show && !this._map.hasLayer(this._markerLayer)) this._markerLayer.addTo(this._map);
       if (!show && this._map.hasLayer(this._markerLayer)) this._map.removeLayer(this._markerLayer);
+      if (plaque) {
+        const n = this._markerLayer.getLayers().length;
+        plaque.hidden = show || !n;
+        plaque.querySelector('.text').textContent = this._t('points_hidden', { n });
+      }
     }
 
     _heat() {
@@ -917,7 +998,9 @@ export function defineHistoryCard(S, D) {
             });
             ends.addLayer(marker);
           } else {
-            marker = L.circleMarker([p.lat, p.lon], { radius: 5, color: person.color, weight: 1, fillColor: person.color, fillOpacity: 0.6 });
+            marker = L.circleMarker([p.lat, p.lon], {
+              radius: 5, color: this._dark ? S.shade(person.color, -0.35) : person.color, weight: 1, fillColor: person.color, fillOpacity: 0.6,
+            });
             markers.addLayer(marker);
           }
           if (!forPicture) marker.bindPopup(() => this._popup(p), { className: 'wa-eintrag', closeButton: false, minWidth: 220, maxWidth: 300 });
@@ -935,6 +1018,7 @@ export function defineHistoryCard(S, D) {
       });
       this._routeLayer = this._markerLayer = this._endLayer = this._heatLayer = null;
       this._bounds = null;
+      this._simplify();
       const mapDiv = this.querySelector('.wa-map');
       let hint = mapDiv.querySelector('.niemand-hinweis');
       const nobody = !this._visiblePersons().length;
@@ -966,13 +1050,23 @@ export function defineHistoryCard(S, D) {
       }
     }
 
-    _symbol(kind, color, size) {
-      const circle = kind === 'end'
-        ? `<circle cx="12" cy="12" r="10.5" fill="${color}" stroke="#fff" stroke-width="2"/>`
-        : `<circle cx="12" cy="12" r="10" fill="#fff" stroke="${color}" stroke-width="3"/>`;
-      const sign = kind === 'end'
-        ? '<path d="M8.5 6.5v11" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><path d="M9.3 6.8h7.2l-1.9 2.6 1.9 2.6H9.3z" fill="#fff"/>'
-        : `<path d="M10 7.6v8.8l7-4.4z" fill="${color}"/>`;
+    // Start: white circle with ▶ in the person's colour (dark map: dark circle); end: coloured circle with a flag.
+    // legend = true on a dark map: both dark with light grey outline and sign.
+    _symbol(kind, color, size, legend = false) {
+      const dark = Boolean(this._dark);
+      const inside = dark ? '#2b2d30' : '#fff';
+      const light = '#d0d0d0';
+      let circle;
+      let sign;
+      if (kind === 'end') {
+        const fill = legend && dark ? inside : color;
+        const mark = legend && dark ? light : '#fff';
+        circle = `<circle cx="12" cy="12" r="10.5" fill="${fill}" stroke="${legend && dark ? light : '#fff'}" stroke-width="2"/>`;
+        sign = `<path d="M8.5 6.5v11" stroke="${mark}" stroke-width="1.8" stroke-linecap="round"/><path d="M9.3 6.8h7.2l-1.9 2.6 1.9 2.6H9.3z" fill="${mark}"/>`;
+      } else {
+        circle = `<circle cx="12" cy="12" r="10" fill="${inside}" stroke="${color}" stroke-width="3"/>`;
+        sign = `<path d="M10 7.6v8.8l7-4.4z" fill="${color}"/>`;
+      }
       return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true">${circle}${sign}</svg>`;
     }
 
@@ -989,13 +1083,47 @@ export function defineHistoryCard(S, D) {
 
     _legendHtml() {
       const t = this._t;
+      const zones = this._zoneSwitchHtml();
       if (this._heat()) {
         return `<div class="verlauf"></div><div class="skala"><span>${esc(t('heat_little'))}</span><span>${esc(t('heat_much'))}</span></div>
-          <label><input type="checkbox" class="mitZuhause"${this._withHome ? ' checked' : ''}>${esc(t('heat_with_home'))}</label>`;
+          <label><input type="checkbox" class="mitZuhause"${this._withHome ? ' checked' : ''}>${esc(t('heat_with_home'))}</label>${zones}`;
       }
+      const grey = this._dark ? '#d0d0d0' : '#666';
       return this._visiblePersons().map((p) => `<div class="eintrag"><span class="linie" style="background:${p.color}"></span>${esc(p.name)}</div>`).join('')
-        + `<div class="eintrag hinweis">${this._symbol('start', '#666', 18)}${esc(t('start'))}`
-        + `<span class="abstand"></span>${this._symbol('end', '#666', 18)}${esc(t('end'))}</div>`;
+        + `<div class="eintrag hinweis">${this._symbol('start', grey, 18, true)}${esc(t('start'))}`
+        + `<span class="abstand"></span>${this._symbol('end', grey, 18, true)}${esc(t('end'))}</div>${zones}`;
+    }
+
+    // "Show zones" in the legend: the same setting as on the settings page (zones_in).
+    _zoneSwitchHtml() {
+      const t = this._t;
+      const locked = ((this._info && this._info.locked_keys) || []).includes('zones_in');
+      const fixedByCard = this._raw && this._raw.show_zones !== undefined;
+      const title = locked ? t('zones_switch_locked') : (fixedByCard ? t('zones_switch_card') : '');
+      return `<label class="zonen${locked ? ' fest' : ''}"${title ? ` title="${esc(title)}"` : ''}><input type="checkbox" class="zonenZeigen"${this._config.show_zones ? ' checked' : ''}${locked ? ' disabled' : ''}>${esc(t('show_zones_short'))}</label>`;
+    }
+
+    async _toggleZones(show) {
+      const fixedByCard = this._raw && this._raw.show_zones !== undefined;
+      if (fixedByCard) {
+        // the card's own setting wins: only shown differently until leaving
+        this._zonesShown = show;
+        this._applyConfig();
+        this._zoneSignature = '';
+        this._drawZones();
+        return;
+      }
+      const current = (this._info && this._info.settings && this._info.settings.zones_in) || 'both';
+      const live = current === 'both' || current === 'live';
+      const zonesIn = show ? (live ? 'both' : 'history') : (live ? 'live' : 'none');
+      this._config.show_zones = show;
+      this._zoneSignature = '';
+      this._drawZones();
+      try {
+        await this._hass.callWS({ type: 'whereabouts/settings/save', scope: 'own', category: 'zones', values: { zones_in: zonesIn } });
+      } catch (err) {
+        console.error('Whereabouts: zones setting not saved', err);
+      }
     }
 
     _showLegend() {
@@ -1009,12 +1137,12 @@ export function defineHistoryCard(S, D) {
         window.L.DomEvent.disableClickPropagation(div);
         const box = div.querySelector('.mitZuhause');
         if (box) box.addEventListener('change', () => { this._withHome = box.checked; this._drawMap(false); });
+        const zones = div.querySelector('.zonenZeigen');
+        if (zones) zones.addEventListener('change', () => this._toggleZones(zones.checked));
         return div;
       };
       legend.addTo(this._map);
       this._legend = legend;
-      // The overview button stays above the legend.
-      if (this._overviewButton) { this._map.removeControl(this._overviewButton); this._overviewButton.addTo(this._map); }
     }
 
     // Header: colour dot, name, close; the place large with a link to the map app; time and duration small;

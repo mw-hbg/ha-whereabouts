@@ -345,7 +345,7 @@ async def test_sync_and_fixed_settings_per_user(hass: HomeAssistant, hass_ws_cli
     assert result["success"]
     await _ws(ws, 6, type="whereabouts/settings/field_lock", user_id=OTHER, category="map", keys=["map_link"])
     assert settings.locked_keys(Other(), "map") == ["map_link"]
-    real = await hass.auth.async_create_user("Belinda")
+    real = await hass.auth.async_create_user("Robin")
     await settings.async_set("own", real.id, "map", {"map_link": "osm"})
     await settings.async_set_field_lock(real.id, "map", ["map_link"])
     user = (await _ws(ws, 7, type="whereabouts/settings/user", user_id=real.id))["result"]
@@ -409,3 +409,87 @@ async def test_users_are_marked_technical(hass: HomeAssistant, hass_ws_client, h
     by_name = {u["name"]: u for u in users}
     assert by_name["MQTT"]["technical"] is True
     assert by_name[hass_admin_user.name]["technical"] is False  # linked to person.alex
+
+
+async def test_value_equal_to_default_is_no_own_value(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    entry = await _setup(hass, hass_admin_user.id)
+    settings = entry.runtime_data.settings
+    ws = await hass_ws_client(hass)
+    await _ws(ws, 1, type="whereabouts/settings/save", scope="own", category="map", values={"tiles": "osm"})
+    assert settings.own(hass_admin_user.id)["map"] == {"tiles": "osm"}
+    # Back to the value that applies anyway: the own value is removed
+    await _ws(ws, 2, type="whereabouts/settings/save", scope="own", category="map", values={"tiles": "esri"})
+    assert settings.own(hass_admin_user.id) == {}
+    # Defaults equal to the built-in value are no defaults either
+    await _ws(ws, 3, type="whereabouts/settings/save", scope="defaults", category="map", values={"tiles": "esri"})
+    assert "map" not in settings.data["defaults"]
+    # Also for another user, edited by an administrator
+    await _ws(
+        ws,
+        4,
+        type="whereabouts/settings/save",
+        scope="own",
+        user_id=OTHER,
+        category="zones",
+        values={"zones_in": "both"},
+    )
+    assert settings.own(OTHER) == {}
+
+
+async def test_factory_reset_and_restore(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    entry = await _setup(hass, hass_admin_user.id)
+    settings = entry.runtime_data.settings
+    ws = await hass_ws_client(hass)
+    await settings.async_set("defaults", "", "map", {"tiles": "carto"})
+    await settings.async_set("own", hass_admin_user.id, "map", {"map_link": "osm"})
+    await settings.async_set("own", OTHER, "map", {"map_link": "waze"})
+    # Only for me: the built-in values, although the defaults differ
+    result = await _ws(ws, 1, type="whereabouts/settings/reset", scope="own", category="map", factory=True)
+    token = result["result"]["undo"]
+    mine = settings.effective(hass_admin_user)["map"]
+    assert mine["tiles"] == "esri" and mine["map_link"] == "google"
+    assert settings.own(OTHER)["map"] == {"map_link": "waze"}
+    assert (await _ws(ws, 2, type="whereabouts/settings/restore", token=token))["success"]
+    assert settings.own(hass_admin_user.id)["map"] == {"map_link": "osm"}
+    # A token works once
+    assert not (await _ws(ws, 3, type="whereabouts/settings/restore", token=token))["success"]
+    # For everybody: defaults and all own values gone, restorable
+    result = await _ws(
+        ws, 4, type="whereabouts/settings/reset", scope="own", category="map", factory=True, everyone=True
+    )
+    assert "map" not in settings.data["defaults"] and settings.own(OTHER) == {}
+    await _ws(ws, 5, type="whereabouts/settings/restore", token=result["result"]["undo"])
+    assert settings.defaults()["map"]["tiles"] == "carto" and settings.own(OTHER)["map"] == {"map_link": "waze"}
+
+
+async def test_new_users_wait_for_a_decision(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    entry = await _setup(hass, hass_admin_user.id)
+    settings = entry.runtime_data.settings
+    ws = await hass_ws_client(hass)
+    first = await hass.auth.async_create_user("Robin")
+    _person(hass, "robin", first.id)
+    # First start: users already there are known, nothing to decide
+    data = (await _ws(ws, 1, type="whereabouts/settings"))["result"]
+    assert data["admin"]["pending_users"] == [] and data["admin"]["has_other_users"]
+    new = await hass.auth.async_create_user("Guest")
+    _person(hass, "guest", new.id)
+    await settings.async_set("own", hass_admin_user.id, "map", {"tiles": "osm"})
+    data = (await _ws(ws, 2, type="whereabouts/settings"))["result"]
+    assert data["admin"]["pending_users"] == [new.id]
+    # Until decided: like the administrator
+    assert settings.effective(new)["map"]["tiles"] == "osm"
+    await _ws(ws, 3, type="whereabouts/settings/new_users", user_ids=[new.id], action="later")
+    assert (await _ws(ws, 4, type="whereabouts/settings"))["result"]["admin"]["pending_users"] == [new.id]
+    # Copied once: stays when the administrator changes again
+    await _ws(ws, 5, type="whereabouts/settings/new_users", user_ids=[new.id], action="copy")
+    await settings.async_set("own", hass_admin_user.id, "map", {"tiles": "carto"})
+    assert settings.effective(new)["map"]["tiles"] == "osm" and not settings.synced(new)
+    assert (await _ws(ws, 6, type="whereabouts/settings"))["result"]["admin"]["pending_users"] == []
+
+
+async def test_image_fetch_refuses_local_addresses(hass: HomeAssistant, hass_client, hass_admin_user):
+    await _setup(hass, hass_admin_user.id)
+    client = await hass_client()
+    for url in ("http://127.0.0.1/x.png", "http://192.168.0.1/x.png", "file:///etc/passwd", "ftp://example.com/a"):
+        response = await client.get("/api/whereabouts/image", params={"url": url})
+        assert response.status == 400, url

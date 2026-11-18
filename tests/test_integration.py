@@ -364,3 +364,20 @@ async def test_old_person_lists_become_the_persons(hass: HomeAssistant):
     options = merged_options(entry)
     assert options["persons"] == ["person.alex", "person.sam"]
     assert "show_persons_live" not in options and options["history_card"] is True
+
+
+async def test_options_dashboard_and_open_settings(hass: HomeAssistant):
+    entry = await setup_integration(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert "open_settings" in result["menu_options"] and "dashboard" in result["menu_options"]
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "open_settings"})
+    assert result["type"] == "abort" and result["reason"] == "open_settings"
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "dashboard"})
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"panel_hidden": True, "panel_title": " Family ", "panel_icon": ""}
+    )
+    await hass.async_block_till_done()
+    assert entry.options["panel"] is False
+    assert entry.options["panel_title"] == "Family"
+    assert entry.options["panel_icon"] == "mdi:map-marker-radius"

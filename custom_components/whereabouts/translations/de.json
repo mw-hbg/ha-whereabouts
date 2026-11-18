@@ -34,8 +34,10 @@
     "step": {
       "init": {
         "title": "Whereabouts",
-        "description": "Personen, Farben, Bilder, Rechte und die Seitenleiste stellst du auf der Einstellungsseite ein: [Einstellungen öffnen](/whereabouts/settings). Dort findest du auch alles Folgende.",
+        "description": "Personen, Farben, Bilder, Rechte und das Dashboard stellst du auf der Einstellungsseite ein: [Einstellungen öffnen](/whereabouts/settings). Dort findest du auch alles Folgende.",
         "menu_options": {
+          "open_settings": "Einstellungen öffnen",
+          "dashboard": "Dashboard",
           "recording": "Aufzeichnung",
           "addresses": "Adressen",
           "import_file": "Verlauf importieren"
@@ -80,6 +82,20 @@
           "target_person": "Pflicht bei GPX. Bei CSV-Dateien leer lassen, dann gilt die Person aus der Datei.",
           "replace": "Aus: Bereits vorhandene Einträge (gleiche Startzeit) werden übersprungen. An: Jeder Tag aus der Datei ersetzt den gespeicherten Tag vollständig."
         }
+      },
+      "dashboard": {
+        "title": "Dashboard",
+        "description": "Ob Whereabouts als Dashboard in der Seitenleiste erscheint, mit welchem Namen und welchem Symbol. Ausgeblendet bleibt es unter [/whereabouts](/whereabouts) und über „Einstellungen öffnen“ hier erreichbar.",
+        "data": {
+          "panel_hidden": "In der Seitenleiste ausblenden",
+          "panel_title": "Name des Dashboards",
+          "panel_icon": "Symbol des Dashboards"
+        },
+        "data_description": {
+          "panel_hidden": "Nur der Eintrag in der Seitenleiste verschwindet – für alle. Nur für dich ausblenden: Profil → Seitenleiste bearbeiten (oder lange auf die Seitenleiste drücken).",
+          "panel_title": "Leer = „Standorte“ (auf Englisch „Whereabouts“).",
+          "panel_icon": "Leer = Standardsymbol."
+        }
       }
     },
     "error": {
@@ -92,7 +108,8 @@
       "not_set_up": "Whereabouts läuft nicht."
     },
     "abort": {
-      "import_done": "Importiert für {persons}: {added} Einträge an {days} Tagen ({skipped} waren schon vorhanden)."
+      "import_done": "Importiert für {persons}: {added} Einträge an {days} Tagen ({skipped} waren schon vorhanden).",
+      "open_settings": "[Whereabouts-Einstellungen öffnen](/whereabouts/settings) – das klappt auch, wenn das Dashboard in der Seitenleiste ausgeblendet ist."
     }
   },
   "selector": {

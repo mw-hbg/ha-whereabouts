@@ -7,10 +7,13 @@ const picker = import(`./datepicker.js${new URL(import.meta.url).search}`);
 const CSS = `
   .wa-dl { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 16px;
            background: rgba(0,0,0,.45); font-family: var(--paper-font-body1_-_font-family, system-ui, sans-serif); }
-  .wa-dl .fenster { width: min(520px, 100%); max-height: 92vh; overflow: auto; box-sizing: border-box; padding: 20px 22px 16px;
+  .wa-dl .fenster { width: min(520px, 100%); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); box-sizing: border-box;
+                    display: flex; flex-direction: column; overflow: hidden;
                     background: var(--card-background-color, #fff); color: var(--primary-text-color, #222);
                     border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.35); }
-  .wa-dl h3 { margin: 0 0 14px; font-size: 20px; font-weight: 400; display: flex; align-items: center; gap: 10px; }
+  .wa-dl h3 { flex: 0 0 auto; margin: 0; padding: 18px 22px 12px; font-size: 20px; font-weight: 400; display: flex; align-items: center; gap: 10px; }
+  /* Only the middle scrolls: title and buttons always stay visible (also on a phone in landscape) */
+  .wa-dl .rumpf { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 22px; }
   .wa-dl h3 svg { width: 24px; height: 24px; fill: var(--primary-color, #03a9f4); }
   .wa-dl .abschnitt { margin: 0 0 14px; }
   .wa-dl .titel { font-size: 13px; font-weight: 500; color: var(--secondary-text-color, #666); margin: 0 0 6px; }
@@ -33,12 +36,21 @@ const CSS = `
   .wa-dl input[type="checkbox"], .wa-dl input[type="radio"] { accent-color: var(--primary-color, #03a9f4); margin: 0; }
   .wa-dl .hinweis { font-size: 13px; color: var(--secondary-text-color, #666); margin: 4px 0 0; }
   .wa-dl .fehler { font-size: 13px; color: var(--error-color, #db4437); min-height: 1em; }
-  .wa-dl .knoepfe { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .wa-dl .knoepfe { flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px 14px; border-top: 1px solid var(--divider-color, #ddd); }
   .wa-dl .knoepfe button { font: inherit; font-size: 14px; font-weight: 500; padding: 8px 16px; border-radius: 18px; cursor: pointer;
                            border: 1px solid var(--divider-color, #ddd); background: none; color: var(--primary-color, #03a9f4); }
   .wa-dl .knoepfe button.los { background: var(--primary-color, #03a9f4); border-color: var(--primary-color, #03a9f4);
                                color: var(--text-primary-color, #fff); }
   .wa-dl .knoepfe button:disabled { opacity: .5; cursor: default; }
+  @media (max-height: 520px) {
+    .wa-dl { padding: 6px; }
+    .wa-dl .fenster { width: min(640px, 100%); max-height: calc(100vh - 12px); max-height: calc(100dvh - 12px); }
+    .wa-dl h3 { padding: 10px 18px 6px; font-size: 17px; }
+    .wa-dl .rumpf { padding: 0 18px; }
+    .wa-dl .abschnitt { margin-bottom: 8px; }
+    .wa-dl label { padding: 2px 0; }
+    .wa-dl .knoepfe { padding: 6px 12px 8px; }
+  }
 `;
 
 export const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>';
@@ -79,8 +91,11 @@ export function openDownloadDialog(S, { hass, t, persons, selected, from, to, da
     const several = state.persons.size > 1;
     const image = state.format === 'jpg';
     const files = (state.perDay && count > 1 ? count : 1) * (state.perPerson && several ? state.persons.size : 1);
+    const before = box.querySelector('.rumpf');
+    const scrolled = before ? before.scrollTop : 0;
     box.innerHTML = `<div class="fenster" role="dialog" aria-modal="true" aria-label="${esc(t('export_data'))}">
       <h3>${DOWNLOAD_ICON}${esc(t('export_data'))}</h3>
+      <div class="rumpf">
       <div class="abschnitt"><div class="titel">${esc(t('format'))}</div>
         <div class="reihe">
           <label><input type="radio" name="format" value="csv"${state.format === 'csv' ? ' checked' : ''}>CSV (${esc(t('format_csv_hint'))})</label>
@@ -109,9 +124,11 @@ export function openDownloadDialog(S, { hass, t, persons, selected, from, to, da
       </div>` : ''}
       <p class="hinweis">${esc(files > 1 ? t('download_zip', { n: files }) : t('download_single'))}</p>`}
       <div class="fehler"></div>
+      </div>
       <div class="knoepfe"><button type="button" class="abbrechen">${esc(t('cancel'))}</button>
         <button type="button" class="los"${image || state.persons.size ? '' : ' disabled'}>${esc(t('download'))}</button></div>
     </div>`;
+    box.querySelector('.rumpf').scrollTop = scrolled;
     box.querySelector('.zeitraum').addEventListener('click', async () => {
       const result = await P.openDatePicker({ t, lang, from: state.from, to: state.to, today, days, first });
       if (result) { state.from = result.from; state.to = result.to; render(); }

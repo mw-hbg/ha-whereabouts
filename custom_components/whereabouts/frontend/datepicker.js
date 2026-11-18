@@ -5,26 +5,29 @@
 const CSS = `
   .wa-dp { position: fixed; inset: 0; z-index: 10001; display: flex; align-items: center; justify-content: center; padding: 16px;
            background: rgba(0,0,0,.45); font-family: var(--paper-font-body1_-_font-family, system-ui, sans-serif); }
-  .wa-dp .fenster { width: min(640px, 100%); max-height: 94vh; overflow: auto; box-sizing: border-box; display: flex; flex-direction: column;
+  .wa-dp .fenster { width: min(660px, 100%); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); box-sizing: border-box;
+                    display: flex; flex-direction: column; overflow: hidden;
                     background: var(--card-background-color, #fff); color: var(--primary-text-color, #222);
                     border-radius: 24px; box-shadow: 0 10px 40px rgba(0,0,0,.35); }
-  .wa-dp .inhalt { display: flex; min-height: 0; }
-  .wa-dp .vorschlaege { flex: 0 0 190px; display: flex; flex-direction: column; padding: 12px 0; border-right: 1px solid var(--divider-color, #ddd); }
-  .wa-dp .vorschlaege button { font: inherit; font-size: 15px; text-align: left; padding: 11px 20px; border: none; background: none; cursor: pointer;
-                               color: var(--primary-text-color, #222); }
-  .wa-dp .vorschlaege button:hover:not(:disabled) { background: var(--secondary-background-color, #f3f3f3); }
-  .wa-dp .vorschlaege button.an { color: var(--primary-color, #03a9f4); font-weight: 500; }
-  .wa-dp .vorschlaege button:disabled { opacity: .4; cursor: default; }
-  .wa-dp .kalender { flex: 1 1 auto; padding: 16px 18px; min-width: 0; }
-  .wa-dp .monat { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .wa-dp .inhalt { display: flex; flex: 1 1 auto; min-height: 0; }
+  .wa-dp .vorschlaege { flex: 0 0 200px; display: flex; flex-direction: column; padding: 8px 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+                        border-right: 1px solid var(--divider-color, #ddd); }
+  .wa-dp .gruppe { display: flex; flex-direction: column; }
+  .wa-dp .gruppe + .gruppe { border-top: 1px solid var(--divider-color, #ddd); margin-top: 6px; padding-top: 6px; }
+  .wa-dp .vorschlaege button { flex: 0 0 auto; font: inherit; font-size: 14px; line-height: 20px; text-align: left; padding: 8px 20px; margin: 0 8px;
+                               border: none; border-radius: 18px; background: none; cursor: pointer; color: var(--primary-text-color, #222); }
+  .wa-dp .vorschlaege button:hover { background: var(--secondary-background-color, #f3f3f3); }
+  .wa-dp .vorschlaege button.an { color: var(--primary-color, #03a9f4); font-weight: 600; background: rgba(var(--rgb-primary-color, 3,169,244), .14); }
+  .wa-dp .kalender { flex: 1 1 auto; padding: 14px 18px 10px; min-width: 0; overflow-y: auto; }
+  .wa-dp .monat { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .wa-dp .monat span { font-size: 16px; font-weight: 500; }
   .wa-dp .pfeil { width: 36px; height: 36px; border-radius: 50%; border: none; background: none; cursor: pointer; font-size: 20px;
                   color: var(--primary-text-color, #222); }
   .wa-dp .pfeil:hover:not(:disabled) { background: var(--secondary-background-color, #f3f3f3); }
   .wa-dp .pfeil:disabled { opacity: .3; cursor: default; }
   .wa-dp .raster { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px 0; text-align: center; }
-  .wa-dp .wt { font-size: 12px; font-weight: 500; color: var(--secondary-text-color, #666); padding: 6px 0; }
-  .wa-dp .tag { font: inherit; font-size: 14px; height: 38px; border: none; background: none; cursor: pointer; color: var(--primary-text-color, #222);
+  .wa-dp .wt { font-size: 12px; font-weight: 500; color: var(--secondary-text-color, #666); padding: 4px 0; }
+  .wa-dp .tag { font: inherit; font-size: 14px; height: 38px; padding: 0; border: none; background: none; cursor: pointer; color: var(--primary-text-color, #222);
                 position: relative; font-variant-numeric: tabular-nums; }
   .wa-dp .tag span { display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; border-radius: 50%; }
   .wa-dp .tag:hover:not(:disabled) span { background: var(--secondary-background-color, #eee); }
@@ -36,20 +39,55 @@ const CSS = `
   .wa-dp .tag.von.bis { border-radius: 19px; background: none; }
   .wa-dp .tag.von span, .wa-dp .tag.bis span { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
   .wa-dp .tag.heute span { box-shadow: inset 0 0 0 1px var(--primary-color, #03a9f4); }
-  .wa-dp .auswahltext { font-size: 13px; color: var(--secondary-text-color, #666); margin-top: 10px; min-height: 1.3em; }
-  .wa-dp .warnung { margin: 0 18px; padding: 8px 12px; border-radius: 8px; font-size: 13px; line-height: 1.4;
+  .wa-dp .warnung { flex: 0 0 auto; margin: 0 18px 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; line-height: 1.4;
                     background: rgba(255,166,0,.16); border-left: 4px solid var(--warning-color, #ffa600); }
   .wa-dp .warnung[hidden] { display: none; }
-  .wa-dp .knoepfe { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--divider-color, #ddd); margin-top: 10px; }
-  .wa-dp .knoepfe button { font: inherit; font-size: 14px; font-weight: 500; padding: 9px 18px; border-radius: 20px; cursor: pointer; border: none;
+  .wa-dp .knoepfe { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--divider-color, #ddd); }
+  .wa-dp .knoepfe .zeitraum { flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wa-dp .knoepfe .zeitraum .leise { font-weight: 400; color: var(--secondary-text-color, #666); }
+  .wa-dp .knoepfe button { flex: 0 0 auto; font: inherit; font-size: 14px; font-weight: 500; height: 38px; padding: 0 18px; border-radius: 19px; cursor: pointer; border: none;
                            background: none; color: var(--primary-color, #03a9f4); }
   .wa-dp .knoepfe button.los { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
   .wa-dp .knoepfe button:disabled { opacity: .5; cursor: default; }
+  /* Phone upright: suggestions as a bar over the calendar, scrolled sideways */
   @media (max-width: 560px) {
+    .wa-dp { padding: 8px; }
+    .wa-dp .fenster { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); border-radius: 20px; }
     .wa-dp .inhalt { flex-direction: column; }
-    .wa-dp .vorschlaege { flex: none; flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 12px; border-right: none;
-                          border-bottom: 1px solid var(--divider-color, #ddd); }
-    .wa-dp .vorschlaege button { padding: 6px 12px; font-size: 13px; border: 1px solid var(--divider-color, #ddd); border-radius: 16px; }
+    .wa-dp .vorschlaege { flex: 0 0 auto; flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 10px 8px; gap: 0;
+                          border-right: none; border-bottom: 1px solid var(--divider-color, #ddd); scrollbar-width: none; }
+    .wa-dp .vorschlaege::-webkit-scrollbar { display: none; }
+    .wa-dp .gruppe { flex-direction: row; gap: 6px; }
+    .wa-dp .gruppe + .gruppe { border-top: none; margin: 0 0 0 6px; padding: 0 0 0 6px; border-left: 1px solid var(--divider-color, #ddd); }
+    .wa-dp .vorschlaege button { margin: 0; padding: 0 12px; height: 32px; font-size: 13px; white-space: nowrap; border: 1px solid var(--divider-color, #ddd); border-radius: 16px; }
+    .wa-dp .vorschlaege button.an { border-color: var(--primary-color, #03a9f4); }
+    .wa-dp .kalender { padding: 10px 12px 6px; }
+    .wa-dp .knoepfe { padding: 8px 10px; gap: 4px; }
+    .wa-dp .knoepfe .zeitraum { font-size: 14px; }
+    .wa-dp .knoepfe button { padding: 0 12px; }
+  }
+  /* Low (phone in landscape): buttons stay at the bottom, suggestions scroll, compact calendar */
+  @media (max-height: 520px) {
+    .wa-dp { padding: 6px; }
+    .wa-dp .fenster { width: min(720px, 100%); max-height: calc(100vh - 12px); max-height: calc(100dvh - 12px); border-radius: 16px; }
+    .wa-dp .inhalt { flex-direction: row; }
+    .wa-dp .vorschlaege { flex: 0 0 190px; flex-direction: column; overflow-x: hidden; overflow-y: auto; padding: 6px 0;
+                          border-bottom: none; border-right: 1px solid var(--divider-color, #ddd); }
+    .wa-dp .gruppe { flex-direction: column; gap: 0; }
+    .wa-dp .gruppe + .gruppe { border-left: none; border-top: 1px solid var(--divider-color, #ddd); margin: 4px 0 0; padding: 4px 0 0; }
+    .wa-dp .vorschlaege button { height: auto; margin: 0 6px; padding: 5px 12px; border: none; font-size: 13px; white-space: normal; }
+    .wa-dp .kalender { padding: 6px 12px 4px; }
+    .wa-dp .monat { margin-bottom: 2px; }
+    .wa-dp .monat span { font-size: 14px; }
+    .wa-dp .pfeil { width: 30px; height: 30px; }
+    .wa-dp .wt { padding: 1px 0; font-size: 11px; }
+    .wa-dp .tag { height: 28px; font-size: 13px; }
+    .wa-dp .tag span { width: 26px; height: 26px; }
+    .wa-dp .tag.von { border-radius: 14px 0 0 14px; }
+    .wa-dp .tag.bis { border-radius: 0 14px 14px 0; }
+    .wa-dp .knoepfe { padding: 6px 12px; }
+    .wa-dp .knoepfe button { height: 34px; }
+    .wa-dp .warnung { margin: 0 12px 4px; padding: 4px 10px; font-size: 12px; }
   }
 `;
 
@@ -63,23 +101,35 @@ const lastOfMonth = (y, m) => new Date(y, m + 1, 0);
 // Long periods are loaded month by month and warned about.
 export const LARGE_DAYS = 92;
 
-// Suggestions: [id, (today) => [from, to, unit]]
-const PRESETS = [
-  ['today', (t) => [t, t, 'day']],
-  ['yesterday', (t) => [addDays(t, -1), addDays(t, -1), 'day']],
-  ['this_week', (t) => { const d = parseDate(t); const back = (d.getDay() + 6) % 7; return [addDays(t, -back), t, 'week']; }],
-  ['this_month', (t) => [`${t.slice(0, 8)}01`, t, 'month']],
-  ['last_month', (t) => {
-    const d = parseDate(t);
-    const first = new Date(d.getFullYear(), d.getMonth() - 1, 1);
-    return [dateStr(first), dateStr(lastOfMonth(first.getFullYear(), first.getMonth())), 'month'];
-  }],
-  ['this_year', (t) => [`${t.slice(0, 4)}-01-01`, t, 'year']],
-  ['last_year', (t) => { const y = Number(t.slice(0, 4)) - 1; return [`${y}-01-01`, `${y}-12-31`, 'year']; }],
-  ['last_7_days', (t) => [addDays(t, -6), t, 'days']],
-  ['last_4_weeks', (t) => [addDays(t, -27), t, 'days']],
-  ['since_start', (t, first) => [first || t, t, 'days']],
+// Suggestions: [id, (today, first) => [from, to, unit]], in groups (thin lines between them).
+const PRESET_GROUPS = [
+  [
+    ['today', (t) => [t, t, 'day']],
+    ['yesterday', (t) => [addDays(t, -1), addDays(t, -1), 'day']],
+  ],
+  [
+    ['last_3_days', (t) => [addDays(t, -2), t, 'days']],
+    ['last_7_days', (t) => [addDays(t, -6), t, 'days']],
+    ['last_4_weeks', (t) => [addDays(t, -27), t, 'days']],
+  ],
+  [
+    ['this_week', (t) => { const d = parseDate(t); const back = (d.getDay() + 6) % 7; return [addDays(t, -back), t, 'week']; }],
+    ['this_month', (t) => [`${t.slice(0, 8)}01`, t, 'month']],
+    ['last_month', (t) => {
+      const d = parseDate(t);
+      const first = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+      return [dateStr(first), dateStr(lastOfMonth(first.getFullYear(), first.getMonth())), 'month'];
+    }],
+  ],
+  [
+    ['this_year', (t) => [`${t.slice(0, 4)}-01-01`, t, 'year']],
+    ['last_year', (t) => { const y = Number(t.slice(0, 4)) - 1; return [`${y}-01-01`, `${y}-12-31`, 'year']; }],
+  ],
+  [
+    ['since_start', (t, first) => [first || t, t, 'days']],
+  ],
 ];
+export const PRESETS = PRESET_GROUPS.flat();
 
 // "18. Nov." / "12.–18. Nov." / "28. Okt. – 3. Nov." (year only when not this year)
 export function rangeText(lang, from, to, short = false) {
@@ -123,15 +173,28 @@ export function openDatePicker({ t, lang, from, to, today, days, first }) {
   if (!document.getElementById('wa-dp-css')) {
     const style = document.createElement('style');
     style.id = 'wa-dp-css';
-    style.textContent = CSS;
     document.head.appendChild(style);
   }
+  document.getElementById('wa-dp-css').textContent = CSS;
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const state = { from, to, unit: 'days', picking: false, preset: '' };
-  const shown = parseDate(to);
-  let month = new Date(shown.getFullYear(), shown.getMonth(), 1);
   const has = (d) => !(days instanceof Set) || days.has(d);
   const allowed = (d) => d <= today && (!first || d >= first) && has(d);
+  // A suggestion's period, cut to what can be shown (not before the first day, not after today)
+  const presetRange = (fn) => {
+    const [a, b, unit] = fn(today, first);
+    return [first && a < first ? first : a, b > today ? today : b, unit];
+  };
+  // Shown only if there are data in the period
+  const withData = (a, b) => {
+    if (b < a) return false;
+    if (!(days instanceof Set)) return true;
+    for (const d of days) if (d >= a && d <= b && d <= today) return true;
+    return false;
+  };
+  const matching = PRESETS.find(([, fn]) => { const [a, b] = presetRange(fn); return a === from && b === to; });
+  const state = { from, to, unit: 'days', picking: false, preset: matching ? matching[0] : '' };
+  const shown = parseDate(to);
+  let month = new Date(shown.getFullYear(), shown.getMonth(), 1);
 
   return new Promise((resolve) => {
     const box = document.createElement('div');
@@ -142,6 +205,8 @@ export function openDatePicker({ t, lang, from, to, today, days, first }) {
     const weekdays = [...Array(7)].map((_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(lang, { weekday: 'narrow' }));
 
     const render = () => {
+      const scroller = box.querySelector('.vorschlaege');
+      const scroll = scroller ? [scroller.scrollLeft, scroller.scrollTop] : null;
       const y = month.getFullYear();
       const m = month.getMonth();
       const lead = (new Date(y, m, 1).getDay() + 6) % 7;
@@ -157,16 +222,19 @@ export function openDatePicker({ t, lang, from, to, today, days, first }) {
         if (value === today) cls.push('heute');
         cells.push(`<button class="${cls.join(' ')}" data-tag="${value}"${allowed(value) ? '' : ' disabled'}><span>${d}</span></button>`);
       }
+      // always six rows: the window does not change its height between months
+      for (let i = lead + count; i < 42; i += 1) cells.push('<button class="tag leer" disabled tabindex="-1"></button>');
       const prevMonth = dateStr(new Date(y, m, 0));
       const nextMonth = dateStr(new Date(y, m + 1, 1));
-      const large = daysBetween(state.from, state.to) > LARGE_DAYS;
+      const n = daysBetween(state.from, state.to);
+      const large = n > LARGE_DAYS;
+      const groups = PRESET_GROUPS.map((group) => group.filter(([, fn]) => { const [a, b] = presetRange(fn); return withData(a, b); }))
+        .filter((group) => group.length);
+      const period = state.picking ? esc(t('pick_end'))
+        : `${esc(rangeText(lang, state.from, state.to))}${n > 1 ? ` <span class="leise">· ${esc(t('n_days', { n }))}</span>` : ''}`;
       box.innerHTML = `<div class="fenster" role="dialog" aria-modal="true" aria-label="${esc(t('pick_period'))}">
         <div class="inhalt">
-          <div class="vorschlaege">${PRESETS.map(([id, fn]) => {
-            const [a, b] = fn(today, first);
-            const usable = b >= (first || a) && a <= today;
-            return `<button type="button" data-preset="${id}" class="${state.preset === id ? 'an' : ''}"${usable ? '' : ' disabled'}>${esc(t(`preset_${id}`))}</button>`;
-          }).join('')}</div>
+          <div class="vorschlaege">${groups.map((group) => `<div class="gruppe">${group.map(([id]) => `<button type="button" data-preset="${id}" class="${state.preset === id ? 'an' : ''}"${state.preset === id ? ' aria-current="true"' : ''}>${esc(t(`preset_${id}`))}</button>`).join('')}</div>`).join('')}</div>
           <div class="kalender">
             <div class="monat">
               <button class="pfeil zurueck" type="button" aria-label="${esc(t('prev_month'))}"${first && prevMonth < first ? ' disabled' : ''}>‹</button>
@@ -174,13 +242,15 @@ export function openDatePicker({ t, lang, from, to, today, days, first }) {
               <button class="pfeil vor" type="button" aria-label="${esc(t('next_month'))}"${nextMonth > today ? ' disabled' : ''}>›</button>
             </div>
             <div class="raster">${weekdays.map((w) => `<div class="wt">${esc(w)}</div>`).join('')}${cells.join('')}</div>
-            <div class="auswahltext">${esc(state.picking ? t('pick_end') : rangeText(lang, state.from, state.to))}</div>
           </div>
         </div>
         <div class="warnung"${large ? '' : ' hidden'}>${esc(t('large_period_warning'))}</div>
-        <div class="knoepfe"><button type="button" class="abbrechen">${esc(t('cancel'))}</button>
+        <div class="knoepfe"><span class="zeitraum" aria-live="polite">${period}</span>
+          <button type="button" class="abbrechen">${esc(t('cancel'))}</button>
           <button type="button" class="los"${state.picking ? ' disabled' : ''}>${esc(t('choose'))}</button></div>
       </div>`;
+      const list = box.querySelector('.vorschlaege');
+      if (scroll) { list.scrollLeft = scroll[0]; list.scrollTop = scroll[1]; }
       box.querySelector('.zurueck').addEventListener('click', () => { month = new Date(y, m - 1, 1); render(); });
       box.querySelector('.vor').addEventListener('click', () => { month = new Date(y, m + 1, 1); render(); });
       box.querySelectorAll('[data-tag]').forEach((b) => b.addEventListener('click', () => {
@@ -198,9 +268,9 @@ export function openDatePicker({ t, lang, from, to, today, days, first }) {
         render();
       }));
       box.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', () => {
-        const [a, c, unit] = PRESETS.find(([id]) => id === b.dataset.preset)[1](today, first);
-        state.from = first && a < first ? first : a;
-        state.to = c > today ? today : c;
+        const [a, c, unit] = presetRange(PRESETS.find(([id]) => id === b.dataset.preset)[1]);
+        state.from = a;
+        state.to = c;
         state.unit = unit;
         state.preset = b.dataset.preset;
         state.picking = false;
@@ -210,6 +280,11 @@ export function openDatePicker({ t, lang, from, to, today, days, first }) {
       }));
       box.querySelector('.abbrechen').addEventListener('click', () => close(null));
       box.querySelector('.los').addEventListener('click', () => close({ from: state.from, to: state.to, unit: state.unit }));
+      // the chosen suggestion stays in view in the sideways bar
+      const chosen = list.querySelector('.an');
+      if (chosen && !scroll && getComputedStyle(list).flexDirection === 'row' && list.scrollWidth > list.clientWidth) {
+        list.scrollLeft = Math.max(0, chosen.offsetLeft - 12);
+      }
     };
 
     box.addEventListener('click', (e) => { if (e.target === box) close(null); });

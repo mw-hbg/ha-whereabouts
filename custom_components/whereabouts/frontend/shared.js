@@ -220,15 +220,24 @@ export const MAP_CSS = `
     /* Narrow: controls bottom left stay above the licence line */
     .leaflet-bottom.leaflet-left { bottom: 16px; }
   }
-  .leaflet-bar a.wa-uebersicht { display: flex; align-items: center; justify-content: center; }
-  .leaflet-bar a.wa-uebersicht svg { width: 20px; height: 20px; fill: currentColor; }
+  .leaflet-bar a.wa-uebersicht, .leaflet-bar a.wa-zahnrad { display: flex; align-items: center; justify-content: center; }
+  .leaflet-bar a.wa-uebersicht svg, .leaflet-bar a.wa-zahnrad svg { width: 18px; height: 18px; fill: currentColor; }
+  /* Dark map: controls, licence line and popups dark too */
+  .wa-dark .leaflet-bar { border-color: rgba(255,255,255,.18); }
+  .wa-dark .leaflet-bar a, .wa-dark .leaflet-bar a:hover { background: #2b2d30; color: #e8e8e8; border-bottom-color: #44474b; }
+  .wa-dark .leaflet-bar a:hover { background: #383b3f; }
+  .wa-dark .leaflet-bar a.leaflet-disabled { background: #232527; color: #6b6e72; }
+  .wa-dark .leaflet-control-attribution { background: rgba(32,33,36,.75); color: #bbb; }
+  .wa-dark .leaflet-control-attribution a { color: #8ab4f8; }
+  .wa-dark .leaflet-popup-content-wrapper, .wa-dark .leaflet-popup-tip { background: #2b2d30; color: #e8e8e8; }
 `;
 
-// Button bottom left: back to the overview of everything shown (not "my location").
+// Button bottom right above the zoom buttons: back to the overview of everything
+// shown (not "my location"). Added after the zoom control, so Leaflet puts it on top.
 const FIT_ICON = 'M17 4h3a2 2 0 0 1 2 2v2h-2V6h-3V4M4 8V6h3V4H4a2 2 0 0 0-2 2v2h2m16 8v2h-3v2h3a2 2 0 0 0 2-2v-2h-2M7 18H4v-2H2v2a2 2 0 0 0 2 2h3v-2M18 8H6v8h12V8m-2 6H8v-4h8v4Z';
 export function overviewControl(map, title, onClick) {
   const L = window.L;
-  const control = L.control({ position: 'bottomleft' });
+  const control = L.control({ position: 'bottomright' });
   control.onAdd = () => {
     const bar = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
     const a = L.DomUtil.create('a', 'wa-uebersicht', bar);
@@ -242,6 +251,41 @@ export function overviewControl(map, title, onClick) {
     return bar;
   };
   return control.addTo(map);
+}
+
+// Administrators: a way to the settings when the dashboard or its settings view is
+// hidden (above the overview button). Kept in step with the info by updateGear().
+const GEAR_ICON = 'M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97 0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1 0 .33.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66Z';
+export function gearNeeded(info) {
+  if (!info || !info.is_admin) return false;
+  const settings = info.settings || {};
+  return info.panel_shown === false || settings.view_settings === false;
+}
+export function updateGear(map, holder, info, title) {
+  const L = window.L;
+  const want = !!(map && gearNeeded(info));
+  if (!want) {
+    if (holder.gear) { holder.gear.remove(); holder.gear = null; }
+    return;
+  }
+  if (holder.gear) return;
+  const control = L.control({ position: 'bottomright' });
+  control.onAdd = () => {
+    const bar = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+    const a = L.DomUtil.create('a', 'wa-zahnrad', bar);
+    a.href = `${(info && info.panel_url) || '/whereabouts'}/settings`;
+    a.title = title;
+    a.setAttribute('aria-label', title);
+    a.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${GEAR_ICON}"/></svg>`;
+    L.DomEvent.disableClickPropagation(bar);
+    L.DomEvent.on(a, 'click', (ev) => {
+      L.DomEvent.preventDefault(ev);
+      history.pushState(null, '', a.getAttribute('href'));
+      window.dispatchEvent(new CustomEvent('location-changed'));
+    });
+    return bar;
+  };
+  holder.gear = control.addTo(map);
 }
 
 // Narrow screens: licence line without "Leaflet", so it fits next to the legend.
@@ -560,25 +604,31 @@ function touchDevice() {
   return window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
 }
 
-// Map apps offered in the chooser, the configured one first.
-function chooserApps(preferred) {
-  const os = platform();
-  let apps = os === 'ios' ? ['apple', 'google', 'waze', 'osm', 'here']
-    : os === 'android' ? ['google', 'waze', 'osm', 'here', 'geo'] : [...MAP_APPS];
+// Map apps offered in the chooser: the chosen ones (default Apple + Google),
+// never Apple Maps on Android; the preferred one first.
+export function chooserApps(preferred, chosen, os = platform()) {
+  let apps = (Array.isArray(chosen) && chosen.length ? chosen : ['apple', 'google']).filter((a) => MAP_APPS.includes(a));
+  if (os === 'android') apps = apps.filter((a) => a !== 'apple');
+  const order = os === 'ios' ? ['apple', 'google', 'waze', 'osm', 'here'] : ['google', 'apple', 'waze', 'osm', 'here'];
+  apps.sort((x, y) => order.indexOf(x) - order.indexOf(y));
   if (apps.includes(preferred)) apps = [preferred, ...apps.filter((a) => a !== preferred)];
   return apps;
 }
 
-// Fills an <a> for coordinates: link to the configured map; on phones and
-// tablets a tap asks which app should open them (if switched on).
+// Fills an <a> for coordinates: link to the preferred map. On phones and
+// tablets a tap asks which app opens them (if switched on); with only one app
+// left, that one opens directly.
 export function bindMapLink(a, config, t, lat, lon) {
   const kind = config.map_link || 'google';
   const href = mapLink(kind, lat, lon);
   if (href) { a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; } else a.removeAttribute('href');
   a.onclick = (e) => {
     if (!href || config.map_link_choice === false || !touchDevice()) return;
+    const apps = chooserApps(kind, config.map_link_apps);
+    if (!apps.length) return;
     e.preventDefault();
-    showMapChooser(t, lat, lon, kind);
+    if (apps.length === 1) { window.open(mapLink(apps[0], lat, lon), '_blank', 'noopener'); return; }
+    showMapChooser(t, lat, lon, kind, apps);
   };
 }
 
@@ -599,7 +649,7 @@ const CHOOSER_CSS = `
                                  color: var(--primary-color, #03a9f4); font-weight: 600; }
 `;
 
-export function showMapChooser(t, lat, lon, preferred) {
+export function showMapChooser(t, lat, lon, preferred, apps = null) {
   if (!document.getElementById('wa-chooser-css')) {
     const style = document.createElement('style');
     style.id = 'wa-chooser-css';
@@ -610,7 +660,7 @@ export function showMapChooser(t, lat, lon, preferred) {
   box.className = 'wa-chooser';
   box.innerHTML = `<div class="blatt" role="dialog" aria-label="${escapeHtml(t('open_with'))}">
       <div class="titel">${escapeHtml(t('open_with'))}</div>
-      ${chooserApps(preferred).map((app) => `<a href="${escapeHtml(mapLink(app, lat, lon))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t(`ed_link_${app}`))}</a>`).join('')}
+      ${(apps || chooserApps(preferred)).map((app) => `<a href="${escapeHtml(mapLink(app, lat, lon))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t(`ed_link_${app}`))}</a>`).join('')}
       <button class="abbrechen" type="button">${escapeHtml(t('cancel'))}</button>
     </div>`;
   const close = () => { box.classList.remove('offen'); setTimeout(() => box.remove(), 250); };
@@ -689,6 +739,58 @@ export function cardConfig(defaults, settings, raw, kind) {
   const config = { ...DEFAULTS_MAP, ...defaults, ...own, ...(raw || {}), person_settings: persons };
   config.persons = raw && raw.persons && raw.persons.length ? raw.persons : (own.persons || []);
   return config;
+}
+
+// WCAG contrast ratio of two colours (1 … 21).
+export function contrastRatio(a, b) {
+  const lum = (hex) => {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex || '');
+    if (!m) return null;
+    const [r, g, bl] = [m[1], m[2], m[3]].map((h) => { const c = parseInt(h, 16) / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const la = lum(a);
+  const lb = lum(b);
+  if (la === null || lb === null) return 21;
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+// Lighter (amount > 0) or darker (amount < 0) version of a colour.
+export function shade(color, amount) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(color || '');
+  if (!m) return color;
+  const mix = (h) => {
+    const v = parseInt(h, 16);
+    const out = amount < 0 ? v * (1 + amount) : v + (255 - v) * amount;
+    return Math.round(Math.max(0, Math.min(255, out))).toString(16).padStart(2, '0');
+  };
+  return `#${mix(m[1])}${mix(m[2])}${mix(m[3])}`;
+}
+// A colour used as text: as it is, or lighter/darker until it reads (3:1) on the background.
+// The setting itself stays unchanged.
+export function readableColor(color, background) {
+  if (contrastRatio(color, background) >= 3) return color;
+  const lighter = contrastRatio(background, '#000000') < contrastRatio(background, '#FFFFFF');
+  for (let step = 0.1; step <= 1; step += 0.1) {
+    const c = shade(color, lighter ? step : -step);
+    if (contrastRatio(c, background) >= 3) return c;
+  }
+  return lighter ? '#FFFFFF' : '#000000';
+}
+// Background of cards: dark or light theme.
+export function cardBackground(hass) {
+  return hass && hass.themes && hass.themes.darkMode ? '#1C1C1C' : '#FFFFFF';
+}
+
+// Below this contrast a pin, route or zone is hard to see on the map. Deliberately lower than
+// WCAG's 3:1 for graphics: the pins have a white rim and shadow, and at 3:1 even the built-in
+// colours (e.g. Home Assistant's zone orange) would be flagged.
+export const MIN_MAP_CONTRAST = 2;
+
+// Typical background of the map services (light / dark), for the contrast check.
+export const MAP_BACKGROUNDS = { light: '#EDEAE4', dark: '#262626' };
+// Text on a coloured background: black or white, whichever reads better.
+export function textOn(color) {
+  return contrastRatio(color, '#000000') >= contrastRatio(color, '#FFFFFF') ? '#000000' : '#FFFFFF';
 }
 
 // Perceived colour difference (CIE76 in Lab). Below ~25 two pins are hard to tell apart.

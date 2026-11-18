@@ -49,6 +49,7 @@ _PERSON_SETTING = vol.Schema(
     }
 )
 
+MAP_APPS = ["google", "apple", "osm", "waze", "here"]
 CARTO_STYLES = ["voyager", "voyager_nolabels", "positron", "positron_nolabels", "dark_matter", "dark_matter_nolabels"]
 
 # Personal categories: key -> (default, validator). The order is the order on the page.
@@ -68,6 +69,8 @@ CATEGORIES: dict[str, dict[str, tuple[Any, Any]]] = {
         "tiles": ("esri", vol.In(["esri", "osm", "carto"])),
         "map_link": ("google", vol.In(["google", "apple", "osm", "waze", "here", "none"])),
         "map_link_choice": (True, bool),
+        # which map apps are offered when choosing is on
+        "map_link_apps": (["apple", "google"], vol.All([vol.In(MAP_APPS)], vol.Length(max=len(MAP_APPS)))),
         # CARTO styles per map and light/dark
         "carto_live_light": ("voyager", vol.In(CARTO_STYLES)),
         "carto_live_dark": ("dark_matter", vol.In(CARTO_STYLES)),
@@ -92,7 +95,11 @@ CATEGORIES: dict[str, dict[str, tuple[Any, Any]]] = {
         "live_refresh_interval": (30, vol.All(vol.Coerce(int), vol.Range(min=5, max=3600))),
     },
     "history": {
-        "default_view": ("map", vol.In(["map", "table"])),
+        # start view: route ("map"), heat map or table
+        "default_view": ("map", vol.In(["map", "heat", "table"])),
+        "start_period": ("today", vol.In(["today", "3d", "7d", "4w"])),
+        # points of the route are hidden from this many entries on (0 = always shown)
+        "simplify_points": (400, vol.All(vol.Coerce(int), vol.Range(min=0, max=100000))),
         "show_legend": (True, bool),
         "show_export": (True, bool),
         "history_auto_refresh": (True, bool),
@@ -148,6 +155,11 @@ class Settings:
         data.setdefault("sync", {"enabled": False, "user_id": ""})
         data.setdefault("user_flags", {})
         data.setdefault("field_locks", {})
+        # 0.5: users seen by an administrator (None = not yet initialised: all
+        # existing users count as known) and new users waiting for a decision
+        # (user_id -> administrator whose settings they get meanwhile)
+        data.setdefault("known_users", None)
+        data.setdefault("pending_users", {})
         # 0.3: one switch "synchronise with all users"
         data.setdefault("all_flags", {"sync": bool(data["sync"].get("enabled")), "hide_settings": False})
         data["sync"].pop("enabled", None)
@@ -167,6 +179,32 @@ class Settings:
             if isinstance(zones, dict) and "show_zones" in zones:
                 zones["zones_in"] = "both" if zones.pop("show_zones") else "none"
         self.data = data
+        self._prune()
+
+    def _prune(self) -> None:
+        """0.5: values equal to what applies anyway are no own values."""
+        for cat in CATEGORIES:
+            built_in = category_defaults(cat)
+            values = self.data["defaults"].get(cat)
+            if isinstance(values, dict):
+                for key in [k for k, v in values.items() if k not in built_in or v == built_in[k]]:
+                    values.pop(key)
+                if not values:
+                    self.data["defaults"].pop(cat)
+        defaults = self.defaults()
+        for uid in list(self.data["users"]):
+            own = self.data["users"][uid]
+            for cat in list(own):
+                values = own[cat]
+                if cat not in CATEGORIES or not isinstance(values, dict):
+                    own.pop(cat)
+                    continue
+                for key in [k for k, v in values.items() if k not in defaults[cat] or v == defaults[cat][k]]:
+                    values.pop(key)
+                if not values:
+                    own.pop(cat)
+            if not own:
+                self.data["users"].pop(uid)
 
     async def async_save(self) -> None:
         await self._store.async_save(self.data)
@@ -219,9 +257,18 @@ class Settings:
             return bool(own[name])
         return bool(self.data["all_flags"].get(name))
 
+    def sync_source(self, user: User | None) -> str | None:
+        """Whose settings apply to this (non-admin) user right now, if an administrator's."""
+        if user is None or user.is_admin:
+            return None
+        if self.data["sync"].get("user_id") and self.flag(user.id, "sync"):
+            return self.data["sync"]["user_id"]
+        # new user, no decision yet: like the administrator who saw them
+        return self.data["pending_users"].get(user.id) or None
+
     def synced(self, user: User | None) -> bool:
         """An administrator's settings apply to this (non-admin) user right now."""
-        return bool(user and not user.is_admin and self.data["sync"].get("user_id") and self.flag(user.id, "sync"))
+        return self.sync_source(user) is not None
 
     def settings_hidden(self, user: User | None) -> bool:
         """The settings tab is hidden for this (non-admin) user."""
@@ -235,8 +282,8 @@ class Settings:
         result = self.defaults()
         if user is None:
             return result
-        if self.synced(user):
-            own = self.data["users"].get(self.data["sync"]["user_id"], {})
+        if (source := self.sync_source(user)) is not None:
+            own = self.data["users"].get(source, {})
             for cat in CATEGORIES:
                 result[cat].update(copy.deepcopy(own.get(cat, {})))
             return result
@@ -252,6 +299,7 @@ class Settings:
         mine = self.effective(user)
         for cat in [category] if category else list(CATEGORIES):
             self.data["defaults"][cat] = copy.deepcopy(mine[cat])
+        self._prune()
         await self.async_save()
 
     async def async_set_flags(self, admin: User, user_id: str, values: dict[str, bool], admins: set[str]) -> None:
@@ -302,10 +350,22 @@ class Settings:
         """scope "defaults" or "own" (``user_id`` = whose values; administrators may edit any user)."""
         values = validate_values(category, values)
         if scope == "defaults":
-            target = self.data["defaults"].setdefault(category, {})
+            container = self.data["defaults"]
+            base = category_defaults(category)
         else:
-            target = self.data["users"].setdefault(user_id, {}).setdefault(category, {})
-        target.update(values)
+            container = self.data["users"].setdefault(user_id, {})
+            base = self.defaults()[category]
+        target = container.setdefault(category, {})
+        for key, value in values.items():
+            # a value equal to what applies anyway is no own value
+            if value == base.get(key):
+                target.pop(key, None)
+            else:
+                target[key] = value
+        if not target:
+            container.pop(category, None)
+        if scope != "defaults" and not container:
+            self.data["users"].pop(user_id, None)
         await self.async_save()
 
     async def async_reset(self, scope: str, user_id: str, category: str | None) -> None:
@@ -314,6 +374,104 @@ class Settings:
             container.clear()
         else:
             container.pop(category, None)
+        await self.async_save()
+
+    def _factory_own(self, category: str) -> dict[str, Any]:
+        """Own values that make a user see the built-in values despite other defaults."""
+        built_in = category_defaults(category)
+        defaults = self.defaults()[category]
+        return {key: value for key, value in built_in.items() if defaults.get(key) != value}
+
+    def snapshot(self, category: str) -> dict[str, Any]:
+        """Everything a reset of this category may change (for "restore")."""
+        return {
+            "defaults": copy.deepcopy(self.data["defaults"].get(category)),
+            "users": {uid: copy.deepcopy(own.get(category)) for uid, own in self.data["users"].items()},
+        }
+
+    async def async_restore(self, category: str, snap: dict[str, Any]) -> None:
+        if snap["defaults"] is None:
+            self.data["defaults"].pop(category, None)
+        else:
+            self.data["defaults"][category] = copy.deepcopy(snap["defaults"])
+        for uid in set(self.data["users"]) | set(snap["users"]):
+            value = snap["users"].get(uid)
+            own = self.data["users"].setdefault(uid, {})
+            if value is None:
+                own.pop(category, None)
+            else:
+                own[category] = copy.deepcopy(value)
+            if not own:
+                self.data["users"].pop(uid, None)
+        await self.async_save()
+
+    async def async_factory_reset(self, user_id: str, category: str, everyone: bool) -> None:
+        """Back to the built-in values: for one user, or (administrators) for everybody."""
+        if everyone:
+            self.data["defaults"].pop(category, None)
+            for uid in list(self.data["users"]):
+                self.data["users"][uid].pop(category, None)
+                if not self.data["users"][uid]:
+                    self.data["users"].pop(uid, None)
+        else:
+            own = self.data["users"].setdefault(user_id, {})
+            values = self._factory_own(category)
+            if values:
+                own[category] = values
+            else:
+                own.pop(category, None)
+            if not own:
+                self.data["users"].pop(user_id, None)
+        await self.async_save()
+
+    # --- new users ------------------------------------------------------------
+    async def async_note_users(self, admin: User, user_ids: list[str]) -> list[str]:
+        """Remember the users an administrator saw; new ones wait for a decision.
+
+        Returns the users waiting for a decision."""
+        known = self.data["known_users"]
+        if known is None:
+            # first start of 0.5: everybody already there is known
+            self.data["known_users"] = sorted(set(user_ids))
+            await self.async_save()
+            return list(self.data["pending_users"])
+        new = [uid for uid in user_ids if uid not in known]
+        if new:
+            for uid in new:
+                self.data["pending_users"].setdefault(uid, admin.id)
+            self.data["known_users"] = sorted(set(known) | set(new))
+            await self.async_save()
+        return [uid for uid in self.data["pending_users"] if uid in user_ids]
+
+    async def async_decide_users(self, admin: User, user_ids: list[str], action: str) -> None:
+        """copy: the administrator's current values once; sync: follow them;
+        factory: built-in values; later: keep waiting (meanwhile like the administrator)."""
+        if action == "later":
+            return
+        mine = self.effective(admin)
+        defaults = self.defaults()
+        for uid in user_ids:
+            self.data["pending_users"].pop(uid, None)
+            if action == "copy":
+                own = {
+                    cat: {k: copy.deepcopy(v) for k, v in mine[cat].items() if v != defaults[cat].get(k)}
+                    for cat in CATEGORIES
+                }
+                own = {cat: vals for cat, vals in own.items() if vals}
+                if own:
+                    self.data["users"][uid] = own
+                else:
+                    self.data["users"].pop(uid, None)
+            elif action == "sync":
+                self.data["sync"]["user_id"] = admin.id
+                self.data["user_flags"].setdefault(uid, {})["sync"] = True
+            elif action == "factory":
+                own = {cat: self._factory_own(cat) for cat in CATEGORIES}
+                own = {cat: vals for cat, vals in own.items() if vals}
+                if own:
+                    self.data["users"][uid] = own
+                else:
+                    self.data["users"].pop(uid, None)
         await self.async_save()
 
     # --- locks ----------------------------------------------------------------
@@ -374,6 +532,7 @@ class Settings:
             "all_flags": dict(self.data["all_flags"]),
             "user_flags": copy.deepcopy(self.data["user_flags"]),
             "field_locks": copy.deepcopy(self.data["field_locks"]),
+            "pending_users": dict(self.data["pending_users"]),
             # which categories/keys each user set themselves ("Gilt gerade")
             "own_keys": {
                 uid: {cat: sorted(vals) for cat, vals in own.items()} for uid, own in self.data["users"].items()

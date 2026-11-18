@@ -111,7 +111,7 @@ export function defineLiveCard(S) {
         this._gone = setTimeout(() => this._onInfo({ ...info, confirmed: true }), 8000);
         return;
       }
-      const sig = JSON.stringify([info.available, info.live_card, info.shown, info.settings]);
+      const sig = JSON.stringify([info.available, info.live_card, info.shown, info.settings, info.panel_shown, info.is_admin]);
       if (sig === this._infoSig) return;
       this._infoSig = sig;
       this._info = info;
@@ -211,7 +211,11 @@ export function defineLiveCard(S) {
       const c = this._config;
       this.style.display = 'block';
       S.applyHeight(this, c);
-      const personCss = this._persons.map((p) => `.wa-live .p-${p.key} { --farbe: ${p.color}; }`).join('\n');
+      // Colour as text: adjusted where it would not read on its background (the setting stays).
+      const cardBg = S.cardBackground(this._hass);
+      const personCss = this._persons.map((p) => `.wa-live .p-${p.key} { --farbe: ${p.color}; --schrift: ${S.readableColor(p.color, '#F4F4F4')};
+          --schrift-leiste: ${S.readableColor(p.color, cardBg)}; }
+        .wa-live.dark .p-${p.key} { --schrift: ${S.readableColor(p.color, '#26282B')}; }`).join('\n');
       const title = c.title || '';
       this.innerHTML = `
         ${S.leafletCss()}
@@ -227,6 +231,9 @@ export function defineLiveCard(S) {
                       background: var(--card-background-color); border-bottom: 1px solid var(--divider-color); }
           .bereich { position: relative; flex: 1 1 auto; min-height: 0; }
           .wa-map { position: absolute; inset: 0; z-index: 0; }
+          .wa-map .niemand-hinweis { position: absolute; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+          .wa-map .niemand-hinweis span { background: var(--card-background-color, #fff); color: var(--primary-text-color); padding: 10px 16px;
+                                          border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.2); font-size: 14px; }
           .leiste { position: absolute; top: 10px; left: 10px; right: 10px; z-index: 1000;
                     display: flex; gap: 10px; align-items: stretch; pointer-events: none; }
           .person { pointer-events: auto; flex: 1 1 0; min-width: 0; display: flex; gap: 12px; align-items: center;
@@ -251,7 +258,7 @@ export function defineLiveCard(S) {
                   display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
           .text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
           .kopf { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-          .name { font-weight: 700; font-size: 1.15em; color: var(--farbe); }
+          .name { font-weight: 700; font-size: 1.15em; color: var(--schrift, var(--farbe)); }
           .status { font-weight: 600; }
           .status .seit { font-weight: 400; color: var(--wa-leise); }
           .adresse, .ortung { font-size: .92em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -285,7 +292,7 @@ export function defineLiveCard(S) {
           .infofenster .eintrag:first-of-type { padding-right: 26px; }
           .infofenster .bild { width: 36px; height: 36px; font-size: 15px; border-width: 2px; }
           .infofenster .zeilen { min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: .92em; line-height: 1.35; }
-          .infofenster .wer { font-weight: 700; color: var(--farbe); font-size: 1.08em; }
+          .infofenster .wer { font-weight: 700; color: var(--schrift, var(--farbe)); font-size: 1.08em; }
           .infofenster .ort { font-weight: 600; overflow-wrap: anywhere; }
           .infofenster .ort .seit, .infofenster .leise { font-weight: 400; color: var(--wa-leise); }
           .infofenster.unten .zipfel { bottom: auto; top: -9px; border-top: none; border-bottom: 9px solid var(--wa-glas); }
@@ -301,10 +308,16 @@ export function defineLiveCard(S) {
           .statusbar .infos { flex: 1 1 auto; min-width: 0; text-align: center; line-height: 1.6; }
           .statusbar .eintrag { white-space: nowrap; }
           .statusbar .trenner { margin: 0 6px; opacity: .6; }
-          .statusbar .wer { font-weight: 600; color: var(--farbe); }
+          .statusbar .wer { font-weight: 600; color: var(--schrift-leiste, var(--farbe)); }
           .statusbar a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; font-variant-numeric: tabular-nums; }
           .statusbar a:hover { color: var(--primary-color, #03a9f4); text-decoration-style: solid; }
           .statusbar .zahl { font-variant-numeric: tabular-nums; }
+          /* Countdown: fixed width right next to the reload button, so nothing jumps */
+          .statusbar .rest { flex: 0 0 auto; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+          .statusbar .rest[hidden] { display: none; }
+          /* Full height (dashboard): keep clear of rounded screen corners and the home bar */
+          .wa-live.flach .statusbar { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right));
+                                      padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
           .neuladen { flex: 0 0 auto; position: relative; width: 34px; height: 34px; border: none; border-radius: 50%;
                       background: transparent; color: var(--primary-text-color, var(--wa-text)); cursor: pointer;
                       display: flex; align-items: center; justify-content: center; padding: 0; }
@@ -324,9 +337,10 @@ export function defineLiveCard(S) {
             .name { font-size: 1.05em; }
             .adresse, .ortung { font-size: .86em; }
             .statusbar { padding-left: 8px; font-size: 12px; }
+            .wa-live.flach .statusbar { padding-left: max(8px, env(safe-area-inset-left)); }
             /* Narrow: only the coordinates and the reload symbol */
             .statusbar .infos { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
-            .statusbar .zuletzt, .statusbar .rest, .statusbar .vor-rest, .statusbar .trenner:has(+ .zuletzt) { display: none !important; }
+            .statusbar .zuletzt, .statusbar .rest, .statusbar .trenner:has(+ .zuletzt) { display: none !important; }
             .alle-ein { align-self: flex-end; padding: 8px; }
             .alle-ein .txt { display: none; }
             /* From four persons: two columns, without pictures */
@@ -378,9 +392,9 @@ export function defineLiveCard(S) {
           ${c.show_status_bar ? `<div class="statusbar">
             <div class="infos">
               ${this._persons.map((p) => `<span class="eintrag p-${p.key}"><span class="wer">${S.escapeHtml(p.name)}:</span> <a class="koord" target="_blank" rel="noopener noreferrer" title="${S.escapeHtml(t('open_in_map'))}">–</a></span><span class="trenner">·</span>`).join('')}
-              <span class="eintrag zuletzt">–</span><span class="trenner vor-rest">·</span>
-              <span class="eintrag rest"></span>
+              <span class="eintrag zuletzt">–</span>
             </div>
+            <span class="rest"></span>
             <button class="neuladen" type="button" title="${S.escapeHtml(t('reload_now'))}" aria-label="${S.escapeHtml(t('reload_now'))}">
               <svg viewBox="0 0 34 34" aria-hidden="true"><circle class="ring-hg" cx="17" cy="17" r="15"/><circle class="ring" cx="17" cy="17" r="15"/></svg>
               <svg class="pfeil" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
@@ -428,6 +442,8 @@ export function defineLiveCard(S) {
           .setView([home.latitude || 0, home.longitude || 0], 12);
         L.control.zoom({ position: 'bottomright', zoomInTitle: this._t('zoom_in'), zoomOutTitle: this._t('zoom_out') }).addTo(this._map);
         S.overviewControl(this._map, this._t('overview'), () => { this._setFollow(true); this._fitAll(true); });
+        this._gear = {};
+        S.updateGear(this._map, this._gear, this._info, this._t('open_settings'));
         S.compactAttribution(this._map);
         this._setTiles(S.isDark(this._hass, this._config.map_style));
         ['dragstart', 'zoomstart'].forEach((ev) => this._map.on(ev, () => { if (!this._programmatic) this._setFollow(false); }));
@@ -443,6 +459,20 @@ export function defineLiveCard(S) {
         const map = this.querySelector('.wa-map');
         if (map) map.innerHTML = `<div style="padding:16px">${S.escapeHtml(this._t('map_unavailable'))}</div>`;
       }
+    }
+
+    // All persons ticked off: say so on the map (like the history).
+    _nobodyHint() {
+      const mapDiv = this.querySelector('.wa-map');
+      if (!mapDiv) return;
+      let hint = mapDiv.querySelector('.niemand-hinweis');
+      const nobody = this._persons.length > 0 && this._persons.every((p) => !this._visible(p));
+      if (nobody && !hint) {
+        hint = document.createElement('div');
+        hint.className = 'niemand-hinweis';
+        hint.innerHTML = `<span>${S.escapeHtml(this._t('no_person_selected'))}</span>`;
+        mapDiv.appendChild(hint);
+      } else if (!nobody && hint) hint.remove();
     }
 
     _setTiles(dark) {
@@ -612,7 +642,8 @@ export function defineLiveCard(S) {
         : (this._updated ? t('data_as_of', { when: S.standText(this._hass, t, this._updated) }) : '–');
       rest.textContent = auto ? t('reload_in', { n: this._rest }) : '';
       rest.hidden = !auto;
-      if (rest.previousElementSibling) rest.previousElementSibling.hidden = !auto;
+      // as wide as the longest text of this interval: nothing moves while counting down
+      rest.style.minWidth = `${t('reload_in', { n: this._interval }).length}ch`;
       const button = bar.querySelector('.neuladen');
       button.classList.toggle('ohne-ring', !auto);
       const ring = button.querySelector('.ring');
@@ -721,6 +752,7 @@ export function defineLiveCard(S) {
     _drawPersons() {
       if (!this._map) return;
       const L = window.L;
+      this._nobodyHint();
       this._groups = this._grouping();
       const keep = new Set();
       this._groups.forEach((g, i) => {
@@ -799,7 +831,7 @@ export function defineLiveCard(S) {
       const esc = S.escapeHtml;
       box.innerHTML = `<button class="zu" type="button" title="${esc(t('close'))}" aria-label="${esc(t('close'))}">&times;</button>`
         + group.items.map(({ p, d }) => `
-          <div class="eintrag" style="--farbe:${p.color}">
+          <div class="eintrag p-${p.key}">
             <div class="bild"></div>
             <div class="zeilen">
               <div class="wer">${esc(p.name)}</div>

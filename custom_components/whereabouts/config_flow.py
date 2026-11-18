@@ -19,6 +19,8 @@ from .const import (
     CONF_ADDRESS_SOURCE,
     CONF_MIN_INTERVAL,
     CONF_PANEL,
+    CONF_PANEL_ICON,
+    CONF_PANEL_TITLE,
     CONF_PERSONS,
     CONF_RECORD_PERSONS,
     CONF_RETENTION_DAYS,
@@ -36,6 +38,7 @@ _LOGGER = logging.getLogger(__name__)
 CONF_FILE = "file"
 CONF_TARGET_PERSON = "target_person"
 CONF_REPLACE = "replace"
+CONF_PANEL_HIDDEN = "panel_hidden"
 
 
 def _select(options: list[str], key: str) -> selector.SelectSelector:
@@ -129,7 +132,37 @@ class WhereaboutsOptionsFlow(OptionsFlow):
         return self.async_create_entry(data={**self._values(), **changes})
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        return self.async_show_menu(step_id="init", menu_options=["recording", "addresses", "import_file"])
+        return self.async_show_menu(
+            step_id="init", menu_options=["open_settings", "dashboard", "recording", "addresses", "import_file"]
+        )
+
+    async def async_step_open_settings(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """A link to the settings page - it works even when the dashboard is hidden."""
+        return self.async_abort(reason="open_settings")
+
+    async def async_step_dashboard(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Sidebar entry: hidden or not, name and icon."""
+        values = self._values()
+        if user_input is not None:
+            return self._save(
+                {
+                    CONF_PANEL: not user_input.get(CONF_PANEL_HIDDEN, False),
+                    CONF_PANEL_TITLE: (user_input.get(CONF_PANEL_TITLE) or "").strip()[:40],
+                    CONF_PANEL_ICON: user_input.get(CONF_PANEL_ICON) or DEFAULT_OPTIONS[CONF_PANEL_ICON],
+                }
+            )
+        schema = vol.Schema(
+            {
+                vol.Optional(CONF_PANEL_HIDDEN, default=not values[CONF_PANEL]): selector.BooleanSelector(),
+                vol.Optional(
+                    CONF_PANEL_TITLE, description={"suggested_value": values.get(CONF_PANEL_TITLE) or None}
+                ): selector.TextSelector(),
+                vol.Optional(
+                    CONF_PANEL_ICON, description={"suggested_value": values.get(CONF_PANEL_ICON) or None}
+                ): selector.IconSelector(),
+            }
+        )
+        return self.async_show_form(step_id="dashboard", data_schema=schema)
 
     async def async_step_recording(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Whose history is recorded, how often, how long it is kept."""

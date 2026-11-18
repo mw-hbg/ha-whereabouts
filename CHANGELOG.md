@@ -1,5 +1,95 @@
 # Changelog
 
+## Unreleased
+
+- Phone: the dashboard no longer shifts at the home bar; the status bars keep clear
+  of rounded screen corners and the home bar; date picker and export window fit a
+  phone in landscape (buttons always visible, the rest scrolls).
+- Date picker: suggestions in groups, with "Last 3 days"; the chosen one is
+  marked; suggestions without data are left out; the period and its number of
+  days are shown next to the buttons; on phones the suggestions are a bar above
+  the calendar.
+- Maps: overview button above the zoom buttons (the legend alone at the bottom
+  left); dark controls, licence line, legend and start symbol on a dark map;
+  "Where is…?" says "No person selected"; countdown at a fixed place next to the
+  refresh button; the same separators in both status bars; names in colours that
+  would be hard to read are drawn readable.
+- "Location history": start with route, heat map or table and with today, the last
+  3 or 7 days or the last 4 weeks ("Today" clicked again returns there); the heat
+  map includes home; a "Show zones" switch in the legend (the same setting as on
+  the settings page); points of long routes are hidden from 400 entries (setting,
+  0 = always shown) with a note on the map that zooms in.
+- Settings: a blue dot marks own values, an arrow goes back to the standard and
+  "Restore" brings them back for 30 seconds; "Reset to standard" means the
+  built-in values (greyed out when there is nothing to reset; also for all users);
+  a value equal to the standard is no longer stored as an own value; the table of
+  contents follows clicks; diagnostics only load on request; less space at the
+  top; structured ⓘ texts.
+- Settings: profile pictures by dropping or choosing a file or from the internet,
+  cropped in a circle and stored small (256 × 256); replaced pictures are deleted
+  when nobody uses them any more; warnings for person and zone colours that are
+  hard to see on the map.
+- Settings: CARTO styles, zone list, accuracy and keeping, and the address sensor
+  per person as sub-areas that open and close; CARTO key shows "API ✓"; choice of
+  map apps on phones (default Apple Maps and Google Maps, never Apple Maps on
+  Android, one app opens directly); addresses explained and the sensor per person
+  pre-filled; the retention confirmation says how many days disappear tonight.
+- Users: everything about other users only appears when there are users who are
+  not administrators; one table "Users" with rules, rights, settings view,
+  synchronising and "Edit" (for the standard, too, with "Done"); "Set for all
+  users"; new users are offered to the next administrator (like mine, synchronised,
+  built-in values or later) together with their rights.
+- Dashboard: terms as in Home Assistant (dashboard, views); "Hide in the sidebar";
+  the integration's options get "Open settings" and "Dashboard"; administrators get
+  a gear in both maps while the dashboard or the settings view is hidden.
+
+---
+
+- Handy: Das Dashboard verschiebt sich nicht mehr am Home-Balken; die Statusleisten
+  halten Abstand zu runden Bildschirmecken und zum Home-Balken; Datumsauswahl und
+  Export-Fenster passen aufs Handy im Querformat (Knöpfe immer sichtbar, der Rest
+  scrollt).
+- Datumsauswahl: Vorschläge in Gruppen, mit „Letzte 3 Tage“; der gewählte ist
+  markiert; Vorschläge ohne Daten entfallen; Zeitraum und Anzahl der Tage stehen
+  neben den Knöpfen; am Handy sind die Vorschläge eine Leiste über dem Kalender.
+- Karten: Gesamtübersicht über den Zoomknöpfen (unten links nur noch die Legende);
+  dunkle Knöpfe, Lizenzzeile, Legende und Startsymbol auf dunkler Karte; „Wo
+  ist…?“ zeigt „Keine Person ausgewählt“; Countdown an fester Stelle neben dem
+  Aktualisieren-Knopf; gleiche Trenner in beiden Statusleisten; Namen in schwer
+  lesbaren Farben werden lesbar gezeichnet.
+- „Standortverlauf“: Start mit Route, Heatmap oder Tabelle und mit heute, den
+  letzten 3 oder 7 Tagen oder den letzten 4 Wochen („Heute“ ein zweites Mal führt
+  dorthin zurück); die Heatmap bezieht Zuhause ein; Schalter „Zonen zeigen“ in der
+  Legende (dieselbe Einstellung wie auf der Einstellungsseite); Punkte langer
+  Routen werden ab 400 Einträgen ausgeblendet (Einstellung, 0 = immer zeigen), mit
+  Hinweis auf der Karte, der hineinzoomt.
+- Einstellungen: Ein blauer Punkt kennzeichnet eigene Werte, ein Pfeil führt zurück
+  zum Standard, „Wiederherstellen“ holt sie 30 Sekunden lang zurück; „Auf Standard
+  zurücksetzen“ heißt Werkseinstellung (ausgegraut, wenn nichts zurückzusetzen ist;
+  auch für alle Benutzer); ein Wert gleich dem Standard wird nicht mehr als eigener
+  Wert gespeichert; das Inhaltsverzeichnis folgt dem Klick; die Diagnose lädt nur
+  auf Wunsch; weniger Platz oben; strukturierte ⓘ-Texte.
+- Einstellungen: Profilbilder per Ablegen, Auswählen oder aus dem Internet, im Kreis
+  zugeschnitten und klein gespeichert (256 × 256); ersetzte Bilder werden gelöscht,
+  wenn sie niemand mehr nutzt; Hinweise bei Personen- und Zonenfarben, die auf der
+  Karte schlecht zu sehen sind.
+- Einstellungen: CARTO-Stile, Zonenliste, Genauigkeit und Aufbewahrung sowie der
+  Adress-Sensor je Person als auf- und zuklappbare Unterbereiche; der CARTO-Schlüssel
+  zeigt „API ✓“; Auswahl der Karten-Apps am Handy (Standard Apple Karten und Google
+  Maps, auf Android nie Apple Karten, eine App öffnet direkt); Adressen erklärt und
+  der Sensor je Person vorbelegt; die Bestätigung zum Löschen nennt, wie viele Tage
+  heute Nacht verschwinden.
+- Benutzer: Alles zu anderen Benutzern erscheint nur noch, wenn es Benutzer ohne
+  Adminrechte gibt; eine Tabelle „Benutzer“ mit Regeln, Rechten, Ansicht
+  Einstellungen, Synchronisieren und „Bearbeiten“ (auch für den Standard, mit
+  „Fertig“); „Für alle Benutzer festlegen“; neue Benutzer werden dem nächsten
+  Administrator angeboten (wie meine, synchron, Werkseinstellungen oder später),
+  gleich mit ihren Rechten.
+- Dashboard: Begriffe wie in Home Assistant (Dashboard, Ansichten); „In der
+  Seitenleiste ausblenden“; die Optionen der Integration bekommen „Einstellungen
+  öffnen“ und „Dashboard“; Administratoren bekommen in beiden Karten ein Zahnrad,
+  solange Dashboard oder Einstellungsansicht ausgeblendet sind.
+
 ## 0.4.4
 
 - Sidebar page: the height follows the visible area only (zooming the browser no

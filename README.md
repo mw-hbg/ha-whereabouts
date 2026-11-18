@@ -83,26 +83,44 @@ what it does; actions that delete or overwrite something ask first.
 
 | Category | Who | What you can set |
 |---|---|---|
-| Views | every user | which tabs are shown, which one opens first |
-| Persons | every user | who appears, order, display name, colour, picture (address or upload), in which card (both, only "Where is…?", only "Location history"); warning for similar colours |
-| Map | every user | light/dark, map style (Esri, OpenStreetMap, CARTO, each with a link to examples; automatic fallback if a service fails) with the CARTO key right below, where coordinates open (Google Maps, Apple Maps, OpenStreetMap, Waze, HERE; choice of apps on phones) |
-| Zones, "Where is…?" display, "Location history" display | every user (advanced) | in which card zones are shown, zone colours, hide single zones, own colour per zone, info bar, status bar, accuracy circle, following, start view, legend, automatic refresh and refresh interval |
+| Views | every user | which views the Whereabouts dashboard shows, the start view |
+| Persons | every user | who appears, order, display name, colour, profile picture (drop or choose a picture, or load one from the internet, and crop it in a circle – stored as 256 × 256), in which card (both, only "Where is…?", only "Location history"); warnings for similar colours and colours that are hard to see on the map |
+| Map | every user | light/dark, map style (Esri, OpenStreetMap, CARTO, each with a link to examples; automatic fallback if a service fails), CARTO styles per map and light/dark, the CARTO key ("API ✓" when it works), preferred map and – on phones and tablets – which map apps are offered (default: Apple Maps and Google Maps; never Apple Maps on Android; one app left = opens directly) |
+| Zones, "Where is…?" display, "Location history" display | every user (advanced) | in which card zones are shown, zone colours, choose and colour single zones, info bar, status bar, accuracy circle, following, start view (route, heat map or table), start period (today, last 3 or 7 days, last 4 weeks), legend, hiding the points of long routes (from 400 entries), automatic refresh and refresh interval |
 | Persons in Whereabouts | administrators | which Home Assistant persons Whereabouts works with at all |
-| Users and rights | administrators | rules for everybody (see live / see history / delete history: all persons (default), own person, nobody) and own rights per user; technical users (e.g. the MQTT user) hidden |
-| Sidebar | administrators | sidebar entry on/off, name, icon |
-| Recording | administrators | recorded persons, store interval (60 s), "same place" radius (50 m), deleting old history (default: never) |
-| Addresses | administrators | Companion app (geocoded location), otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; sensor per person (found automatically) |
+| Users | administrators, only when there are other users | one table: rules for everybody (see live / see history / delete history: all persons, own person, nobody), own rights per user, settings view, synchronising, "Edit" for the standard or a user; technical users (e.g. the MQTT user) hidden |
+| Dashboard | administrators | hide in the sidebar, name, icon |
+| Recording | administrators | recorded persons; accuracy and keeping: store interval (60 s), "same place" radius (50 m), deleting old history (default: never; the confirmation says how many days disappear tonight) |
+| Addresses | administrators | address source: Companion app, otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; distance up to which the phone's address is used; address sensor per person (found automatically, a warning when there is none) |
 | Import and export | export: everybody (own rights), import: administrators | "Export data" (day or period, persons, CSV/GPX, several files as ZIP); import that merges into gaps of existing days (or skips or replaces them) with a preview per day, format help and a prompt for converting other apps' data with an AI assistant |
 | Diagnostics | administrators | trackers, geocoded-location sensor and stored days per person |
 
-Administrators choose whose settings they edit: **Me**, **Default for all users**
-or a single user. Under **Users and rights** a table shows per user what applies
-(default, own settings, synchronised, fixed settings), whether they see the
-settings tab, and whether they are **synchronised with the administrator's
-settings** (for single users or all, new users included); switching it off keeps
-the administrator's settings. A category can be fixed for all users (with
+**Own values and the standard:** a blue dot marks a setting with an own value
+(hovering shows what the standard would be); the arrow next to it goes back to
+the standard, and for 30 seconds **Restore** brings the value back. **Reset to
+standard** sets a whole category to the built-in values (greyed out when there is
+nothing to reset; afterwards 30 seconds **Restore own values**).
+
+**More users:** everything about other users only appears when there is at least
+one user who is not an administrator. Then the category **Users** shows one table
+with the rules and settings for all users (the standard) and every user: rights,
+what applies (standard, own settings, synchronised, fixed settings), whether they
+see the settings view and whether they are **synchronised with the
+administrator's settings**. **Edit** switches the page to that user's settings
+(or the standard) until **Done**. **Set for all users** turns your values of a
+category into the standard. A category can be fixed for all users (with
 exceptions) or selected users; single settings can be fixed for one user. Fixed
-settings are greyed out for the user.
+settings are greyed out for the user. When a new user appears, the next
+administrator who opens the settings is asked which settings the user starts with
+(like mine once, like mine synchronised, the built-in values, or later – until
+then like the administrator) and which rights they get.
+
+**Always a way back to the settings:** the dashboard can be hidden in the sidebar
+and administrators can hide the view **Settings**, too. The settings stay
+reachable at `/whereabouts/settings`, under **Settings → Devices & services →
+Whereabouts → Configure → Open settings**, and – for administrators, while the
+dashboard or the settings view is hidden – with a gear above the zoom buttons in
+both maps (also in cards on other dashboards).
 
 Switches and selections save at once; text and number fields only with **Save** or
 the Enter key. Leaving the page with unsaved fields asks first; unsaved values are
@@ -116,7 +134,8 @@ All settings are stored in `.storage/whereabouts.settings` and are part of every
 Home Assistant backup, like the history.
 
 The options under **Settings → Devices & services → Whereabouts → Configure**
-still work and link to the settings page.
+still work: open the settings, dashboard (hide in the sidebar, name, icon),
+recording, addresses and import.
 
 **Wi-Fi trackers (optional):** A person in Home Assistant can have several
 trackers, e.g. the Companion app (GPS) and a router or ARP-scan tracker for the
@@ -140,7 +159,7 @@ filling the page use a view of type **Panel**.
 | Per person (this card only) | display name, colour, picture, address sensor | display name, colour, picture |
 | Map | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO (own key), coordinates open in Google Maps (default), Apple Maps, OpenStreetMap, Waze or HERE; on phones and tablets a choice of apps | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO |
 | Zones | on/off, colour of Home and of the other zones, names from zoom | same |
-| Display | info bar with "Show everyone", status bar, GPS accuracy, follow at start, automatic refresh and interval | start with map or table, legend, "Export data" (also as map picture), automatic refresh and interval; a day or any period with suggestions (days without data greyed out), route or heatmap |
+| Display | info bar with "Show everyone", status bar, GPS accuracy, follow at start, automatic refresh and interval | start with route, heat map or table, start period, legend (with a "Show zones" switch that changes the same setting as the settings page), "Export data" (also as map picture), hiding points of long routes (a note on the map says how many), automatic refresh and interval; a day or any period with grouped suggestions (suggestions without data are left out), route or heatmap |
 | Height | automatic (full height in a panel view), full screen or fixed | same |
 
 Without a colour, a person gets the same colour in both cards automatically.
@@ -303,27 +322,47 @@ oder überschreibt, fragt vorher nach.
 
 | Kategorie | Wer | Was man einstellt |
 |---|---|---|
-| Ansichten | jeder Benutzer | welche Reiter angezeigt werden, welcher zuerst erscheint |
-| Personen | jeder Benutzer | wer erscheint, Reihenfolge, Anzeigename, Farbe, Bild (Adresse oder hochladen), in welcher Karte (beide, nur „Wo ist…?“, nur „Standortverlauf“); Warnung bei ähnlichen Farben |
-| Karte | jeder Benutzer | hell/dunkel, Kartenstil (Esri, OpenStreetMap, CARTO, jeweils mit Link zu Beispielen; automatischer Ersatz, wenn ein Dienst ausfällt) mit dem CARTO-Schlüssel direkt darunter, wohin Koordinaten führen (Google Maps, Apple Karten, OpenStreetMap, Waze, HERE; am Handy mit App-Auswahl) |
-| Zonen, Anzeige „Wo ist…?“, Anzeige „Standortverlauf“ | jeder Benutzer (erweitert) | in welcher Karte Zonen erscheinen, Zonenfarben, einzelne Zonen ausblenden, eigene Farbe pro Zone, Infoleiste, Statusleiste, Genauigkeitskreis, Folgen, Startansicht, Legende, automatisch aktualisieren und Aktualisierungsintervall |
+| Ansichten | jeder Benutzer | welche Ansichten das Whereabouts-Dashboard zeigt, die Startansicht |
+| Personen | jeder Benutzer | wer erscheint, Reihenfolge, Anzeigename, Farbe, Profilbild (Bild ablegen oder auswählen oder aus dem Internet laden und im Kreis zuschneiden – gespeichert als 256 × 256), in welcher Karte (beide, nur „Wo ist…?“, nur „Standortverlauf“); Hinweise bei ähnlichen und auf der Karte schlecht sichtbaren Farben |
+| Karte | jeder Benutzer | hell/dunkel, Kartenstil (Esri, OpenStreetMap, CARTO, jeweils mit Link zu Beispielen; automatischer Ersatz, wenn ein Dienst ausfällt), CARTO-Stile je Karte und hell/dunkel, der CARTO-Schlüssel („API ✓“, wenn er funktioniert), bevorzugte Karte und – auf Handy und Tablet – welche Karten-Apps zur Wahl stehen (Standard: Apple Karten und Google Maps; auf Android nie Apple Karten; nur eine App übrig = öffnet direkt) |
+| Zonen, Anzeige „Wo ist…?“, Anzeige „Standortverlauf“ | jeder Benutzer (erweitert) | in welcher Karte Zonen erscheinen, Zonenfarben, einzelne Zonen auswählen und einfärben, Infoleiste, Statusleiste, Genauigkeitskreis, Folgen, Startansicht (Route, Heatmap oder Tabelle), Startzeitraum (heute, letzte 3 oder 7 Tage, letzte 4 Wochen), Legende, Punkte langer Routen ausblenden (ab 400 Einträgen), automatisch aktualisieren und Aktualisierungsintervall |
 | Personen in Whereabouts | Administratoren | mit welchen Personen aus Home Assistant Whereabouts überhaupt arbeitet |
-| Benutzer und Rechte | Administratoren | Regeln für alle (live sehen / Verlauf sehen / Verlauf löschen: alle Personen (Standard), eigene Person, niemand) und eigene Rechte pro Benutzer; technische Benutzer (z. B. der MQTT-Benutzer) ausgeblendet |
-| Seitenleiste | Administratoren | Eintrag an/aus, Name, Symbol |
-| Aufzeichnung | Administratoren | aufgezeichnete Personen, Speicherabstand (60 s), Umkreis „derselbe Ort“ (50 m), alten Verlauf löschen (Standard: nie) |
-| Adressen | Administratoren | Companion App (Geokodierter Standort), sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; Sensor pro Person (wird automatisch gefunden) |
+| Benutzer | Administratoren, nur wenn es weitere Benutzer gibt | eine Tabelle: Regeln für alle (live sehen / Verlauf sehen / Verlauf löschen: alle Personen, eigene Person, niemand), eigene Rechte pro Benutzer, Ansicht Einstellungen, Synchronisieren, „Bearbeiten“ für den Standard oder einen Benutzer; technische Benutzer (z. B. der MQTT-Benutzer) ausgeblendet |
+| Dashboard | Administratoren | in der Seitenleiste ausblenden, Name, Symbol |
+| Aufzeichnung | Administratoren | aufgezeichnete Personen; Genauigkeit und Aufbewahrung: Speicherabstand (60 s), Umkreis „gleicher Ort“ (50 m), alten Verlauf löschen (Standard: nie; die Bestätigung nennt, wie viele Tage heute Nacht verschwinden) |
+| Adressen | Administratoren | Adressquelle: Companion App, sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; Abstand, bis zu dem die Handy-Adresse übernommen wird; Adress-Sensor je Person (automatisch gefunden, Hinweis, wenn keiner da ist) |
 | Import und Export | Export: jeder (eigene Rechte), Import: Administratoren | „Daten exportieren“ (Tag oder Zeitraum, Personen, CSV/GPX, mehrere Dateien als ZIP); Import, der Lücken vorhandener Tage ergänzt (oder sie überspringt oder ersetzt), mit Vorschau pro Tag, Formathilfe und einem Text, mit dem ein KI-Assistent Daten anderer Apps umwandelt |
 | Diagnose | Administratoren | Tracker, Sensor „Geokodierter Standort“ und gespeicherte Tage pro Person |
 
-Administratoren wählen, wessen Einstellungen sie bearbeiten: **Mir**, **Standard
-für alle Benutzer** oder ein einzelner Benutzer. Unter **Benutzer und Rechte**
-zeigt eine Tabelle pro Benutzer, was gerade gilt (Standard, eigene Einstellungen,
-synchronisiert, festgelegte Einstellungen), ob er den Einstellungen-Reiter sieht
-und ob er **mit den Einstellungen des Administrators synchronisiert** ist (für
-einzelne oder alle Benutzer, auch neue); beim Ausschalten bleiben die
-Einstellungen des Administrators. Eine Kategorie lässt sich für alle Benutzer
-(mit Ausnahmen) oder ausgewählte festlegen, einzelne Einstellungen für einen
-Benutzer. Festgelegtes sieht der Benutzer ausgegraut.
+**Eigene Werte und Standard:** Ein blauer Punkt kennzeichnet eine Einstellung mit
+eigenem Wert (der Hinweis nennt, was Standard wäre); der Pfeil daneben geht zurück
+zum Standard, 30 Sekunden lang holt **Wiederherstellen** den Wert zurück. **Auf
+Standard zurücksetzen** stellt eine ganze Kategorie auf die Werte von Whereabouts
+(ausgegraut, wenn es nichts zurückzusetzen gibt; danach 30 Sekunden **Eigene Werte
+wiederherstellen**).
+
+**Weitere Benutzer:** Alles zu anderen Benutzern erscheint erst, wenn es mindestens
+einen Benutzer ohne Adminrechte gibt. Dann zeigt die Kategorie **Benutzer** eine
+Tabelle mit den Regeln und Einstellungen für alle Benutzer (dem Standard) und jedem
+Benutzer: Rechte, was gerade gilt (Standard, eigene Einstellungen, synchronisiert,
+festgelegte Einstellungen), ob er die Ansicht Einstellungen sieht und ob er **mit
+den Einstellungen des Administrators synchronisiert** ist. **Bearbeiten** schaltet
+die Seite auf die Einstellungen dieses Benutzers (oder den Standard), bis
+**Fertig**. **Für alle Benutzer festlegen** macht deine Werte einer Kategorie zum
+Standard. Eine Kategorie lässt sich für alle Benutzer (mit Ausnahmen) oder
+ausgewählte festlegen, einzelne Einstellungen für einen Benutzer. Festgelegtes
+sieht der Benutzer ausgegraut. Kommt ein neuer Benutzer hinzu, fragt die Seite den
+nächsten Administrator, der sie öffnet, womit er startet (wie meine Einstellungen
+einmalig, wie meine Einstellungen synchron, Werkseinstellungen oder später – bis
+dahin wie der Administrator) und welche Rechte er bekommt.
+
+**Immer ein Weg zurück zu den Einstellungen:** Das Dashboard lässt sich in der
+Seitenleiste ausblenden, Administratoren können auch die Ansicht **Einstellungen**
+ausblenden. Die Einstellungen bleiben erreichbar unter `/whereabouts/settings`,
+über **Einstellungen → Geräte & Dienste → Whereabouts → Konfigurieren →
+Einstellungen öffnen** und – für Administratoren, solange Dashboard oder
+Einstellungsansicht ausgeblendet sind – mit einem Zahnrad über den Zoomknöpfen in
+beiden Karten (auch in Karten auf anderen Dashboards).
 
 Schalter und Auswahlen speichern sofort, Text- und Zahlenfelder nur mit
 **Speichern** oder der Eingabetaste. Wer die Seite mit ungespeicherten Feldern
@@ -339,7 +378,8 @@ Alle Einstellungen liegen in `.storage/whereabouts.settings` und sind – wie de
 Verlauf – Teil jedes Home-Assistant-Backups.
 
 Die Optionen unter **Einstellungen → Geräte & Dienste → Whereabouts →
-Konfigurieren** funktionieren weiter und verweisen auf die Einstellungsseite.
+Konfigurieren** funktionieren weiter: Einstellungen öffnen, Dashboard (in der
+Seitenleiste ausblenden, Name, Symbol), Aufzeichnung, Adressen und Import.
 
 **WLAN-Tracker (optional):** Eine Person in Home Assistant kann mehrere Tracker
 haben, z. B. die Companion App (GPS) und einen Router- oder ARP-Scan-Tracker fürs
@@ -365,7 +405,7 @@ füllt, eine Ansicht vom Typ **Panel** verwenden.
 | Pro Person (nur diese Karte) | Anzeigename, Farbe, Bild, Adress-Sensor | Anzeigename, Farbe, Bild |
 | Karte | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO (eigener Schlüssel), Koordinaten öffnen in Google Maps (Standard), Apple Karten, OpenStreetMap, Waze oder HERE; auf Handy und Tablet mit App-Auswahl | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO |
 | Zonen | an/aus, Farbe von Zuhause und der übrigen Zonen, Namen ab Zoom | ebenso |
-| Anzeige | Infoleiste mit „Alle einblenden“, Statusleiste, GPS-Genauigkeit, beim Start folgen, automatisch aktualisieren und Intervall | Start mit Karte oder Tabelle, Legende, „Daten exportieren“ (auch als Kartenbild), automatisch aktualisieren und Intervall; ein Tag oder ein beliebiger Zeitraum mit Vorschlägen (Tage ohne Daten ausgegraut), Route oder Heatmap |
+| Anzeige | Infoleiste mit „Alle einblenden“, Statusleiste, GPS-Genauigkeit, beim Start folgen, automatisch aktualisieren und Intervall | Start mit Route, Heatmap oder Tabelle, Startzeitraum, Legende (mit Schalter „Zonen zeigen“, der dieselbe Einstellung wie die Einstellungsseite ändert), „Daten exportieren“ (auch als Kartenbild), Punkte langer Routen ausblenden (ein Hinweis auf der Karte nennt die Zahl), automatisch aktualisieren und Intervall; ein Tag oder ein beliebiger Zeitraum mit gruppierten Vorschlägen (Vorschläge ohne Daten entfallen), Route oder Heatmap |
 | Höhe | automatisch (ganze Höhe in einer Panel-Ansicht), ganze Bildschirmhöhe oder fest | ebenso |
 
 Ohne eigene Farbe bekommt eine Person in beiden Karten automatisch dieselbe

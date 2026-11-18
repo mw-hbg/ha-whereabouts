@@ -9,8 +9,8 @@ const rgbToHex = (rgb) => (Array.isArray(rgb) && rgb.length === 3
   : undefined);
 
 const ZONE_COLORS = ['zone_color_home', 'zone_color'];
-const SELECTS = ['map_style', 'tiles', 'map_link', 'default_view', 'carto_light', 'carto_dark'];
-const HELP = ['title', 'persons', 'picture', 'map_link_choice'];
+const SELECTS = ['map_style', 'tiles', 'map_link', 'default_view', 'start_period', 'carto_light', 'carto_dark'];
+const HELP = ['title', 'persons', 'picture', 'map_link_choice', 'simplify_points', 'start_period'];
 
 // defaults: { live: LIVE_DEFAULTS, history: HISTORY_DEFAULTS } (passed in, so no module is loaded twice)
 export function defineEditor(S, defaults) {
@@ -60,8 +60,9 @@ export function defineEditor(S, defaults) {
     _schema() {
       const t = this._t;
       const live = this.kind !== 'history';
-      const label = (name, v) => t(`ed_${name === 'map_style' ? 'style' : name === 'map_link' ? 'link' : name === 'default_view' ? 'view'
-        : name === 'height_mode' ? 'height' : name === 'carto_light' || name === 'carto_dark' ? 'carto' : name}_${v}`);
+      const label = (name, v) => (name === 'start_period' ? t(`start_period_${v}`)
+        : t(`ed_${name === 'map_style' ? 'style' : name === 'map_link' ? 'link' : name === 'default_view' ? 'view'
+          : name === 'height_mode' ? 'height' : name === 'carto_light' || name === 'carto_dark' ? 'carto' : name}_${v}`));
       // First choice: as on the settings page (with what that is right now).
       const select = (name, values, inherit = true) => ({
         name,
@@ -107,9 +108,11 @@ export function defineEditor(S, defaults) {
           { name: 'refresh_interval', disabled: this._data().auto_refresh === false, selector: { number: { min: 5, max: 3600, step: 5, mode: 'box', unit_of_measurement: 's' } } },
         ]
         : [
-          select('default_view', ['map', 'table']),
+          select('default_view', ['map', 'heat', 'table']),
+          select('start_period', ['today', '3d', '7d', '4w']),
           { name: 'show_legend', selector: { boolean: {} } },
           { name: 'show_export', selector: { boolean: {} } },
+          { name: 'simplify_points', selector: { number: { min: 0, max: 100000, step: 50, mode: 'box' } } },
           { name: 'auto_refresh', selector: { boolean: {} } },
           { name: 'refresh_interval', disabled: this._data().auto_refresh === false, selector: { number: { min: 10, max: 3600, step: 5, mode: 'box', unit_of_measurement: 's' } } },
         ];

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1
 
 - Addresses: default is now "Companion app (geocoded location), otherwise
   OpenStreetMap". Clearer names for all choices; set-up, options and README say

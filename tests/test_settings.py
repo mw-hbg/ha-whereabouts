@@ -234,3 +234,86 @@ async def test_import_only_for_admins(hass: HomeAssistant, hass_client, hass_adm
     data.add_field("file", b"x", filename="a.csv")
     response = await client.post("/api/whereabouts/import", data=data)
     assert response.status == 403
+
+
+async def test_history_over_a_period(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    entry = await _setup(hass, hass_admin_user.id)
+    storage = entry.runtime_data.storage
+    await hass.async_add_executor_job(storage.add_point, "alex", Point("2026-06-25", "09:00:00", "home", *HOME))
+    ws = await hass_ws_client(hass)
+    result = await _ws(ws, 1, type="whereabouts/history", person="person.alex", date="2026-06-24", date_to="2026-06-25")
+    assert [s["date"] for s in result["result"]["stays"]] == ["2026-06-24", "2026-06-25"]
+    result = await _ws(ws, 2, type="whereabouts/history", person="person.alex", date="2026-06-01", date_to="2026-07-15")
+    assert result["error"]["code"] == "invalid_range"  # more than 31 days
+
+
+async def test_export_several_persons_and_days(hass: HomeAssistant, hass_client, hass_admin_user):
+    import io
+    import zipfile
+
+    entry = await _setup(hass, hass_admin_user.id)
+    storage = entry.runtime_data.storage
+    await hass.async_add_executor_job(storage.add_point, "alex", Point("2026-06-25", "09:00:00", "home", *HOME))
+    client = await hass_client()
+    base = "/api/whereabouts/export?persons=person.alex,person.sam&from=2026-06-24&to=2026-06-25&format=csv"
+    # one file with both persons
+    response = await client.get(base)
+    text = await response.text()
+    assert response.status == 200 and text.count("\n") == 4  # header + 3 stays
+    assert "alex,2026-06-25" in text and "sam,2026-06-24" in text
+    # every person and day on its own -> ZIP
+    response = await client.get(base + "&split_day=1&split_person=1")
+    assert response.headers["Content-Type"] == "application/zip"
+    names = sorted(zipfile.ZipFile(io.BytesIO(await response.read())).namelist())
+    assert names == ["alex_2026-06-24.csv", "alex_2026-06-25.csv", "sam_2026-06-24.csv"]
+    response = await client.get(base.replace("csv", "gpx") + "&split_person=1")
+    names = sorted(zipfile.ZipFile(io.BytesIO(await response.read())).namelist())
+    assert names == ["alex_2026-06-24_2026-06-25.gpx", "sam_2026-06-24_2026-06-25.gpx"]
+
+
+async def test_persons_in_whereabouts_limit_everything(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    entry = await _setup(hass, hass_admin_user.id)
+    ws = await hass_ws_client(hass)
+    assert (await _ws(ws, 1, type="whereabouts/settings/options", values={"persons": ["person.alex"]}))["success"]
+    await hass.async_block_till_done()
+    assert entry.options["record_persons"] == ["person.alex"]  # Sam no longer recorded ...
+    days = await hass.async_add_executor_job(entry.runtime_data.storage.days, "sam")
+    assert days == ["2026-06-24"]  # ... but the history is kept
+    data = (await _ws(ws, 2, type="whereabouts/settings"))["result"]
+    assert [p["entity_id"] for p in data["persons"]] == ["person.alex"]
+    assert len(data["admin"]["all_persons"]) == 3
+    result = await _ws(ws, 3, type="whereabouts/history", person="person.sam", date="2026-06-24")
+    assert result["error"]["code"] == "forbidden"
+
+
+async def test_promote_and_sync(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    entry = await _setup(hass, hass_admin_user.id)
+    settings = entry.runtime_data.settings
+    ws = await hass_ws_client(hass)
+    await _ws(ws, 1, type="whereabouts/settings/save", scope="own", category="map", values={"tiles": "osm"})
+    assert (await _ws(ws, 2, type="whereabouts/settings/promote", category="map"))["success"]
+    assert settings.defaults()["map"]["tiles"] == "osm"
+
+    class Other:
+        id = OTHER
+        is_admin = False
+
+    await settings.async_set("own", Other(), "zones", {"show_zones": False})
+    assert (await _ws(ws, 3, type="whereabouts/settings/sync", enabled=True))["success"]
+    await _ws(ws, 4, type="whereabouts/settings/save", scope="own", category="map", values={"map_link": "waze"})
+    assert settings.synced(Other())
+    assert settings.effective(Other())["map"]["map_link"] == "waze"  # follows the admin live
+    assert settings.effective(Other())["zones"]["show_zones"] is True
+    assert settings.locked_categories(Other()) == list(settings.defaults())
+    await _ws(ws, 5, type="whereabouts/settings/sync", enabled=False)
+    assert settings.effective(Other())["zones"]["show_zones"] is False  # own values are back
+
+
+async def test_users_are_marked_technical(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    await _setup(hass, hass_admin_user.id)
+    await hass.auth.async_create_user("MQTT", group_ids=["system-users"])
+    ws = await hass_ws_client(hass)
+    users = (await _ws(ws, 1, type="whereabouts/settings"))["result"]["admin"]["users"]
+    by_name = {u["name"]: u for u in users}
+    assert by_name["MQTT"]["technical"] is True
+    assert by_name[hass_admin_user.name]["technical"] is False  # linked to person.alex

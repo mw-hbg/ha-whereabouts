@@ -21,6 +21,11 @@ export function defineEditor(S, defaults) {
           this._t = S.translator(hass);
           this._render();
         });
+        // Only the persons Whereabouts works with (and this user may see).
+        S.subscribeInfo(hass, (info) => {
+          this._info = info;
+          this._render();
+        });
       } else if (this._form) {
         this._form.hass = hass;
       }
@@ -35,10 +40,18 @@ export function defineEditor(S, defaults) {
       return { ...S.DEFAULTS_MAP, ...(this.kind === 'history' ? defaults.history : defaults.live) };
     }
 
+    // Persons this card can show: Whereabouts' persons that the user may see here.
+    _available() {
+      const info = this._info || {};
+      if (this.kind === 'history') return (info.persons || []).map((p) => p.entity_id);
+      return info.shown || info.base || [];
+    }
+
     // Persons whose settings are shown: the chosen ones, or all.
     _shownPersons() {
-      const chosen = this._config.persons || [];
-      return chosen.length ? chosen : S.allPersonIds(this._hass);
+      const available = this._available();
+      const chosen = (this._config.persons || []).filter((id) => available.includes(id));
+      return chosen.length ? chosen : available;
     }
 
     _schema() {
@@ -62,7 +75,6 @@ export function defineEditor(S, defaults) {
       const map = [
         select('map_style', ['auto', 'light', 'dark']),
         select('tiles', ['esri', 'osm', 'carto']),
-        ...((this._config.tiles || this._defaults.tiles) === 'carto' ? [{ name: 'carto_api_key', selector: { text: {} } }] : []),
         ...(live ? [select('map_link', ['google', 'apple', 'osm', 'waze', 'here', 'none'])] : []),
         ...(live && this._data().map_link !== 'none' ? [{ name: 'map_link_choice', selector: { boolean: {} } }] : []),
         select('height_mode', ['auto', 'full', 'fixed']),
@@ -75,14 +87,14 @@ export function defineEditor(S, defaults) {
           { name: 'show_accuracy', selector: { boolean: {} } },
           { name: 'follow', selector: { boolean: {} } },
           { name: 'auto_refresh', selector: { boolean: {} } },
-          { name: 'refresh_interval', selector: { number: { min: 5, max: 3600, step: 5, mode: 'box', unit_of_measurement: 's' } } },
+          { name: 'refresh_interval', disabled: this._data().auto_refresh === false, selector: { number: { min: 5, max: 3600, step: 5, mode: 'box', unit_of_measurement: 's' } } },
         ]
         : [
           select('default_view', ['map', 'table']),
           { name: 'show_legend', selector: { boolean: {} } },
           { name: 'show_export', selector: { boolean: {} } },
           { name: 'auto_refresh', selector: { boolean: {} } },
-          { name: 'refresh_interval', selector: { number: { min: 10, max: 3600, step: 5, mode: 'box', unit_of_measurement: 's' } } },
+          { name: 'refresh_interval', disabled: this._data().auto_refresh === false, selector: { number: { min: 10, max: 3600, step: 5, mode: 'box', unit_of_measurement: 's' } } },
         ];
       const zones = [
         { name: 'show_zones', selector: { boolean: {} } },
@@ -94,7 +106,7 @@ export function defineEditor(S, defaults) {
       ];
       return [
         { name: 'title', selector: { text: {} } },
-        { name: 'persons', selector: { entity: { multiple: true, filter: { domain: 'person' } } } },
+        { name: 'persons', selector: { select: { multiple: true, mode: 'list', options: this._available().map((id) => ({ value: id, label: S.personName(this._hass, {}, id) })) } } },
         ...persons,
         { type: 'expandable', name: '', flatten: true, title: t('ed_appearance'), schema: map },
         { type: 'expandable', name: '', flatten: true, title: t('ed_zones'), schema: zones },
@@ -117,7 +129,7 @@ export function defineEditor(S, defaults) {
     }
 
     _render() {
-      if (!this._hass || !this._t || !this._config) return;
+      if (!this._hass || !this._t || !this._config || !this._info) return;
       if (!this._form) {
         this._form = document.createElement('ha-form');
         this._form.computeLabel = (schema) => this._t(`ed_${schema.name}`);

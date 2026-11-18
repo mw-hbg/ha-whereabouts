@@ -48,8 +48,8 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
 (async () => {
   const [S] = await Promise.all([load('shared.js'), load('whereabouts-cards.js')]);
   await Promise.all(['whereabouts-live-card', 'whereabouts-history-card'].map((n) => customElements.whenDefined(n)));
-  const settingsModule = await load('settings-page.js');
-  settingsModule.defineSettingsPage(S);
+  const [settingsModule, download] = await Promise.all([load('settings-page.js'), load('download.js')]);
+  settingsModule.defineSettingsPage(S, download);
 
   class WhereaboutsPanel extends HTMLElement {
     constructor() {
@@ -104,9 +104,10 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
       this._info = info;
       const settings = info.settings || {};
       const visible = VIEWS.filter((v) => {
-        if (v.id === 'live') return info.live_card && settings.view_live !== false;
-        if (v.id === 'history') return info.history_card && settings.view_history !== false;
-        return settings.view_settings !== false;
+        if (v.id === 'live') return settings.view_live !== false;
+        if (v.id === 'history') return settings.view_history !== false;
+        // Settings managed by the administrator: no tab (the address still explains it).
+        return settings.view_settings !== false && !info.synced;
       }).map((v) => v.id);
       const sig = JSON.stringify([info.available, visible]);
       if (!this._ready || sig !== this._sig) {
@@ -188,7 +189,10 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
       if (nav.scrollWidth > nav.clientWidth + 1) nav.classList.add('wap-symbole');
     }
 
-    _navigate(view) {
+    async _navigate(view) {
+      // Unsaved fields on the settings page: ask first.
+      const settings = this._pages.settings;
+      if (this._view === 'settings' && view !== 'settings' && settings && settings.confirmLeave && !await settings.confirmLeave()) return;
       const base = (this._panel && this._panel.url_path) || 'whereabouts';
       const path = `/${base}/${view}`;
       if (window.location.pathname !== path) {

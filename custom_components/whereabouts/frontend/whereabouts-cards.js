@@ -7,12 +7,12 @@ const query = new URL(import.meta.url).search;
 const load = (name) => import(`./${name}${query}`);
 
 (async () => {
-  const [S, live, history, editor] = await Promise.all([
-    load('shared.js'), load('live-card.js'), load('history-card.js'), load('editor.js'),
+  const [S, live, history, editor, download] = await Promise.all([
+    load('shared.js'), load('live-card.js'), load('history-card.js'), load('editor.js'), load('download.js'),
   ]);
   editor.defineEditor(S, { live: live.LIVE_DEFAULTS, history: history.HISTORY_DEFAULTS });
   live.defineLiveCard(S);
-  history.defineHistoryCard(S);
+  history.defineHistoryCard(S, download);
 
   // Card picker: names in the browser's language (no hass object yet)
   await S.loadTranslations((navigator.language || 'en').split('-')[0]);

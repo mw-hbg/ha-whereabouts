@@ -1,4 +1,4 @@
-// Whereabouts – "Location history" card: the stays of a day as route or table.
+// Whereabouts – "Location history" card: the stays of a day or a period as route or table.
 // Data only through the integration's WebSocket API (checked per user).
 
 export const HISTORY_DEFAULTS = {
@@ -13,8 +13,11 @@ export const HISTORY_DEFAULTS = {
 
 const CHECK = '<div class="checkbox"><svg viewBox="0 0 24 24"><polyline points="5 13 10 18 19 7"></polyline></svg></div>';
 const BIN = '<svg viewBox="0 0 24 24"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12M8 9h8v10H8V9m7.5-5-1-1h-5l-1 1H5v2h14V4h-3.5Z"/></svg>';
+const CLOSE = '<svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
+const MAX_DAYS = 31;
 
-export function defineHistoryCard(S) {
+export function defineHistoryCard(S, D) {
+  const { openDownloadDialog, DOWNLOAD_ICON } = D;
   class WhereaboutsHistoryCard extends HTMLElement {
     static getConfigElement() {
       const el = document.createElement('whereabouts-card-editor');
@@ -28,8 +31,10 @@ export function defineHistoryCard(S) {
 
     constructor() {
       super();
-      this._person = 'all';
-      this._date = this._todayStr();
+      this._hidden = new Set(); // persons switched off with their button (not stored)
+      this._range = false; // false = one day, true = period
+      this._date = this._todayStr(); // first day
+      this._to = this._date; // last day (= first day in day mode)
       this._points = [];
       this._map = null;
       this._tiles = [];
@@ -106,7 +111,8 @@ export function defineHistoryCard(S) {
       if (!info.history_card) { this.innerHTML = S.messageHtml(this._t('card_off')); return; }
       const allowed = info.persons || [];
       const wanted = this._config.persons || [];
-      const chosen = wanted.length ? wanted.map((id) => allowed.find((p) => p.entity_id === id)).filter(Boolean) : allowed;
+      const chosen = (wanted.length ? wanted.map((id) => allowed.find((p) => p.entity_id === id)).filter(Boolean) : allowed)
+        .filter((p) => S.showsIn(this._config, p.entity_id, 'history'));
       this._persons = chosen.map((p) => ({
         id: p.entity_id,
         key: p.entity_id.replace(/[^a-z0-9_]/gi, '_'),
@@ -115,7 +121,7 @@ export function defineHistoryCard(S) {
         canDelete: p.can_delete,
       }));
       if (!this._persons.length) { this.innerHTML = S.messageHtml(this._t('no_history_persons')); return; }
-      if (!this._persons.some((p) => p.id === this._person)) this._person = this._persons.length === 1 ? this._persons[0].id : 'all';
+      this._hidden.forEach((id) => { if (!this._personById(id)) this._hidden.delete(id); });
       this._build();
       this._ready = true;
       this._startBackground();
@@ -217,16 +223,41 @@ export function defineHistoryCard(S) {
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
 
-    _shift(delta) {
-      const [y, m, d] = this._date.split('-').map(Number);
+    _addDays(value, delta) {
+      const [y, m, d] = value.split('-').map(Number);
       return this._dateStr(new Date(y, m - 1, d + delta));
     }
 
-    // Every change of date: empty, invalid or future dates jump to today.
-    _setDate(value) {
+    _days(from, to) {
+      const a = from.split('-').map(Number);
+      const b = to.split('-').map(Number);
+      return Math.round((new Date(b[0], b[1] - 1, b[2]) - new Date(a[0], a[1] - 1, a[2])) / 86400000) + 1;
+    }
+
+    // Arrows: one day, or the length of the period.
+    _step(direction) {
+      const n = this._range ? this._days(this._date, this._to) : 1;
+      this._setPeriod(this._addDays(this._date, direction * n), this._addDays(this._to, direction * n));
+    }
+
+    _valid(value) {
+      return /^\d{4}-\d{2}-\d{2}$/.test(value || '');
+    }
+
+    // Every change of date: empty, invalid or future dates jump to today; at most 31 days.
+    _setPeriod(from, to, fixed = 'from') {
       const today = this._todayStr();
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '') || value > today) value = today;
-      this._date = value;
+      if (!this._valid(from) || from > today) from = today;
+      if (!this._range) to = from;
+      if (!this._valid(to) || to > today) to = today;
+      if (to < from) { if (fixed === 'from') to = from; else from = to; }
+      if (this._days(from, to) > MAX_DAYS) {
+        if (fixed === 'from') to = this._addDays(from, MAX_DAYS - 1);
+        else from = this._addDays(to, -(MAX_DAYS - 1));
+        if (to > today) { to = today; from = this._addDays(today, -(MAX_DAYS - 1)); }
+      }
+      this._date = from;
+      this._to = to;
       this._updateDateControls();
       this._rest = this._interval;
       this._renderCountdown();
@@ -234,14 +265,43 @@ export function defineHistoryCard(S) {
       this._load({ fit: true });
     }
 
+    // "Today": the same length, ending today.
+    _today() {
+      const today = this._todayStr();
+      const n = this._range ? this._days(this._date, this._to) : 1;
+      this._setPeriod(this._addDays(today, -(n - 1)), today);
+    }
+
+    _setRange(on) {
+      if (on === this._range) return;
+      this._range = on;
+      this.querySelectorAll('.modus .segment').forEach((b) => b.classList.toggle('aktiv', (b.dataset.modus === 'range') === on));
+      this.querySelector('.bis-feld').hidden = !on;
+      // Period: starts with the last 7 days up to the shown day; day: the last day of the period.
+      if (on) this._setPeriod(this._addDays(this._date, -6), this._date, 'to');
+      else this._setPeriod(this._to, this._to);
+    }
+
     _updateDateControls() {
       const today = this._todayStr();
-      const field = this.querySelector('.datum');
-      field.max = today;
-      field.value = this._date;
-      const isToday = this._date >= today;
+      const from = this.querySelector('.datum');
+      const to = this.querySelector('.datum-bis');
+      from.max = today;
+      from.value = this._date;
+      to.max = today;
+      to.min = this._date;
+      to.value = this._to;
+      const isToday = this._to >= today;
       this.querySelector('.nextDay').disabled = isToday;
-      this.querySelector('.today').disabled = isToday;
+      this.querySelector('.today').disabled = isToday && (!this._range || this._date === this._addDays(today, -(this._days(this._date, this._to) - 1)));
+    }
+
+    _visiblePersons() {
+      return this._persons.filter((p) => !this._hidden.has(p.id));
+    }
+
+    _visiblePoints() {
+      return this._points.filter((p) => !this._hidden.has(p.person));
     }
 
     // --- texts ------------------------------------------------------------------------
@@ -249,6 +309,26 @@ export function defineHistoryCard(S) {
       const from = String(p.time || '').slice(0, 5);
       const to = String(p.end || '').slice(0, 5);
       return this._t('time', { time: to && to !== from ? `${from} – ${to}` : from });
+    }
+
+    // "2 h 36 min" from start and end of a stay (same day).
+    _durationText(p) {
+      const minutes = (v) => { const [h, m] = String(v || '').split(':').map(Number); return h * 60 + m; };
+      if (!p.end || !p.time) return '';
+      const n = minutes(p.end) - minutes(p.time);
+      if (!(n > 0)) return '';
+      const h = Math.floor(n / 60);
+      const m = n % 60;
+      if (!h) return this._t('duration_m', { m });
+      return m ? this._t('duration_hm', { h, m }) : this._t('duration_h', { h });
+    }
+
+    _dayText(value, weekday = true) {
+      const [y, m, d] = value.split('-').map(Number);
+      const options = { day: '2-digit', month: '2-digit' };
+      if (weekday) options.weekday = 'short';
+      if (y !== new Date().getFullYear()) options.year = 'numeric';
+      return new Date(y, m - 1, d).toLocaleDateString(S.language(this._hass), options);
     }
 
     _placeText(p) {
@@ -266,12 +346,9 @@ export function defineHistoryCard(S) {
       const c = this._config;
       this.style.display = 'block';
       S.applyHeight(this, c);
-      const multi = this._persons.length > 1;
       const personCss = this._persons.map((p) => `
-          .personWahl .p-${p.key} .farbpunkt { background: ${p.color}; }
-          .personWahl .segment.p-${p.key}.aktiv { background: ${p.color}; color: #fff; }
-          .leaflet-popup.popup-${p.key} .leaflet-popup-content-wrapper { box-shadow: inset 4px 0 0 ${p.color}, 0 3px 14px rgba(0,0,0,0.3); }`).join('');
-      const gradient = this._persons.map((p) => p.color).join(', ');
+          .personWahl .person.p-${p.key}.aktiv { background: ${p.color}; border-color: ${p.color}; color: #fff; }
+          .statusbar .wer.p-${p.key} { color: ${p.color}; }`).join('');
       const esc = S.escapeHtml;
       this.innerHTML = `
         ${S.leafletCss()}
@@ -295,10 +372,20 @@ export function defineHistoryCard(S) {
             .segmented .segment:last-child { border-right: none; }
             .segmented .segment:hover { background: var(--secondary-background-color); }
             .personWahl { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-            .personWahl .farbpunkt { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
-            .personWahl .p-all .farbpunkt { background: conic-gradient(${gradient}); }
-            .personWahl .segment.aktiv .farbpunkt { display: none; }
-            .personWahl .segment.p-all.aktiv { background: linear-gradient(90deg, ${gradient}); color: #fff; }
+            .controls .personWahl .person { color: var(--secondary-text-color); background: var(--secondary-background-color, rgba(127,127,127,.12));
+                                            border-color: transparent; }
+            .controls .personWahl .person:hover { filter: brightness(.95); }
+            .bis-feld { display: inline-flex; align-items: center; gap: 6px; }
+            .bis-feld[hidden] { display: none; }
+            .controls button.icon svg { width: 20px; height: 20px; fill: currentColor; display: block; }
+            .controls button.herunterladen { padding: 7px 9px; }
+            .niemand { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; padding: 30px; text-align: center;
+                       color: var(--secondary-text-color); font-size: 15px; }
+            .niemand[hidden] { display: none; }
+            .wa-map .niemand-hinweis { position: absolute; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center;
+                                       pointer-events: none; }
+            .wa-map .niemand-hinweis span { background: var(--card-background-color, #fff); color: var(--primary-text-color); padding: 10px 16px;
+                                            border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.25); font-size: 15px; }
             ${personCss}
             .controls button { font-family: inherit; font-size: 15px; padding: 8px 14px; border: 1px solid var(--divider-color);
                                border-radius: 8px; background: var(--card-background-color); color: var(--primary-text-color); cursor: pointer; }
@@ -327,21 +414,28 @@ export function defineHistoryCard(S) {
             .auswahl button { font-family: inherit; font-size: 14px; padding: 7px 12px; border: 1px solid var(--divider-color);
                               border-radius: 8px; background: var(--card-background-color); color: var(--primary-text-color); cursor: pointer; }
             .auswahl button:disabled { opacity: 0.5; cursor: default; }
-            .auswahl button.loeschen, .popup button.loeschen { color: var(--error-color, #db4437); border: 1px solid var(--error-color, #db4437); }
-            .auswahl button.loeschen:hover:not(:disabled), .popup button.loeschen:hover:not(:disabled) { background: var(--error-color, #db4437); color: #fff; }
-            .leaflet-popup-content { margin: 12px 14px; }
-            .popup { display: grid; grid-template-columns: minmax(0, 1fr) 32px; grid-template-rows: auto auto;
-                     column-gap: 10px; row-gap: 6px; align-items: center; font-size: 14px; }
-            .popup .zeile1 { grid-column: 1; grid-row: 1; display: flex; align-items: center; gap: 8px; min-width: 0; padding-right: 8px; }
-            .popup .zeit { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
-            .popup .ort { grid-column: 1 / span 2; grid-row: 2; overflow-wrap: anywhere; }
-            .popup.mit-loeschen .ort { grid-column: 1; }
-            .popup .marke { white-space: nowrap; flex: 0 0 auto; color: #fff; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 8px;
-                            overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
-            .popup button.loeschen { grid-column: 2; grid-row: 2; align-self: end; display: inline-flex; align-items: center; justify-content: center;
-                                     width: 32px; height: 32px; padding: 0; border-radius: 6px; background: transparent; cursor: pointer; }
-            .popup button.loeschen svg { width: 20px; height: 20px; fill: var(--error-color, #db4437); }
-            .popup button.loeschen:hover:not(:disabled) svg { fill: #fff; }
+            .auswahl button.loeschen { color: var(--error-color, #db4437); border: 1px solid var(--error-color, #db4437); }
+            .auswahl button.loeschen:hover:not(:disabled) { background: var(--error-color, #db4437); color: #fff; }
+            .leaflet-popup.wa-eintrag .leaflet-popup-content-wrapper { border-radius: 14px; background: var(--card-background-color, #fff);
+                                                                       color: var(--primary-text-color, #222); }
+            .leaflet-popup.wa-eintrag .leaflet-popup-tip { background: var(--card-background-color, #fff); }
+            .leaflet-popup.wa-eintrag .leaflet-popup-content { margin: 12px 14px 10px; width: auto !important; min-width: 220px; max-width: 300px; }
+            .popup { font-size: 14px; line-height: 1.35; }
+            .popup .kopf { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+            .popup .punkt { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+            .popup .name { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .popup .zu { flex: 0 0 auto; width: 28px; height: 28px; margin: -4px -6px -4px 0; padding: 0; border: none; border-radius: 50%;
+                         background: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+            .popup .zu svg { width: 18px; height: 18px; fill: var(--secondary-text-color, #666); }
+            .popup .zu:hover { background: rgba(127,127,127,.15); }
+            .popup .ort { font-size: 17px; font-weight: 500; overflow-wrap: anywhere; }
+            .popup .art { font-size: 13px; color: var(--secondary-text-color, #666); margin-top: 1px; }
+            .popup .zeit { font-size: 13px; color: var(--secondary-text-color, #666); margin-top: 4px; font-variant-numeric: tabular-nums; }
+            .popup button.loeschen { margin: 10px 0 0 -6px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px;
+                                     border: none; border-radius: 8px; background: none; cursor: pointer; font: inherit; font-size: 14px;
+                                     color: var(--error-color, #db4437); }
+            .popup button.loeschen svg { width: 16px; height: 16px; fill: currentColor; }
+            .popup button.loeschen:hover:not(:disabled) { background: rgba(219,68,55,.1); }
             .popup button.loeschen:disabled { opacity: 0.5; cursor: default; }
             .legende { background: var(--card-background-color, #fff); color: var(--primary-text-color, #222); padding: 8px 12px;
                        border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.25); font-size: 14px; line-height: 1.6; }
@@ -375,31 +469,31 @@ export function defineHistoryCard(S) {
             .statusbar { display: flex; align-items: center; gap: 8px; text-align: center; font-size: 13px;
                          color: var(--secondary-text-color); padding: 4px 8px 4px 14px; line-height: 1.6; border-top: 1px solid var(--divider-color); }
             .statusbar.fehler .status { color: var(--error-color, #db4437); }
-            .statusbar .export { display: inline-flex; gap: 6px; }
-            .statusbar .export button { font: inherit; font-size: 12px; padding: 3px 8px; border: 1px solid var(--divider-color);
-                                        border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
-            .statusbar .export button:hover { background: var(--secondary-background-color); }
+            .statusbar .wer { font-weight: 500; }
 `, '.wa-history')}</style>
           ${c.title ? `<div class="wa-titel">${esc(c.title)}</div>` : ''}
           <div class="controls">
             <div class="zone links">
               <div class="personWahl">
-                ${multi ? `<div class="segmented"><button class="segment p-all${this._person === 'all' ? ' aktiv' : ''}" data-wert="all"><span class="farbpunkt"></span>${esc(t('all'))}</button></div>` : ''}
-                <div class="segmented">
-                  ${this._persons.map((p) => `<button class="segment p-${p.key}${this._person === p.id ? ' aktiv' : ''}" data-wert="${esc(p.id)}"><span class="farbpunkt"></span>${esc(p.name)}</button>`).join('')}
-                </div>
+                ${this._persons.map((p) => `<button class="person p-${p.key}${this._hidden.has(p.id) ? '' : ' aktiv'}" data-wert="${esc(p.id)}" aria-pressed="${this._hidden.has(p.id) ? 'false' : 'true'}" title="${esc(t(this._hidden.has(p.id) ? 'show_person' : 'hide_person', { name: p.name }))}">${esc(p.name)}</button>`).join('')}
               </div>
             </div>
             <div class="zone mitte">
-              <button class="prevDay" title="${esc(t('prev_day'))}" aria-label="${esc(t('prev_day'))}">&larr;</button>
+              <div class="segmented modus">
+                <button class="segment${this._range ? '' : ' aktiv'}" data-modus="day">${esc(t('mode_day'))}</button>
+                <button class="segment${this._range ? ' aktiv' : ''}" data-modus="range">${esc(t('mode_range'))}</button>
+              </div>
+              <button class="prevDay" title="${esc(t(this._range ? 'prev_range' : 'prev_day'))}" aria-label="${esc(t('prev_day'))}">&larr;</button>
               <input type="date" class="datum" aria-label="${esc(t('date'))}">
-              <button class="nextDay" title="${esc(t('next_day'))}" aria-label="${esc(t('next_day'))}">&rarr;</button>
+              <span class="bis-feld"${this._range ? '' : ' hidden'}><span class="bis">–</span><input type="date" class="datum-bis" aria-label="${esc(t('to'))}"></span>
+              <button class="nextDay" title="${esc(t(this._range ? 'next_range' : 'next_day'))}" aria-label="${esc(t('next_day'))}">&rarr;</button>
               <button class="today">${esc(t('today'))}</button>
             </div>
             <div class="zone rechts">
               <div class="aktionen">
                 <button class="auswahlBtn" style="display:none;">${esc(t('multi_select'))}</button>
                 <button class="ansicht"></button>
+                ${c.show_export ? `<button class="icon herunterladen" title="${esc(t('download_title'))}" aria-label="${esc(t('download_title'))}">${DOWNLOAD_ICON}</button>` : ''}
               </div>
             </div>
           </div>
@@ -411,9 +505,9 @@ export function defineHistoryCard(S) {
           <div class="wa-map"></div>
           <div class="tabelle"></div>
           <div class="leer" style="display:none;"></div>
+          <div class="niemand" hidden>${esc(t('no_person_selected'))}</div>
           <div class="statusbar">
             <div class="infos"><span class="status"></span>
-              ${c.show_export ? `<span class="export"><button data-format="csv">${esc(t('export_csv'))}</button><button data-format="gpx">${esc(t('export_gpx'))}</button></span>` : ''}
               <span class="rest"></span>
             </div>
             <button class="neuladen" title="${esc(t('reload_now'))}" aria-label="${esc(t('reload_now'))}">
@@ -424,32 +518,36 @@ export function defineHistoryCard(S) {
         </ha-card>`;
 
       this._updateDateControls();
-      this.querySelectorAll('.personWahl .segment').forEach((button) => {
-        button.addEventListener('click', () => {
-          if (button.dataset.wert === this._person) return;
-          this._person = button.dataset.wert;
-          this.querySelectorAll('.personWahl .segment').forEach((b) => b.classList.toggle('aktiv', b === button));
-          this._selected.clear();
-          this._load({ fit: true });
-        });
+      this.querySelectorAll('.personWahl .person').forEach((button) => {
+        button.addEventListener('click', () => this._togglePerson(button.dataset.wert));
       });
-      const field = this.querySelector('.datum');
+      this.querySelectorAll('.modus .segment').forEach((b) => b.addEventListener('click', () => this._setRange(b.dataset.modus === 'range')));
       // Typing reports every digit (e.g. year "0002"): wait a moment and ignore unfinished years.
-      field.addEventListener('change', (e) => {
-        clearTimeout(this._dateTimer);
-        const value = e.target.value;
-        if (value && Number(value.slice(0, 4)) < 2000) return;
-        this._dateTimer = setTimeout(() => this._setDate(value), 400);
-      });
-      field.addEventListener('blur', (e) => {
-        clearTimeout(this._dateTimer);
-        const value = e.target.value;
-        const unfinished = value && Number(value.slice(0, 4)) < 2000;
-        if (unfinished || value !== this._date) this._setDate(unfinished ? '' : value);
-      });
-      this.querySelector('.today').addEventListener('click', () => this._setDate(this._todayStr()));
-      this.querySelector('.prevDay').addEventListener('click', () => this._setDate(this._shift(-1)));
-      this.querySelector('.nextDay').addEventListener('click', () => this._setDate(this._shift(1)));
+      const watch = (field, apply, current) => {
+        field.addEventListener('change', (e) => {
+          clearTimeout(this._dateTimer);
+          const value = e.target.value;
+          if (value && Number(value.slice(0, 4)) < 2000) return;
+          this._dateTimer = setTimeout(() => apply(value), 400);
+        });
+        field.addEventListener('blur', (e) => {
+          clearTimeout(this._dateTimer);
+          const value = e.target.value;
+          const unfinished = value && Number(value.slice(0, 4)) < 2000;
+          if (unfinished || value !== current()) apply(unfinished ? '' : value);
+        });
+      };
+      watch(this.querySelector('.datum'), (v) => {
+        if (!this._range) { this._setPeriod(v, v); return; }
+        // Moving the first day keeps the length when possible.
+        this._setPeriod(v, this._valid(v) ? this._addDays(v, this._days(this._date, this._to) - 1) : this._to);
+      }, () => this._date);
+      watch(this.querySelector('.datum-bis'), (v) => this._setPeriod(this._date, v, 'to'), () => this._to);
+      this.querySelector('.today').addEventListener('click', () => this._today());
+      this.querySelector('.prevDay').addEventListener('click', () => this._step(-1));
+      this.querySelector('.nextDay').addEventListener('click', () => this._step(1));
+      const download = this.querySelector('.herunterladen');
+      if (download) download.addEventListener('click', () => this._download());
       this.querySelector('.ansicht').addEventListener('click', () => {
         this._tableView = !this._tableView;
         if (!this._tableView && this._selectMode) this._setSelectMode(false);
@@ -465,7 +563,6 @@ export function defineHistoryCard(S) {
       this.querySelector('.auswahlBtn').addEventListener('click', () => this._setSelectMode(!this._selectMode));
       this.querySelector('.alleBtn').addEventListener('click', () => this._selectAll());
       this.querySelector('.loeschenBtn').addEventListener('click', () => this._delete([...this._selected], this.querySelector('.loeschenBtn')));
-      this.querySelectorAll('.export button').forEach((b) => b.addEventListener('click', () => this._export(b.dataset.format)));
       this._initMap();
     }
 
@@ -475,7 +572,8 @@ export function defineHistoryCard(S) {
         await S.waitForCss(this);
         const home = this._hass.config || {};
         const mapDiv = this.querySelector('.wa-map');
-        this._map = window.L.map(mapDiv).setView([home.latitude || 0, home.longitude || 0], 14);
+        this._map = window.L.map(mapDiv, { zoomControl: false }).setView([home.latitude || 0, home.longitude || 0], 14);
+        window.L.control.zoom({ position: 'bottomright', zoomInTitle: this._t('zoom_in'), zoomOutTitle: this._t('zoom_out') }).addTo(this._map);
         this._setTiles(S.isDark(this._hass, this._config.map_style));
         S.watchZoneNames(this._map, mapDiv, this._config);
         this._drawZones();
@@ -504,8 +602,23 @@ export function defineHistoryCard(S) {
     }
 
     // --- data ---------------------------------------------------------------------------
-    _selectedPersons() {
-      return this._person === 'all' ? this._persons : this._persons.filter((p) => p.id === this._person);
+    // Person button: hide or show (only until reload); the map zooms to what is left.
+    _togglePerson(id) {
+      const person = this._personById(id);
+      if (!person) return;
+      if (this._hidden.has(id)) this._hidden.delete(id); else this._hidden.add(id);
+      const on = !this._hidden.has(id);
+      const button = this.querySelector(`.personWahl .p-${person.key}`);
+      if (button) {
+        button.classList.toggle('aktiv', on);
+        button.setAttribute('aria-pressed', on ? 'true' : 'false');
+        button.title = this._t(on ? 'hide_person' : 'show_person', { name: person.name });
+      }
+      [...this._selected].forEach((k) => { if (k.startsWith(`${id}|`) && !on) this._selected.delete(k); });
+      this._renderStatusText();
+      this._updateView();
+      this._updateSelection();
+      this._drawMap(true);
     }
 
     // options.fit: zoom the map to the route (day/person changed); false = keep the view.
@@ -521,11 +634,14 @@ export function defineHistoryCard(S) {
         bar.classList.remove('fehler');
         status.textContent = t('loading');
       }
-      const persons = this._selectedPersons();
+      const persons = this._persons;
       const day = this._date;
+      const last = this._to;
+      const request = (p) => (last !== day
+        ? { type: 'whereabouts/history', person: p.id, date: day, date_to: last }
+        : { type: 'whereabouts/history', person: p.id, date: day });
       // allSettled: if one person fails, the others are still shown.
-      const results = await Promise.allSettled(persons.map((p) =>
-        this._hass.callWS({ type: 'whereabouts/history', person: p.id, date: day })));
+      const results = await Promise.allSettled(persons.map((p) => this._hass.callWS(request(p))));
       if (number !== this._loadNo) return; // something newer was requested meanwhile
       this._loadedAt = new Date();
 
@@ -538,13 +654,14 @@ export function defineHistoryCard(S) {
           return;
         }
         (result.value.stays || []).forEach((s) => points.push({
-          person: persons[i].id, time: s.start, end: s.end, state: s.state,
+          person: persons[i].id, date: s.date || day, time: s.start, end: s.end, state: s.state,
           lat: s.latitude, lon: s.longitude, address: s.address, times: s.times,
         }));
       });
-      points.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : a.person.localeCompare(b.person)));
+      const order = (p) => `${p.date} ${p.time}`;
+      points.sort((a, b) => (order(a) < order(b) ? -1 : order(a) > order(b) ? 1 : a.person.localeCompare(b.person)));
 
-      const signature = `${day}|${points.map((p) => `${this._keyOf(p)}${p.end}${p.address}`).join(',')}`;
+      const signature = `${day}|${last}|${points.map((p) => `${this._keyOf(p)}${p.end}${p.address}`).join(',')}`;
       if (options.onlyIfChanged && signature === this._signature && !failed.length) return;
       this._signature = signature;
 
@@ -554,51 +671,58 @@ export function defineHistoryCard(S) {
       const present = new Set(points.map((p) => this._keyOf(p)));
       this._selected.forEach((k) => { if (!present.has(k)) this._selected.delete(k); });
 
-      let text;
-      const range = () => {
-        const end = points.reduce((max, p) => ((p.end || p.time) > max ? (p.end || p.time) : max), '');
-        return ` — ${t('time', { time: t('range', { from: points[0].time.slice(0, 5), to: end.slice(0, 5) }) })}`;
-      };
-      if (!points.length) text = failed.length ? '' : t('no_data');
-      else if (persons.length > 1) {
-        text = persons.filter((p) => !failed.includes(p.name))
-          .map((p) => `${p.name}: ${this._countText(points.filter((x) => x.person === p.id).length)}`).join(' · ') + range();
-      } else text = this._countText(points.length) + range();
-      this.querySelector('.leer').textContent = failed.length ? t('load_failed') : t('no_data');
-      if (failed.length) text = (text ? `${text} · ` : '') + t('error_for', { names: failed.join(', ') });
-      if (this._mapError) text += (text ? ' · ' : '') + t('map_unavailable');
+      this._failed = failed;
+      this.querySelector('.leer').textContent = failed.length ? t('load_failed') : t(last !== day ? 'no_data_range' : 'no_data');
       bar.classList.toggle('fehler', failed.length > 0);
-      status.textContent = text;
+      this._renderStatusText();
 
       this._updateView();
       this._updateSelection();
       this._drawMap(fit);
     }
 
-    // Unique key (with "All" the same time can occur for several persons).
-    _keyOf(p) {
-      return `${p.person}|${p.time}`;
+    // Status bar: names in their colour with the number of entries, then the period / times.
+    _renderStatusText() {
+      const t = this._t;
+      const esc = S.escapeHtml;
+      const status = this.querySelector('.status');
+      if (!status) return;
+      const failed = this._failed || [];
+      const persons = this._visiblePersons().filter((p) => !failed.includes(p.name));
+      const points = this._visiblePoints();
+      const parts = [];
+      const multiDay = this._to !== this._date;
+      if (!persons.length && !failed.length) parts.push(esc(t('no_person_selected')));
+      else if (!points.length) { if (!failed.length) parts.push(esc(t(multiDay ? 'no_data_range' : 'no_data'))); }
+      else if (persons.length > 1 || this._persons.length > 1) {
+        parts.push(persons.map((p) => `<span class="wer p-${p.key}">${esc(p.name)}</span>: ${esc(this._countText(points.filter((x) => x.person === p.id).length))}`).join(' · '));
+      } else parts.push(esc(this._countText(points.length)));
+      let text = parts.join('');
+      if (multiDay) {
+        text += `${text ? ' — ' : ''}${esc(t('range', { from: this._dayText(this._date, false), to: this._dayText(this._to, false) }))}`;
+      } else if (points.length) {
+        const end = points.reduce((max, p) => ((p.end || p.time) > max ? (p.end || p.time) : max), '');
+        text += ` — ${esc(t('time', { time: t('range', { from: points[0].time.slice(0, 5), to: end.slice(0, 5) }) }))}`;
+      }
+      if (failed.length) text += (text ? ' · ' : '') + esc(t('error_for', { names: failed.join(', ') }));
+      if (this._mapError) text += (text ? ' · ' : '') + esc(t('map_unavailable'));
+      status.innerHTML = text;
     }
 
-    async _export(format) {
-      const persons = this._selectedPersons();
-      for (const p of persons) {
-        const url = `/api/whereabouts/export?person=${encodeURIComponent(p.id)}&from=${this._date}&to=${this._date}&format=${format}`;
-        try {
-          const response = await this._hass.fetchWithAuth(url);
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const blob = await response.blob();
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = `whereabouts_${p.id.split('.')[1]}_${this._date}.${format}`;
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          setTimeout(() => URL.revokeObjectURL(link.href), 10000);
-        } catch (err) {
-          console.error('Whereabouts: export failed', err);
-        }
-      }
+    // Unique key: person, day and start of the stay.
+    _keyOf(p) {
+      return `${p.person}|${p.date}|${p.time}`;
+    }
+
+    _download() {
+      openDownloadDialog(S, {
+        hass: this._hass,
+        t: this._t,
+        persons: this._persons.map((p) => ({ id: p.id, name: p.name, color: p.color })),
+        selected: this._visiblePersons().map((p) => p.id),
+        from: this._date,
+        to: this._to,
+      });
     }
 
     // --- map --------------------------------------------------------------------------
@@ -613,13 +737,23 @@ export function defineHistoryCard(S) {
       if (this._routeLayer) { this._map.removeLayer(this._routeLayer); this._routeLayer = null; }
       if (this._markerLayer) { this._map.removeLayer(this._markerLayer); this._markerLayer = null; }
       this._showLegend();
-      if (!this._points.length) return;
+      const mapDiv = this.querySelector('.wa-map');
+      let hint = mapDiv.querySelector('.niemand-hinweis');
+      const nobody = !this._visiblePersons().length;
+      if (nobody && !hint) {
+        hint = document.createElement('div');
+        hint.className = 'niemand-hinweis';
+        hint.innerHTML = `<span>${S.escapeHtml(this._t('no_person_selected'))}</span>`;
+        mapDiv.appendChild(hint);
+      } else if (!nobody && hint) hint.remove();
+      if (!this._visiblePoints().length) return;
 
       const L = window.L;
       this._routeLayer = L.featureGroup();
       this._markerLayer = L.layerGroup();
       // Each person in its colour: line and small points; start = white circle with ▶, end = coloured circle with flag.
-      this._persons.forEach((person) => {
+      // A period is one continuous route over all its days.
+      this._visiblePersons().forEach((person) => {
         const own = this._points.filter((p) => p.person === person.id);
         if (!own.length) return;
         L.polyline(own.map((p) => [p.lat, p.lon]), { color: person.color, weight: 4, opacity: 0.8 }).addTo(this._routeLayer);
@@ -639,7 +773,7 @@ export function defineHistoryCard(S) {
           } else {
             marker = L.circleMarker([p.lat, p.lon], { radius: 5, color: person.color, weight: 1, fillColor: person.color, fillOpacity: 0.6 });
           }
-          marker.bindPopup(() => this._popup(p), { className: `popup-${person.key}`, minWidth: 190, maxWidth: 300 });
+          marker.bindPopup(() => this._popup(p), { className: 'wa-eintrag', closeButton: false, minWidth: 220, maxWidth: 300 });
           this._markerLayer.addLayer(marker);
         });
       });
@@ -675,11 +809,11 @@ export function defineHistoryCard(S) {
     _showLegend() {
       if (!this._map) return;
       if (this._legend) { this._map.removeControl(this._legend); this._legend = null; }
-      if (!this._config.show_legend) return;
+      if (!this._config.show_legend || !this._visiblePersons().length) return;
       const legend = window.L.control({ position: 'bottomleft' });
       legend.onAdd = () => {
         const div = window.L.DomUtil.create('div', 'legende');
-        div.innerHTML = this._selectedPersons().map((p) =>
+        div.innerHTML = this._visiblePersons().map((p) =>
           `<div class="eintrag"><span class="linie" style="background:${p.color}"></span>${S.escapeHtml(p.name)}</div>`).join('')
           + `<div class="eintrag hinweis">${this._symbol('start', '#666', 18)}${S.escapeHtml(this._t('start'))}`
           + `<span class="abstand"></span>${this._symbol('end', '#666', 18)}${S.escapeHtml(this._t('end'))}</div>`;
@@ -689,32 +823,49 @@ export function defineHistoryCard(S) {
       this._legend = legend;
     }
 
-    // Two rows: name and time on top, place below; delete at the bottom right (never under the X).
+    // Header: colour dot, name, close; the place large; time and duration small; delete as a red text button.
     _popup(p) {
+      const t = this._t;
       const person = this._personById(p.person);
       const box = document.createElement('div');
       box.className = 'popup';
-      const top = document.createElement('div');
-      top.className = 'zeile1';
+      const head = document.createElement('div');
+      head.className = 'kopf';
+      const dot = document.createElement('span');
+      dot.className = 'punkt';
+      dot.style.background = person.color;
       const name = document.createElement('span');
-      name.className = 'marke';
-      name.style.background = person.color;
+      name.className = 'name';
       name.textContent = person.name;
-      const time = document.createElement('span');
-      time.className = 'zeit';
-      time.textContent = this._timeText(p);
-      top.append(name, time);
+      const close = document.createElement('button');
+      close.className = 'zu';
+      close.type = 'button';
+      close.title = t('close');
+      close.setAttribute('aria-label', t('close'));
+      close.innerHTML = CLOSE;
+      close.addEventListener('click', (e) => { e.stopPropagation(); this._map.closePopup(); });
+      head.append(dot, name, close);
       const place = document.createElement('div');
       place.className = 'ort';
-      place.textContent = this._placeText(p);
-      box.append(top, place);
+      const away = p.state === 'not_home' && p.address;
+      place.textContent = away ? p.address : S.placeText(t, p.state);
+      box.append(head, place);
+      if (away) {
+        const kind = document.createElement('div');
+        kind.className = 'art';
+        kind.textContent = S.placeText(t, p.state);
+        box.appendChild(kind);
+      }
+      const time = document.createElement('div');
+      time.className = 'zeit';
+      const duration = this._durationText(p);
+      time.textContent = [this._to !== this._date ? this._dayText(p.date) : '', this._timeText(p), duration].filter(Boolean).join(' · ');
+      box.appendChild(time);
       if (person.canDelete) {
-        box.classList.add('mit-loeschen');
         const button = document.createElement('button');
         button.className = 'loeschen';
-        button.title = this._t('delete_entry');
-        button.setAttribute('aria-label', this._t('delete_entry'));
-        button.innerHTML = BIN;
+        button.type = 'button';
+        button.innerHTML = `${BIN}<span>${S.escapeHtml(t('delete_entry'))}</span>`;
         button.addEventListener('click', (e) => { e.stopPropagation(); this._delete([this._keyOf(p)], button); });
         box.appendChild(button);
       }
@@ -725,18 +876,22 @@ export function defineHistoryCard(S) {
     _renderTable() {
       const t = this._t;
       const box = this.querySelector('.tabelle');
-      if (!this._points.length) {
-        box.innerHTML = `<p style="color:var(--secondary-text-color);font-size:14px;padding:14px;">${S.escapeHtml(t('no_data'))}</p>`;
+      const points = this._visiblePoints();
+      this._rows = points;
+      if (!points.length) {
+        box.innerHTML = '';
         return;
       }
-      const withPerson = this._person === 'all';
+      const withPerson = this._visiblePersons().length > 1;
+      const withDate = this._to !== this._date;
       const rowStyle = (c) => `--zeile-bg:${c}14;--zeile-hover:${c}29;--zeile-sel:${c}47;--zeile-farbe:${c}`;
       let html = '<table><thead><tr>';
       if (this._selectMode) html += '<th class="wahl"></th>';
+      if (withDate) html += `<th>${S.escapeHtml(t('col_date'))}</th>`;
       html += `<th>${S.escapeHtml(t('col_time'))}</th>`;
       if (withPerson) html += `<th>${S.escapeHtml(t('col_person'))}</th>`;
       html += `<th>${S.escapeHtml(t('col_place'))}</th><th>${S.escapeHtml(t('col_lat'))}</th><th>${S.escapeHtml(t('col_lon'))}</th></tr></thead><tbody>`;
-      this._points.forEach((p, i) => {
+      points.forEach((p, i) => {
         const person = this._personById(p.person);
         const key = this._keyOf(p);
         const classes = [];
@@ -744,6 +899,7 @@ export function defineHistoryCard(S) {
         if (this._selectMode && this._selected.has(key)) classes.push('gewaehlt');
         html += `<tr data-key="${S.escapeHtml(key)}" data-index="${i}" class="${classes.join(' ')}" style="${rowStyle(person.color)}">`;
         if (this._selectMode) html += `<td class="wahl">${CHECK}</td>`;
+        if (withDate) html += `<td>${S.escapeHtml(this._dayText(p.date))}</td>`;
         html += `<td>${S.escapeHtml(this._timeText(p))}</td>`;
         if (withPerson) html += `<td><span class="punkt" style="background:${person.color}"></span>${S.escapeHtml(person.name)}</td>`;
         html += `<td>${S.escapeHtml(this._placeText(p))}</td><td>${Number(p.lat).toFixed(6)}</td><td>${Number(p.lon).toFixed(6)}</td></tr>`;
@@ -762,7 +918,7 @@ export function defineHistoryCard(S) {
       if (!this._persons.some((p) => p.canDelete)) return;
       const index = Number(row.dataset.index);
       const key = row.dataset.key;
-      const own = this._points[index] && this._personById(this._points[index].person);
+      const own = this._rows[index] && this._personById(this._rows[index].person);
       if (!own || !own.canDelete) return; // only entries the user may delete can be selected
       const single = e.ctrlKey || e.metaKey;
       const range = e.shiftKey;
@@ -772,19 +928,19 @@ export function defineHistoryCard(S) {
         this.querySelector('.auswahlBtn').classList.add('aktiv');
         this.querySelector('.auswahl').classList.add('aktiv');
       }
-      if (range && this._anchor != null && this._points[this._anchor]) {
+      if (range && this._anchor != null && this._rows[this._anchor]) {
         const from = Math.min(this._anchor, index);
         const to = Math.max(this._anchor, index);
         for (let i = from; i <= to; i++) {
-          if (this._personById(this._points[i].person).canDelete) this._selected.add(this._keyOf(this._points[i]));
+          if (this._personById(this._rows[i].person).canDelete) this._selected.add(this._keyOf(this._rows[i]));
         }
         if (this._lastRange) {
           this._lastRange.forEach((k) => {
-            const idx = this._points.findIndex((p) => this._keyOf(p) === k);
+            const idx = this._rows.findIndex((p) => this._keyOf(p) === k);
             if (idx < from || idx > to) this._selected.delete(k);
           });
         }
-        this._lastRange = this._points.slice(from, to + 1).map((p) => this._keyOf(p));
+        this._lastRange = this._rows.slice(from, to + 1).map((p) => this._keyOf(p));
       } else {
         if (this._selected.has(key)) this._selected.delete(key);
         else this._selected.add(key);
@@ -813,7 +969,7 @@ export function defineHistoryCard(S) {
     }
 
     _selectAll() {
-      const all = this._points.filter((p) => this._personById(p.person).canDelete).map((p) => this._keyOf(p));
+      const all = this._visiblePoints().filter((p) => this._personById(p.person).canDelete).map((p) => this._keyOf(p));
       const allSelected = all.length > 0 && all.every((k) => this._selected.has(k));
       if (allSelected) this._selected.clear();
       else all.forEach((k) => this._selected.add(k));
@@ -822,27 +978,29 @@ export function defineHistoryCard(S) {
     }
 
     // --- delete ---------------------------------------------------------------------------
-    // keys: "person|HH:MM:SS" (start of the stay). A stay can consist of several rows (times).
+    // keys: "person|YYYY-MM-DD|HH:MM:SS" (start of the stay). A stay can consist of several rows (times).
     async _delete(keys, button) {
       const t = this._t;
       if (!keys.length) return;
-      const day = this._date; // keep: the user may change the day meanwhile
       const byKey = new Map(this._points.map((p) => [this._keyOf(p), p]));
       // eslint-disable-next-line no-alert
       if (!confirm(keys.length === 1 ? t('confirm_delete_one') : t('confirm_delete_many', { n: keys.length }))) return;
       const original = button ? button.innerHTML : '';
       if (button) { button.disabled = true; if (!button.querySelector('svg')) button.textContent = t('deleting'); }
       try {
-        const perPerson = {};
+        // One request per person and day.
+        const groups = new Map();
         keys.forEach((k) => {
-          const [person, time] = [k.slice(0, k.lastIndexOf('|')), k.slice(k.lastIndexOf('|') + 1)];
           const p = byKey.get(k);
-          const times = p && Array.isArray(p.times) && p.times.length ? p.times : [time];
-          (perPerson[person] = perPerson[person] || []).push(...times);
+          if (!p) return;
+          const times = Array.isArray(p.times) && p.times.length ? p.times : [p.time];
+          const id = `${p.person}|${p.date}`;
+          if (!groups.has(id)) groups.set(id, { person: p.person, date: p.date, times: [] });
+          groups.get(id).times.push(...times);
         });
-        for (const person of Object.keys(perPerson)) {
-          if (!this._personById(person) || !this._personById(person).canDelete) continue;
-          await this._hass.callWS({ type: 'whereabouts/delete', person, date: day, times: perPerson[person] });
+        for (const group of groups.values()) {
+          if (!this._personById(group.person) || !this._personById(group.person).canDelete) continue;
+          await this._hass.callWS({ type: 'whereabouts/delete', person: group.person, date: group.date, times: group.times });
         }
       } catch (err) {
         console.error('Whereabouts: deleting failed', err);
@@ -881,8 +1039,11 @@ export function defineHistoryCard(S) {
       const empty = this.querySelector('.leer');
       const button = this.querySelector('.ansicht');
       const selectButton = this.querySelector('.auswahlBtn');
-      const none = this._points.length === 0;
+      const nobody = !this._visiblePersons().length;
+      const none = this._visiblePoints().length === 0 && !nobody;
       empty.style.display = none ? 'block' : 'none';
+      const noPerson = this.querySelector('.niemand');
+      noPerson.hidden = !(nobody && this._tableView);
       button.style.display = this._mapError ? 'none' : '';
       const canSelect = this._persons.some((p) => p.canDelete);
       if (this._tableView) {
@@ -894,12 +1055,12 @@ export function defineHistoryCard(S) {
         selectButton.style.display = canSelect ? '' : 'none';
         this._renderTable();
       } else {
-        map.style.display = none ? 'none' : 'block';
+        map.style.display = none ? 'none' : 'block'; // nobody shown: empty map with a hint
         table.style.display = 'none';
         button.textContent = t('show_table');
         button.classList.remove('aktiv');
         selectButton.style.display = 'none';
-        if (this._map && !none) {
+        if (this._map && !none && !nobody) {
           setTimeout(() => { if (this._staleView) this._fit(); else this._map.invalidateSize(); }, 0);
         }
       }

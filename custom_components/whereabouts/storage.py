@@ -367,10 +367,17 @@ def from_export_text(text: str) -> str:
 
 def export_csv(person: str, rows: list[tuple[str, Stay]]) -> str:
     """Whereabouts exchange format (see FORMAT.md), comma separated with header."""
+    return export_csv_multi([(person, rows)])
+
+
+def export_csv_multi(groups: list[tuple[str, list[tuple[str, Stay]]]]) -> str:
+    """Several persons in one file (the column "person" tells them apart)."""
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(["person", "date", "start", "end", "state", "latitude", "longitude", "address"])
-    for day, stay in rows:
+    rows = [(person, day, stay) for person, person_rows in groups for day, stay in person_rows]
+    rows.sort(key=lambda r: (r[1], r[2].start, r[0]))
+    for person, day, stay in rows:
         writer.writerow(
             [
                 person,

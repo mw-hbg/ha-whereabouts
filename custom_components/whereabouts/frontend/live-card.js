@@ -36,6 +36,7 @@ export function defineLiveCard(S) {
       this._circles = {};
       this._groups = [];
       this._panel = null;
+      this._hidden = new Set(); // persons ticked off in the info bar (not stored)
       this._zoneLayer = null;
       this._zoneSignature = '';
       this._follow = true;
@@ -134,7 +135,7 @@ export function defineLiveCard(S) {
     _personList() {
       const shown = this._info.shown || [];
       const configured = (this._config.persons || []).filter((id) => shown.includes(id));
-      const ids = configured.length ? configured : shown;
+      const ids = (configured.length ? configured : shown).filter((id) => S.showsIn(this._config, id, 'live'));
       return ids.map((id) => ({
         id,
         key: id.replace(/[^a-z0-9_]/gi, '_'),
@@ -222,6 +223,10 @@ export function defineLiveCard(S) {
                     background: var(--wa-glas); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
                     box-shadow: 0 2px 10px rgba(0,0,0,.18); transition: transform .1s; }
           .person:active { transform: scale(.985); }
+          .person.aus { opacity: .5; filter: grayscale(1); }
+          .person .text { flex: 1 1 auto; }
+          .haken { flex: 0 0 auto; align-self: center; display: flex; padding: 6px; margin: -6px -4px -6px 0; cursor: pointer; }
+          .haken input { width: 20px; height: 20px; margin: 0; cursor: pointer; accent-color: var(--farbe); }
           .person:focus-visible { outline: 2px solid var(--farbe); outline-offset: 2px; }
           .bild { flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%; border: 3px solid var(--farbe);
                   background: var(--farbe) center/cover no-repeat; color: #fff; font-weight: 700; font-size: 20px;
@@ -313,14 +318,15 @@ export function defineLiveCard(S) {
             <div class="wa-map"></div>
             <div class="infofenster" hidden role="dialog"></div>
             ${c.show_info_bar ? `<div class="leiste">${this._persons.map((p) => `
-              <button class="person p-${p.key}" data-person="${p.key}" type="button" title="${S.escapeHtml(t('jump_to', { name: p.name }))}">
+              <div class="person p-${p.key}${this._hidden.has(p.key) ? ' aus' : ''}" data-person="${p.key}" role="button" tabindex="0" title="${S.escapeHtml(t('jump_to', { name: p.name }))}">
                 <div class="bild"></div>
                 <div class="text">
                   <div class="kopf"><span class="name">${S.escapeHtml(p.name)}</span><span class="status"></span></div>
                   <div class="adresse"></div>
                   <div class="ortung"></div>
                 </div>
-              </button>`).join('')}</div>` : ''}
+                <label class="haken" title="${S.escapeHtml(t('show_on_map'))}"><input type="checkbox" data-person="${p.key}"${this._hidden.has(p.key) ? '' : ' checked'} aria-label="${S.escapeHtml(t('show_on_map_name', { name: p.name }))}"></label>
+              </div>`).join('')}</div>` : ''}
           </div>
           ${c.show_status_bar ? `<div class="statusbar">
             <div class="infos">
@@ -335,7 +341,13 @@ export function defineLiveCard(S) {
           </div>` : ''}
         </div>`;
 
-      this.querySelectorAll('.person').forEach((b) => b.addEventListener('click', () => this._goTo(b.dataset.person)));
+      this.querySelectorAll('.person').forEach((b) => {
+        b.addEventListener('click', (e) => { if (!e.target.closest('.haken')) this._goTo(b.dataset.person); });
+        b.addEventListener('keydown', (e) => {
+          if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('.haken')) { e.preventDefault(); this._goTo(b.dataset.person); }
+        });
+      });
+      this.querySelectorAll('.haken input').forEach((box) => box.addEventListener('change', () => this._toggle(box.dataset.person, box.checked)));
       const reload = this.querySelector('.neuladen');
       if (reload) {
         reload.addEventListener('click', () => {
@@ -446,6 +458,25 @@ export function defineLiveCard(S) {
       });
     }
 
+    // Tick in the info bar: hide or show a person on the map (only until reload).
+    _toggle(key, show) {
+      if (show) this._hidden.delete(key); else this._hidden.add(key);
+      const tile = this.querySelector(`.leiste .p-${key}`);
+      if (tile) tile.classList.toggle('aus', !show);
+      if (this._panel && !show) {
+        const group = this._groupOf(this._panel.key);
+        if (group && group.items.some((x) => x.p.key === key)) this._closePanel(false);
+      }
+      this._renderStatus();
+      if (!this._map) return;
+      this._drawPersons();
+      if (this._follow) this._fitAll(true);
+    }
+
+    _visible(p) {
+      return !this._hidden.has(p.key);
+    }
+
     _setPicture(el, url, name) {
       if (el.dataset.url === url) return;
       el.dataset.url = url;
@@ -458,7 +489,10 @@ export function defineLiveCard(S) {
       if (!bar) return;
       const t = this._t;
       this._persons.forEach((p) => {
-        const link = bar.querySelector(`.p-${p.key} .koord`);
+        const entry = bar.querySelector(`.eintrag.p-${p.key}`);
+        entry.hidden = !this._visible(p);
+        if (entry.nextElementSibling) entry.nextElementSibling.hidden = entry.hidden;
+        const link = entry.querySelector('.koord');
         const d = this._data(p);
         if (d && d.pos) {
           link.textContent = `${d.pos.lat.toFixed(5)}, ${d.pos.lon.toFixed(5)}`;
@@ -532,7 +566,8 @@ export function defineLiveCard(S) {
 
     _fitAll(animate) {
       if (!this._map) return;
-      const points = this._persons.map((p) => this._data(p)).filter((d) => d && d.pos).map((d) => [d.pos.lat, d.pos.lon]);
+      const points = this._persons.filter((p) => this._visible(p)).map((p) => this._data(p))
+        .filter((d) => d && d.pos).map((d) => [d.pos.lat, d.pos.lon]);
       if (!points.length) return;
       const size = this._map.getSize();
       if (!size.x || !size.y) return;
@@ -549,7 +584,8 @@ export function defineLiveCard(S) {
     // --- pins -------------------------------------------------------------------
     // Persons whose pins would overlap on screen form one group (one pin).
     _grouping() {
-      const items = this._persons.map((p) => ({ p, d: this._data(p) })).filter((x) => x.d && x.d.pos);
+      const items = this._persons.filter((p) => this._visible(p)).map((p) => ({ p, d: this._data(p) }))
+        .filter((x) => x.d && x.d.pos);
       const groups = [];
       items.forEach((item) => {
         item.pt = this._map.latLngToLayerPoint([item.d.pos.lat, item.d.pos.lon]);
@@ -618,7 +654,7 @@ export function defineLiveCard(S) {
     _drawCircles() {
       const L = window.L;
       this._persons.forEach((p) => {
-        const d = this._data(p);
+        const d = this._visible(p) ? this._data(p) : null;
         const circle = d && d.pos && this._config.show_accuracy && d.pos.accuracy > 0
           && d.pos.accuracy <= MAX_ACCURACY && d.st.state === 'not_home';
         if (circle) {

@@ -24,17 +24,14 @@ from .const import (
     CONF_ADDRESS_SENSORS,
     CONF_ADDRESS_SOURCE,
     CONF_CARTO_KEY,
-    CONF_HISTORY_CARD,
-    CONF_LIVE_CARD,
     CONF_MIN_INTERVAL,
     CONF_PANEL,
     CONF_PANEL_ICON,
     CONF_PANEL_TITLE,
+    CONF_PERSONS,
     CONF_RECORD_PERSONS,
     CONF_RETENTION_DAYS,
     CONF_SAME_PLACE_DISTANCE,
-    CONF_SHOW_PERSONS_HISTORY,
-    CONF_SHOW_PERSONS_LIVE,
     DOMAIN,
     SIGNAL_INFO_CHANGED,
 )
@@ -58,10 +55,7 @@ _PERSONS = vol.All([_PERSON], vol.Length(max=200))
 # Integration options that the settings page may change (administrators only)
 OPTIONS_SCHEMA = vol.Schema(
     {
-        vol.Optional(CONF_LIVE_CARD): bool,
-        vol.Optional(CONF_HISTORY_CARD): bool,
-        vol.Optional(CONF_SHOW_PERSONS_LIVE): _PERSONS,
-        vol.Optional(CONF_SHOW_PERSONS_HISTORY): _PERSONS,
+        vol.Optional(CONF_PERSONS): _PERSONS,
         vol.Optional(CONF_RECORD_PERSONS): _PERSONS,
         vol.Optional(CONF_MIN_INTERVAL): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
         vol.Optional(CONF_SAME_PLACE_DISTANCE): vol.All(vol.Coerce(int), vol.Range(min=10, max=1000)),
@@ -92,6 +86,9 @@ def async_register(hass: HomeAssistant) -> None:
         ws_rights_default,
         ws_options,
         ws_diagnostics,
+        ws_promote,
+        ws_sync,
+        ws_check_key,
     ):
         websocket_api.async_register_command(hass, command)
     hass.http.register_view(ImportView())
@@ -113,9 +110,11 @@ def _changed(hass: HomeAssistant) -> None:
     async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
 
 
-def _persons(hass: HomeAssistant) -> list[dict[str, Any]]:
+def _persons(hass: HomeAssistant, only: list[str] | None = None) -> list[dict[str, Any]]:
     result = []
     for entity_id in sorted(hass.states.async_entity_ids("person")):
+        if only is not None and entity_id not in only:
+            continue
         state = hass.states.get(entity_id)
         result.append(
             {
@@ -130,9 +129,19 @@ def _persons(hass: HomeAssistant) -> list[dict[str, Any]]:
 
 async def _users(hass: HomeAssistant) -> list[dict[str, Any]]:
     users = await hass.auth.async_get_users()
+    linked = {
+        state.attributes.get("user_id") for state in hass.states.async_all("person") if state.attributes.get("user_id")
+    }
     return sorted(
         (
-            {"id": u.id, "name": u.name or u.id, "is_admin": u.is_admin, "active": u.is_active}
+            {
+                "id": u.id,
+                "name": u.name or u.id,
+                "is_admin": u.is_admin,
+                "active": u.is_active,
+                # e.g. the MQTT broker's user: may only log in locally or has no person
+                "technical": bool(getattr(u, "local_only", False)) or u.id not in linked,
+            }
             for u in users
             if not u.system_generated
         ),
@@ -147,8 +156,11 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
     runtime = _ready(hass, connection, msg)
     if runtime is None:
         return
+    from . import base_persons
+
     user = connection.user
     settings = runtime.settings
+    base = base_persons(hass, runtime.options)
     result: dict[str, Any] = {
         "version": runtime.version,
         "is_admin": user.is_admin,
@@ -160,17 +172,21 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
         "locked": settings.locked_categories(user),
         "rights": {kind: settings.allowed(user, kind) for kind in RIGHT_KINDS},
         "own_rights": user.id in settings.data["rights"],
-        "persons": _persons(hass),
-        "cards": {
-            CONF_LIVE_CARD: runtime.options[CONF_LIVE_CARD],
-            CONF_HISTORY_CARD: runtime.options[CONF_HISTORY_CARD],
-        },
+        "persons": _persons(hass, base),
+        "synced": settings.synced(user),
+        "carto_key_set": bool(runtime.options.get(CONF_CARTO_KEY)),
+        "zones": [
+            {"entity_id": z.entity_id, "name": z.name, "passive": bool(z.attributes.get("passive"))}
+            for z in sorted(hass.states.async_all("zone"), key=lambda z: (z.entity_id != "zone.home", z.name.lower()))
+        ],
     }
     if user.is_admin:
         result["admin"] = {
             **settings.admin_view(),
             "users": await _users(hass),
             "options": {str(key): runtime.options.get(str(key)) for key in OPTIONS_SCHEMA.schema},
+            "all_persons": _persons(hass),
+            "address": _address_info(hass, runtime, base),
         }
     connection.send_result(msg["id"], result)
 
@@ -301,12 +317,97 @@ async def ws_options(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         return
     entry = entries[0]
     options = {**runtime.options, **values}
-    if not options[CONF_HISTORY_CARD]:
-        options[CONF_RECORD_PERSONS] = []
+    if values.get(CONF_PERSONS):
+        # Only persons Whereabouts works with are recorded.
+        options[CONF_RECORD_PERSONS] = [p for p in options[CONF_RECORD_PERSONS] if p in values[CONF_PERSONS]]
     if CONF_ADDRESS_SENSORS in values:
         options[CONF_ADDRESS_SENSORS] = {k: v for k, v in values[CONF_ADDRESS_SENSORS].items() if v}
     hass.config_entries.async_update_entry(entry, options=options)
     connection.send_result(msg["id"])
+
+
+def _is_address_sensor(state) -> bool:
+    attrs = state.attributes
+    return ("Location" in attrs or "location" in attrs) and any(
+        key in attrs for key in ("Locality", "locality", "Thoroughfare", "thoroughfare")
+    )
+
+
+def _address_info(hass: HomeAssistant, runtime, base: list[str]) -> dict[str, Any]:
+    """Per person the sensor found automatically, and all sensors that deliver addresses."""
+    auto = {}
+    for entity_id in base:
+        sensor_id = find_address_sensor(hass, hass.states.get(entity_id))
+        sensor = hass.states.get(sensor_id) if sensor_id else None
+        auto[entity_id] = {
+            "sensor": sensor_id or "",
+            "ok": bool(sensor and sensor.state not in ("unavailable", "unknown")),
+        }
+    sensors = sorted(
+        ({"entity_id": s.entity_id, "name": s.name} for s in hass.states.async_all("sensor") if _is_address_sensor(s)),
+        key=lambda s: s["name"].lower(),
+    )
+    return {"auto": auto, "sensors": sensors}
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/settings/promote",
+        vol.Optional("category"): vol.In(list(CATEGORIES)),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_promote(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """My current settings (one category or all) become the defaults for everybody."""
+    runtime = _ready(hass, connection, msg, admin=True)
+    if runtime is None:
+        return
+    await runtime.settings.async_promote(connection.user, msg.get("category"))
+    _changed(hass)
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/settings/sync",
+        vol.Required("enabled"): bool,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_sync(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """My settings apply to every non-admin, live (or no longer)."""
+    runtime = _ready(hass, connection, msg, admin=True)
+    if runtime is None:
+        return
+    await runtime.settings.async_set_sync(connection.user, msg["enabled"])
+    _changed(hass)
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command({vol.Required("type"): "whereabouts/settings/check_key"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_check_key(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Does CARTO deliver a tile with the stored key? (one small request)"""
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+    runtime = _ready(hass, connection, msg, admin=True)
+    if runtime is None:
+        return
+    key = runtime.options.get(CONF_CARTO_KEY) or ""
+    if not key:
+        connection.send_result(msg["id"], {"ok": False, "reason": "no_key"})
+        return
+    url = f"https://a.basemaps.cartocdn.com/rastertiles/voyager/12/2148/1409.png?key={key}"
+    try:
+        async with async_get_clientsession(hass).get(url, timeout=10) as response:
+            ok = response.status == 200 and response.content_type.startswith("image/")
+            reason = "" if ok else f"http_{response.status}"
+    except Exception:  # noqa: BLE001 - any network problem means "could not check"
+        ok, reason = False, "unreachable"
+    connection.send_result(msg["id"], {"ok": ok, "reason": reason})
 
 
 def _file_stats(folder: str) -> dict[str, dict[str, Any]]:
@@ -341,7 +442,12 @@ async def ws_diagnostics(hass: HomeAssistant, connection: websocket_api.ActiveCo
         return
     stats = await hass.async_add_executor_job(_file_stats, runtime.storage.folder)
     persons = []
+    from . import base_persons
+
+    base = base_persons(hass, runtime.options)
     for entity_id in sorted(hass.states.async_entity_ids("person")):
+        if entity_id not in base:
+            continue
         state = hass.states.get(entity_id)
         trackers = []
         for tracker_id in (state.attributes.get("device_trackers") or []) if state else []:

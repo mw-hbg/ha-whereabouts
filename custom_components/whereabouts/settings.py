@@ -33,11 +33,14 @@ STORAGE_VERSION = 1
 _COLOR = vol.Match(r"^#[0-9A-Fa-f]{6}$")
 _URL = vol.All(str, vol.Length(max=500))
 _PERSON = vol.Match(r"^person\.[a-z0-9_]{1,100}$")
+_ZONE = vol.Match(r"^zone\.[a-z0-9_]{1,100}$")
 _PERSON_SETTING = vol.Schema(
     {
         vol.Optional("name"): vol.All(str, vol.Length(max=60)),
         vol.Optional("color"): _COLOR,
         vol.Optional("picture"): _URL,
+        # in which map the person appears
+        vol.Optional("show_in"): vol.In(["both", "live", "history"]),
     }
 )
 
@@ -64,6 +67,8 @@ CATEGORIES: dict[str, dict[str, tuple[Any, Any]]] = {
         "zone_color_home": ("#2E7D32", _COLOR),
         "zone_color": ("#EF6C00", _COLOR),
         "zone_names_zoom": (14, vol.All(vol.Coerce(int), vol.Range(min=1, max=20))),
+        "hidden_zones": ([], vol.All([_ZONE], vol.Length(max=500))),
+        "zone_colors": ({}, vol.Schema({_ZONE: _COLOR})),
     },
     "live": {
         "show_info_bar": (True, bool),
@@ -102,7 +107,8 @@ def validate_values(category: str, values: dict[str, Any]) -> dict[str, Any]:
 
 
 def _legacy_level(level: str | None) -> str:
-    if level == ACCESS_EVERYONE:
+    """0.1.x option -> rule. Without that option (new installation): everybody sees all."""
+    if level is None or level == ACCESS_EVERYONE:
         return "all"
     if level == ACCESS_ADMINS:
         return "none"
@@ -124,6 +130,7 @@ class Settings:
         data.setdefault("users", {})
         data.setdefault("locks", {})
         data.setdefault("rights", {})
+        data.setdefault("sync", {"enabled": False, "user_id": ""})
         # 0.1.x: who may see/delete the history was one option for everybody
         data.setdefault(
             "rights_default",
@@ -157,18 +164,44 @@ class Settings:
         return False
 
     def locked_categories(self, user: User | None) -> list[str]:
+        if self.synced(user):
+            return list(CATEGORIES)
         return [cat for cat in CATEGORIES if self.is_locked(cat, user)]
 
+    def synced(self, user: User | None) -> bool:
+        """An administrator's settings apply to this (non-admin) user right now."""
+        sync = self.data.get("sync") or {}
+        return bool(user and not user.is_admin and sync.get("enabled") and sync.get("user_id"))
+
     def effective(self, user: User | None) -> dict[str, dict[str, Any]]:
-        """Defaults, overwritten by the user's own values where not locked."""
+        """Defaults, overwritten by the user's own values where not locked.
+
+        With synchronisation on, non-admins get the settings of the
+        administrator who switched it on (their own values stay stored)."""
         result = self.defaults()
         if user is None:
+            return result
+        if self.synced(user):
+            own = self.data["users"].get(self.data["sync"]["user_id"], {})
+            for cat in CATEGORIES:
+                result[cat].update(copy.deepcopy(own.get(cat, {})))
             return result
         own = self.data["users"].get(user.id, {})
         for cat in CATEGORIES:
             if not self.is_locked(cat, user):
                 result[cat].update(copy.deepcopy(own.get(cat, {})))
         return result
+
+    async def async_promote(self, user: User, category: str | None) -> None:
+        """The user's current values become the defaults (one or all categories)."""
+        mine = self.effective(user)
+        for cat in [category] if category else list(CATEGORIES):
+            self.data["defaults"][cat] = copy.deepcopy(mine[cat])
+        await self.async_save()
+
+    async def async_set_sync(self, user: User, enabled: bool) -> None:
+        self.data["sync"] = {"enabled": bool(enabled), "user_id": user.id if enabled else ""}
+        await self.async_save()
 
     async def async_set(self, scope: str, user: User, category: str, values: dict[str, Any]) -> None:
         values = validate_values(category, values)
@@ -241,6 +274,7 @@ class Settings:
             "locks": copy.deepcopy(self.data["locks"]),
             "rights": copy.deepcopy(self.data["rights"]),
             "rights_default": dict(self.data["rights_default"]),
+            "sync": dict(self.data.get("sync") or {}),
         }
 
 

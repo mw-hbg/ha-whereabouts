@@ -46,14 +46,27 @@ DATA_STATIC = f"{DOMAIN}_static_registered"
 
 
 def merged_options(entry: ConfigEntry) -> dict:
-    """Defaults plus what the user set (0.1.x had one person list for both cards)."""
+    """Defaults plus what the user set.
+
+    Older versions had a person list per card (0.1.x one for both). They become
+    the persons Whereabouts works with; both cards always exist now.
+    """
     options = {**DEFAULT_OPTIONS, **entry.options}
-    legacy = options.pop("show_persons", None)
-    if legacy:
-        for key in ("show_persons_live", "show_persons_history"):
-            if key not in entry.options:
-                options[key] = list(legacy)
+    legacy = set(options.pop("show_persons", None) or [])
+    legacy |= set(options.pop("show_persons_live", None) or [])
+    legacy |= set(options.pop("show_persons_history", None) or [])
+    if "persons" not in entry.options and legacy:
+        options["persons"] = sorted(legacy)
+    options["live_card"] = True
+    options["history_card"] = True
     return options
+
+
+def base_persons(hass: HomeAssistant, options: dict) -> list[str]:
+    """Persons Whereabouts works with: the chosen ones that exist, or all."""
+    existing = sorted(hass.states.async_entity_ids("person"))
+    chosen = options.get("persons") or []
+    return [p for p in existing if p in chosen] if chosen else existing
 
 
 @dataclass

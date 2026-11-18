@@ -22,17 +22,13 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_CARTO_KEY,
-    CONF_HISTORY_CARD,
-    CONF_LIVE_CARD,
     CONF_RECORD_PERSONS,
-    CONF_SHOW_PERSONS_HISTORY,
-    CONF_SHOW_PERSONS_LIVE,
     DOMAIN,
     SIGNAL_INFO_CHANGED,
 )
 from .logger import person_key
 from .settings import card_settings
-from .storage import Stay, export_csv, is_valid_date, is_valid_key
+from .storage import Stay, export_csv_multi, is_valid_date, is_valid_key
 
 DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 TIME_PATTERN = r"^\d{2}:\d{2}:\d{2}$"
@@ -40,6 +36,7 @@ TIME_PATTERN = r"^\d{2}:\d{2}:\d{2}$"
 ERR_NOT_SET_UP = "not_set_up"
 ERR_FORBIDDEN = "forbidden"
 ERR_NOT_RECORDED = "not_recorded"
+MAX_RANGE_DAYS = 31
 
 
 def _runtime(hass: HomeAssistant):
@@ -47,14 +44,24 @@ def _runtime(hass: HomeAssistant):
     return hass.data.get(DOMAIN)
 
 
+def _base(hass: HomeAssistant, runtime) -> list[str]:
+    from . import base_persons
+
+    return base_persons(hass, runtime.options)
+
+
 def can_view(hass: HomeAssistant, user: User | None, person_entity: str) -> bool:
     runtime = _runtime(hass)
-    return bool(runtime) and person_entity in runtime.settings.allowed(user, "history")
+    return (
+        bool(runtime)
+        and person_entity in _base(hass, runtime)
+        and person_entity in runtime.settings.allowed(user, "history")
+    )
 
 
 def can_delete(hass: HomeAssistant, user: User | None, person_entity: str) -> bool:
     runtime = _runtime(hass)
-    return bool(runtime) and person_entity in runtime.settings.allowed(user, "delete")
+    return can_view(hass, user, person_entity) and person_entity in runtime.settings.allowed(user, "delete")
 
 
 def _stay_dict(stay: Stay) -> dict[str, Any]:
@@ -86,29 +93,21 @@ def _check(hass, connection, msg, person: str, check) -> bool:
     return True
 
 
-def shown_persons(hass: HomeAssistant, options: dict, key: str) -> list[str]:
-    """Persons shown in a card: the chosen ones, or every person in Home Assistant."""
-    existing = sorted(hass.states.async_entity_ids("person"))
-    chosen = options.get(key) or []
-    return [p for p in chosen if p in existing] if chosen else existing
-
-
 def build_info(hass: HomeAssistant, user: User | None) -> dict[str, Any]:
     """What the cards need to know - for this user."""
     runtime = _runtime(hass)
     if runtime is None:
         return {"available": False}
     settings = runtime.settings
+    base = _base(hass, runtime)
     live_allowed = set(settings.allowed(user, "live"))
-    shown_live = [p for p in shown_persons(hass, runtime.options, CONF_SHOW_PERSONS_LIVE) if p in live_allowed]
-    shown = shown_persons(hass, runtime.options, CONF_SHOW_PERSONS_HISTORY)
     history_allowed = set(settings.allowed(user, "history"))
     delete_allowed = set(settings.allowed(user, "delete"))
-    # History: only shown persons that have (or get) a history and that this
-    # user may see - nothing about the others.
+    # History: persons that have (or get) a history and that this user may
+    # see - nothing about the others.
     persons = []
     for entity_id in sorted(set(runtime.options[CONF_RECORD_PERSONS]) | set(runtime.known_persons())):
-        if entity_id not in shown or entity_id not in history_allowed:
+        if entity_id not in base or entity_id not in history_allowed:
             continue
         persons.append(
             {
@@ -123,12 +122,14 @@ def build_info(hass: HomeAssistant, user: User | None) -> dict[str, Any]:
     return {
         "available": True,
         "version": runtime.version,
-        "live_card": runtime.options[CONF_LIVE_CARD],
-        "history_card": runtime.options[CONF_HISTORY_CARD],
-        "shown": shown_live,
+        "live_card": True,
+        "history_card": True,
+        "base": base,
+        "shown": [p for p in base if p in live_allowed],
         "persons": persons,
         "settings": personal,
         "is_admin": bool(user and user.is_admin),
+        "synced": settings.synced(user),
         "today": dt_util.now().strftime("%Y-%m-%d"),
     }
 
@@ -163,17 +164,25 @@ def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection
         vol.Required("type"): "whereabouts/history",
         vol.Required("person"): str,
         vol.Required("date"): vol.Match(DATE_PATTERN),
+        # optional: last day of a period (max. MAX_RANGE_DAYS days)
+        vol.Optional("date_to"): vol.Match(DATE_PATTERN),
     }
 )
 @websocket_api.async_response
 async def ws_history(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """Stays of one person on one day."""
+    """Stays of one person on one day or in a period (each stay with its date)."""
     person = msg["person"]
     if not _check(hass, connection, msg, person, can_view):
         return
     runtime = _runtime(hass)
-    stays = await hass.async_add_executor_job(runtime.storage.read_day, person_key(person), msg["date"])
-    connection.send_result(msg["id"], {"stays": [_stay_dict(s) for s in stays]})
+    date_from = msg["date"]
+    date_to = msg.get("date_to") or date_from
+    first, last = dt_util.parse_date(date_from), dt_util.parse_date(date_to)
+    if first is None or last is None or last < first or (last - first).days >= MAX_RANGE_DAYS:
+        connection.send_error(msg["id"], "invalid_range", f"Period of 1 to {MAX_RANGE_DAYS} days")
+        return
+    rows = await hass.async_add_executor_job(runtime.storage.export_rows, person_key(person), date_from, date_to)
+    connection.send_result(msg["id"], {"stays": [{**_stay_dict(stay), "date": day} for day, stay in rows]})
 
 
 @websocket_api.websocket_command(
@@ -216,7 +225,11 @@ async def ws_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnect
 
 
 class ExportView(HomeAssistantView):
-    """GET /api/whereabouts/export?person=person.x&from=YYYY-MM-DD&to=YYYY-MM-DD&format=csv|gpx"""
+    """GET /api/whereabouts/export?persons=person.a,person.b&from=…&to=…&format=csv|gpx
+    &split_day=1&split_person=1
+
+    One file, or a ZIP when the splitting gives more than one file. ("person"
+    instead of "persons" still works.)"""
 
     url = "/api/whereabouts/export"
     name = "api:whereabouts:export"
@@ -226,15 +239,18 @@ class ExportView(HomeAssistantView):
         hass: HomeAssistant = request.app["hass"]
         user = request[KEY_HASS_USER]
         runtime = _runtime(hass)
-        person = request.query.get("person", "")
+        persons = [p for p in (request.query.get("persons") or request.query.get("person", "")).split(",") if p]
         date_from = request.query.get("from", "")
         date_to = request.query.get("to", date_from)
         fmt = request.query.get("format", "csv")
+        split_day = request.query.get("split_day") == "1"
+        split_person = request.query.get("split_person") == "1"
         if runtime is None:
             return self.json_message("Whereabouts is not set up", HTTPStatus.NOT_FOUND)
         if (
-            not person.startswith("person.")
-            or not is_valid_key(person_key(person))
+            not persons
+            or len(persons) > 50
+            or any(not p.startswith("person.") or not is_valid_key(person_key(p)) for p in persons)
             or not is_valid_date(date_from)
             or not is_valid_date(date_to)
             or date_from > date_to
@@ -243,28 +259,69 @@ class ExportView(HomeAssistantView):
             return self.json_message("Invalid request", HTTPStatus.BAD_REQUEST)
         if (dt_util.parse_date(date_to) - dt_util.parse_date(date_from)).days > 3660:
             return self.json_message("Range too long (max. 10 years)", HTTPStatus.BAD_REQUEST)
-        if not can_view(hass, user, person):
+        if any(not can_view(hass, user, p) for p in persons):
             return self.json_message("Not allowed", HTTPStatus.FORBIDDEN)
-        key = person_key(person)
-        rows = await hass.async_add_executor_job(runtime.storage.export_rows, key, date_from, date_to)
-        name = f"whereabouts_{key}_{date_from}" + ("" if date_from == date_to else f"_{date_to}")
-        if fmt == "gpx":
-            body, content_type = export_gpx(key, rows, dt_util.get_default_time_zone()), "application/gpx+xml"
+        groups = []
+        for person in persons:
+            key = person_key(person)
+            rows = await hass.async_add_executor_job(runtime.storage.export_rows, key, date_from, date_to)
+            groups.append((key, rows))
+        timezone = dt_util.get_default_time_zone()
+        files = _export_files(groups, fmt, split_day, split_person, date_from, date_to, timezone)
+        headers = {"Cache-Control": "no-store"}
+        if len(files) == 1:
+            name, body = next(iter(files.items()))
+            headers["Content-Disposition"] = f'attachment; filename="{name}"'
+            content_type = "application/gpx+xml" if fmt == "gpx" else "text/csv"
+            return web.Response(text=body, content_type=content_type, charset="utf-8", headers=headers)
+        archive = await hass.async_add_executor_job(_zip, files)
+        span = date_from if date_from == date_to else f"{date_from}_{date_to}"
+        headers["Content-Disposition"] = f'attachment; filename="whereabouts_{span}.zip"'
+        return web.Response(body=archive, content_type="application/zip", headers=headers)
+
+
+def _export_files(groups, fmt, split_day, split_person, date_from, date_to, timezone) -> dict[str, str]:
+    """File name -> content, split by day and/or person as asked."""
+    span = date_from if date_from == date_to else f"{date_from}_{date_to}"
+    days = sorted({day for _, rows in groups for day, _ in rows}) or [date_from]
+    files: dict[str, str] = {}
+
+    def render(parts: list[tuple[str, list]]) -> str:
+        return export_csv_multi(parts) if fmt == "csv" else export_gpx_multi(parts, timezone)
+
+    person_sets = [[g] for g in groups] if split_person or len(groups) == 1 else [groups]
+    for parts in person_sets:
+        who = parts[0][0] if len(parts) == 1 else "whereabouts"
+        if split_day:
+            for day in days:
+                day_parts = [(p, [r for r in rows if r[0] == day]) for p, rows in parts]
+                if any(rows for _, rows in day_parts) or len(days) == 1:
+                    files[f"{who}_{day}.{fmt}"] = render(day_parts)
         else:
-            body, content_type = export_csv(key, rows), "text/csv"
-        return web.Response(
-            text=body,
-            content_type=content_type,
-            charset="utf-8",
-            headers={
-                "Content-Disposition": f'attachment; filename="{name}.{fmt}"',
-                "Cache-Control": "no-store",
-            },
-        )
+            files[f"{who}_{span}.{fmt}"] = render(parts)
+    if not files:
+        files[f"whereabouts_{span}.{fmt}"] = render(groups)
+    return files
+
+
+def _zip(files: dict[str, str]) -> bytes:
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, body in files.items():
+            archive.writestr(name, body)
+    return buffer.getvalue()
 
 
 def export_gpx(person: str, rows: list[tuple[str, Stay]], timezone) -> str:
     """Stays as GPX waypoints (start of each stay) plus one track per day."""
+    return export_gpx_multi([(person, rows)], timezone)
+
+
+def export_gpx_multi(groups: list[tuple[str, list[tuple[str, Stay]]]], timezone) -> str:
+    """Several persons: waypoints named with the person, one track per person and day."""
     from datetime import datetime
     from xml.sax.saxutils import escape, quoteattr
 
@@ -276,24 +333,29 @@ def export_gpx(person: str, rows: list[tuple[str, Stay]], timezone) -> str:
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<gpx version="1.1" creator="Whereabouts for Home Assistant" xmlns="http://www.topografix.com/GPX/1/1">',
     ]
-    for day, stay in rows:
-        label = stay.address or stay.state
-        lines.append(
-            f"  <wpt lat={quoteattr(str(stay.latitude))} lon={quoteattr(str(stay.longitude))}>"
-            f"<time>{stamp(day, stay.start)}</time><name>{escape(label)}</name>"
-            f"<desc>{escape(f'{stay.start}-{stay.end}')}</desc></wpt>"
-        )
-    days: dict[str, list[Stay]] = {}
-    for day, stay in rows:
-        days.setdefault(day, []).append(stay)
-    for day, stays in days.items():
-        lines.append(f"  <trk><name>{escape(person)} {day}</name><trkseg>")
-        for stay in stays:
-            for clock in dict.fromkeys((stay.start, stay.end)):
-                lines.append(
-                    f"    <trkpt lat={quoteattr(str(stay.latitude))} lon={quoteattr(str(stay.longitude))}>"
-                    f"<time>{stamp(day, clock)}</time></trkpt>"
-                )
-        lines.append("  </trkseg></trk>")
+    multi = len(groups) > 1
+    for person, rows in groups:
+        for day, stay in rows:
+            label = stay.address or stay.state
+            if multi:
+                label = f"{person}: {label}"
+            lines.append(
+                f"  <wpt lat={quoteattr(str(stay.latitude))} lon={quoteattr(str(stay.longitude))}>"
+                f"<time>{stamp(day, stay.start)}</time><name>{escape(label)}</name>"
+                f"<desc>{escape(f'{stay.start}-{stay.end}')}</desc></wpt>"
+            )
+    for person, rows in groups:
+        days: dict[str, list[Stay]] = {}
+        for day, stay in rows:
+            days.setdefault(day, []).append(stay)
+        for day, stays in days.items():
+            lines.append(f"  <trk><name>{escape(person)} {day}</name><trkseg>")
+            for stay in stays:
+                for clock in dict.fromkeys((stay.start, stay.end)):
+                    lines.append(
+                        f"    <trkpt lat={quoteattr(str(stay.latitude))} lon={quoteattr(str(stay.longitude))}>"
+                        f"<time>{stamp(day, clock)}</time></trkpt>"
+                    )
+            lines.append("  </trkseg></trk>")
     lines.append("</gpx>")
     return "\n".join(lines) + "\n"

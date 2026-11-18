@@ -115,7 +115,12 @@ export function setTiles(map, layers, config, dark, container, notice) {
   layers.splice(0).forEach((layer) => map.removeLayer(layer));
   const oldHint = container.querySelector('.wa-ersatz');
   if (oldHint) oldHint.remove();
-  const add = (url, options) => { const layer = L.tileLayer(url, options).addTo(map); layers.push(layer); return layer; };
+  // OpenStreetMap refuses tiles without a Referer (Home Assistant sends none by default).
+  const add = (url, options) => {
+    const layer = L.tileLayer(url, { referrerPolicy: 'strict-origin-when-cross-origin', ...options }).addTo(map);
+    layers.push(layer);
+    return layer;
+  };
   container.style.background = dark ? '#262626' : '#f2efe9';
   container.classList.toggle('wa-osm-dark', false);
   container.classList.toggle('wa-dark', dark);
@@ -196,13 +201,14 @@ export function fallbackNotice(container, t) {
 export function zoneStates(hass, config) {
   if (!config.show_zones) return [];
   const states = hass.states;
-  return Object.keys(states).filter((id) => id.startsWith('zone.')).map((id) => states[id])
+  const hidden = new Set(config.hidden_zones || []);
+  return Object.keys(states).filter((id) => id.startsWith('zone.') && !hidden.has(id)).map((id) => states[id])
     .filter((z) => z.attributes && !z.attributes.passive
       && Number.isFinite(Number(z.attributes.latitude)) && Number.isFinite(Number(z.attributes.longitude)));
 }
 
 export function zoneSignature(hass, config) {
-  return [config.zone_color_home, config.zone_color, ...zoneStates(hass, config).map((z) => {
+  return [config.zone_color_home, config.zone_color, JSON.stringify(config.zone_colors || {}), ...zoneStates(hass, config).map((z) => {
     const a = z.attributes;
     return [z.entity_id, a.latitude, a.longitude, a.radius, a.friendly_name].join('|');
   })].join(';');
@@ -216,7 +222,8 @@ export function drawZones(map, oldLayer, hass, config, t) {
   zoneStates(hass, config).forEach((z) => {
     const a = z.attributes;
     const home = z.entity_id === 'zone.home';
-    const color = home ? safeColor(config.zone_color_home, '#2E7D32') : safeColor(config.zone_color, '#EF6C00');
+    const base = home ? safeColor(config.zone_color_home, '#2E7D32') : safeColor(config.zone_color, '#EF6C00');
+    const color = safeColor((config.zone_colors || {})[z.entity_id], base);
     L.circle([Number(a.latitude), Number(a.longitude)], {
       radius: Number(a.radius) || 100, color, weight: 1.5, opacity: 0.7, fillColor: color, fillOpacity: 0.1, interactive: false,
     }).addTo(layer).bindTooltip(escapeHtml(home ? t('home') : (a.friendly_name || z.entity_id)), {
@@ -275,6 +282,12 @@ export function personColor(hass, config, entityId) {
   if (own) return own;
   const index = allPersonIds(hass).indexOf(entityId);
   return PALETTE[(index < 0 ? 0 : index) % PALETTE.length];
+}
+
+// In which map a person appears ("both" | "live" | "history")
+export function showsIn(config, entityId, kind) {
+  const where = personSettings(config, entityId).show_in || 'both';
+  return where === 'both' || where === kind;
 }
 
 // Picture: own URL from the card settings, otherwise the person's picture.

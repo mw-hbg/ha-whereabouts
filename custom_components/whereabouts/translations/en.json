@@ -3,18 +3,26 @@
     "step": {
       "user": {
         "title": "Whereabouts",
-        "description": "Live map and location history for your persons. Everything can be changed later under Configure.",
+        "description": "Live map and location history for your persons. Everything else is set later on the settings page: sidebar → Whereabouts → Settings.",
         "data": {
-          "live_card": "\"Where is...?\" card (live map)",
-          "history_card": "\"Location history\" card",
-          "record_persons": "Record the history of these persons",
+          "persons": "Persons in Whereabouts",
+          "panel": "Entry in the sidebar",
           "address_source": "Addresses for places on the way"
         },
         "data_description": {
-          "live_card": "Shows the persons live on a map. Uses only what Home Assistant already knows, nothing is stored.",
-          "history_card": "Shows where the recorded persons were on a chosen day, as a route or table.",
-          "record_persons": "Nothing is recorded until you choose persons here. The history is stored only on this Home Assistant (folder whereabouts in the configuration directory) and is kept until you delete it.",
+          "persons": "The ticked persons are set up for now and are the default for everybody; only they appear in Whereabouts. You can change this later on the settings page (Administration → Persons in Whereabouts).",
+          "panel": "A page \"Whereabouts\" (German: \"Standorte\") with the tabs \"Where is…?\", \"Location history\" and \"Settings\". Without it you can still use the dashboard cards.",
           "address_source": "Companion app (geocoded location): the address the Home Assistant Companion app on the phone already determined – stays local. The sensor \"Geocoded location\" must be switched on in the app on the phone (Companion app settings → Sensors / Manage sensors → Geocoded location). If it has no fitting address, OpenStreetMap is asked instead (default): the coordinates of that place are sent to nominatim.openstreetmap.org. You can also use only the Companion app, only OpenStreetMap or no addresses."
+        }
+      },
+      "recording": {
+        "title": "Recording",
+        "description": "Whose location history should be recorded? Only the persons chosen in the first step are listed. The history stays on this Home Assistant and is part of every backup.",
+        "data": {
+          "record_persons": "Record the history of these persons"
+        },
+        "data_description": {
+          "record_persons": "Untick persons whose history should not be recorded. You can change this later under Settings → Administration → Recording."
         }
       }
     },
@@ -28,40 +36,13 @@
         "title": "Whereabouts",
         "description": "Persons, colours, pictures, rights and the sidebar are set on the settings page: [Open settings](/whereabouts/settings). There you also find everything below.",
         "menu_options": {
-          "card_live": "\"Where is...?\" card",
-          "card_history": "\"Location history\" card",
           "recording": "Recording",
           "addresses": "Addresses",
           "import_file": "Import history"
         }
       },
-      "card_live": {
-        "title": "\"Where is...?\" card",
-        "description": "For comparison – the \"Location history\" card currently shows: {other}. If you choose other persons here, the two cards show different persons.",
-        "data": {
-          "live_card": "\"Where is...?\" card (live map)",
-          "show_persons_live": "Show these persons in \"Where is...?\" (empty = all)"
-        },
-        "data_description": {
-          "live_card": "Shows the persons live on a map. Uses only what Home Assistant already knows, nothing is stored.",
-          "show_persons_live": "Changes the card at once. In the card's own settings you choose the display name, colour and picture of each person and can show fewer persons there."
-        }
-      },
-      "card_history": {
-        "title": "\"Location history\" card",
-        "description": "For comparison – the \"Where is...?\" card currently shows: {other}. If you choose other persons here, the two cards show different persons.",
-        "data": {
-          "history_card": "\"Location history\" card",
-          "show_persons_history": "Show these persons in \"Location history\" (empty = all)"
-        },
-        "data_description": {
-          "history_card": "Shows where the recorded persons were on a chosen day, as a route or table.",
-          "show_persons_history": "Changes the card at once. Only recorded persons have a history. Hiding a person does not delete their history."
-        }
-      },
       "recording": {
         "title": "Recording",
-        "description": "Tip: a person can have several trackers (Companion app and e.g. a router or ARP-scan tracker for the home network) – assign them under Settings → People, Home Assistant combines them. Only watch your own home network this way and only add devices that also run the Companion app.",
         "data": {
           "record_persons": "Record the history of these persons",
           "min_interval": "Store position updates at the same place at most every",

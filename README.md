@@ -74,27 +74,37 @@ update, restart Home Assistant when the repair notice asks for it.
 Companion app on every phone (app settings → Companion app → Sensors / Manage
 sensors → Geocoded location). Without it, addresses come only from OpenStreetMap.
 
-The first dialog asks for the cards, the persons whose history is recorded
-(none by default) and the address source. Then open **Whereabouts** in the
+Set-up asks in two steps: first which persons Whereabouts works with (all are
+ticked; everywhere else only these can be chosen later), whether you want an
+entry in the sidebar and the address source; then whose history is recorded
+(chosen from the first step). Then open **Whereabouts** in the
 sidebar (German: **Standorte**) → **Settings**. Next to every setting an ⓘ explains
 what it does; actions that delete or overwrite something ask first.
 
 | Category | Who | What you can set |
 |---|---|---|
 | Views | every user | which tabs are shown, which one opens first |
-| Persons | every user | who appears, order, display name, colour, picture (address or upload); warning for similar colours |
-| Map | every user | light/dark, map style with example maps (Esri, OpenStreetMap, CARTO; automatic fallback if a service fails), where coordinates open (Google Maps, Apple Maps, OpenStreetMap, Waze, HERE; choice of apps on phones) |
-| Zones, "Where is…?" display, "Location history" display | every user (advanced) | zone colours, info bar, status bar, accuracy circle, following, start view, legend, reload |
-| Users and rights | administrators | rules for everybody (see live / see history / delete history: all, own person, nobody) and own rights per user |
-| Sidebar and cards | administrators | sidebar entry on/off, name, icon; cards on/off and their persons; CARTO key (free, [request here](https://carto.com/basemaps/apikey/); every installation uses its own key) |
+| Persons | every user | who appears, order, display name, colour, picture (address or upload), in which card (both, only "Where is…?", only "Location history"); warning for similar colours |
+| Map | every user | light/dark, map style (Esri, OpenStreetMap, CARTO, each with a link to examples; automatic fallback if a service fails) with the CARTO key right below, where coordinates open (Google Maps, Apple Maps, OpenStreetMap, Waze, HERE; choice of apps on phones) |
+| Zones, "Where is…?" display, "Location history" display | every user (advanced) | zone colours, hide single zones, own colour per zone, info bar, status bar, accuracy circle, following, start view, legend, automatic refresh and refresh interval |
+| Persons in Whereabouts | administrators | which Home Assistant persons Whereabouts works with at all |
+| Users and rights | administrators | rules for everybody (see live / see history / delete history: all persons (default), own person, nobody) and own rights per user; technical users (e.g. the MQTT user) hidden |
+| Sidebar | administrators | sidebar entry on/off, name, icon |
 | Recording | administrators | recorded persons, store interval (60 s), "same place" radius (50 m), deleting old history (default: never) |
-| Addresses | administrators | Companion app (geocoded location), otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; sensor per person |
-| Import and export | export: everybody (own rights), import: administrators | CSV / GPX download for a period; import with preview |
+| Addresses | administrators | Companion app (geocoded location), otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; sensor per person (found automatically) |
+| Import and export | export: everybody (own rights), import: administrators | "Download location data" (day or period, persons, CSV/GPX, several files as ZIP); import with preview, format help and a prompt for converting other apps' data with an AI assistant |
 | Diagnostics | administrators | trackers, geocoded-location sensor and stored days per person |
 
-Administrators switch between **My settings** and **Default for everyone**. Each
-personal category can be locked – for all non-admins (with exceptions) or for
-selected users; locked users see it greyed out with the defaults.
+Administrators switch between **For me** and **Default for all users**, can make
+one category or all their settings the default, and can **synchronise their
+settings with all users** (non-admins then get the administrator's settings live
+and no settings tab; their own values are kept). Each personal category can be
+locked – for all non-admins (with exceptions) or for selected users; locked users
+see it greyed out with the defaults.
+
+Switches and selections save at once; text and number fields only with **Save** or
+the Enter key. Leaving the page with unsaved fields asks first; unsaved values are
+offered again on return. All categories can be folded.
 
 **Note on "see live":** this limits what Whereabouts shows. Every logged-in user
 can in principle see the persons' positions elsewhere in Home Assistant too; the
@@ -124,11 +134,11 @@ filling the page use a view of type **Panel**.
 | Setting | "Where is…?" | "Location history" |
 |---|---|---|
 | Title | optional | optional |
-| Persons | as allowed and chosen on the settings page (or fewer) | same, only persons with a history you may see |
+| Persons | as allowed and chosen on the settings page (or fewer); a tick per person on the map hides it until reload | same, only persons with a history you may see; the person buttons hide and show persons |
 | Per person (this card only) | display name, colour, picture, address sensor | display name, colour, picture |
 | Map | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO (own key), coordinates open in Google Maps (default), Apple Maps, OpenStreetMap, Waze or HERE; on phones and tablets a choice of apps | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO |
 | Zones | on/off, colour of Home and of the other zones, names from zoom | same |
-| Display | info bar, status bar, GPS accuracy, follow at start, reload interval | start with map or table, legend, download buttons, auto reload (today only) |
+| Display | info bar, status bar, GPS accuracy, follow at start, automatic refresh and interval | start with map or table, legend, download button, automatic refresh and interval; one day or a period of up to 31 days |
 | Height | automatic (full height in a panel view), full screen or fixed | same |
 
 Without a colour, a person gets the same colour in both cards automatically.
@@ -140,7 +150,7 @@ persons: [person.alex, person.sam]
 person_settings:
   person.alex: { color: "#378ADD" }
   person.sam: { name: Sam, color: "#D6409F", picture: /local/pictures/sam.jpg }
-tiles: esri          # esri | osm | carto (then carto_api_key: ...)
+tiles: esri          # esri | osm | carto (key on the settings page)
 map_style: auto      # auto | light | dark
 map_link: google     # google | apple | osm | waze | here | none
 map_link_choice: true
@@ -175,13 +185,17 @@ background stays empty.
 
 ### Import and export
 
-Import: **Configure → Import history**. Supported are the Whereabouts CSV
+Import: **Settings → Import and export** on the sidebar page (or **Configure →
+Import history**). Supported are the Whereabouts CSV
 format, GPX (tracks, routes, waypoints) and the daily files of the original
 script version (single file or ZIP). Existing entries are skipped, or whole days
 replaced if you choose so. The format is described in [FORMAT.md](FORMAT.md#english).
 
-Export: from the history card (CSV or GPX), or directly via
-`/api/whereabouts/export?person=person.x&from=2026-01-01&to=2026-01-31&format=csv`.
+Export: **Download location data** in the history card or on the settings page –
+a day or a period, one or more persons, CSV or GPX, one file or a ZIP with one
+file per day and/or person. Directly:
+`/api/whereabouts/export?persons=person.x,person.y&from=2026-01-01&to=2026-01-31&format=csv`
+(optional `split_day=1`, `split_person=1`).
 
 ### Uninstalling
 
@@ -270,8 +284,11 @@ Sensor **Geokodierter Standort** einschalten (Einstellungen der App → Companio
 → Sensoren bzw. Sensoren verwalten → Geokodierter Standort). Ohne ihn kommen
 Adressen nur von OpenStreetMap.
 
-Der erste Dialog fragt nach den Karten, den Personen, deren Verlauf
-aufgezeichnet wird (standardmäßig keine), und der Adressquelle. Danach in der
+Die Einrichtung fragt in zwei Schritten: zuerst, mit welchen Personen
+Whereabouts arbeitet (alle angehakt; überall sonst stehen später nur diese zur
+Auswahl), ob es einen Eintrag in der Seitenleiste geben soll und nach der
+Adressquelle; dann, wessen Verlauf aufgezeichnet wird (aus dem ersten Schritt).
+Danach in der
 Seitenleiste **Standorte** (englisch: **Whereabouts**) → **Einstellungen** öffnen.
 Neben jeder Einstellung erklärt ein ⓘ, was sie bewirkt; alles, was etwas löscht
 oder überschreibt, fragt vorher nach.
@@ -279,20 +296,30 @@ oder überschreibt, fragt vorher nach.
 | Kategorie | Wer | Was man einstellt |
 |---|---|---|
 | Ansichten | jeder Benutzer | welche Reiter angezeigt werden, welcher zuerst erscheint |
-| Personen | jeder Benutzer | wer erscheint, Reihenfolge, Anzeigename, Farbe, Bild (Adresse oder hochladen); Warnung bei ähnlichen Farben |
-| Karte | jeder Benutzer | hell/dunkel, Kartenstil mit Beispielkarten (Esri, OpenStreetMap, CARTO; automatischer Ersatz, wenn ein Dienst ausfällt), wohin Koordinaten führen (Google Maps, Apple Karten, OpenStreetMap, Waze, HERE; am Handy mit App-Auswahl) |
-| Zonen, Anzeige „Wo ist…?“, Anzeige „Standortverlauf“ | jeder Benutzer (erweitert) | Zonenfarben, Infoleiste, Statusleiste, Genauigkeitskreis, Folgen, Startansicht, Legende, Neuladen |
-| Benutzer und Rechte | Administratoren | Regeln für alle (live sehen / Verlauf sehen / Verlauf löschen: alle, eigene Person, niemand) und eigene Rechte pro Benutzer |
-| Seitenleiste und Karten | Administratoren | Eintrag an/aus, Name, Symbol; Karten an/aus und ihre Personen; CARTO-Schlüssel (kostenlos, [hier beantragen](https://carto.com/basemaps/apikey/); jede Installation nutzt ihren eigenen) |
+| Personen | jeder Benutzer | wer erscheint, Reihenfolge, Anzeigename, Farbe, Bild (Adresse oder hochladen), in welcher Karte (beide, nur „Wo ist…?“, nur „Standortverlauf“); Warnung bei ähnlichen Farben |
+| Karte | jeder Benutzer | hell/dunkel, Kartenstil (Esri, OpenStreetMap, CARTO, jeweils mit Link zu Beispielen; automatischer Ersatz, wenn ein Dienst ausfällt) mit dem CARTO-Schlüssel direkt darunter, wohin Koordinaten führen (Google Maps, Apple Karten, OpenStreetMap, Waze, HERE; am Handy mit App-Auswahl) |
+| Zonen, Anzeige „Wo ist…?“, Anzeige „Standortverlauf“ | jeder Benutzer (erweitert) | Zonenfarben, einzelne Zonen ausblenden, eigene Farbe pro Zone, Infoleiste, Statusleiste, Genauigkeitskreis, Folgen, Startansicht, Legende, automatisch aktualisieren und Aktualisierungsintervall |
+| Personen in Whereabouts | Administratoren | mit welchen Personen aus Home Assistant Whereabouts überhaupt arbeitet |
+| Benutzer und Rechte | Administratoren | Regeln für alle (live sehen / Verlauf sehen / Verlauf löschen: alle Personen (Standard), eigene Person, niemand) und eigene Rechte pro Benutzer; technische Benutzer (z. B. der MQTT-Benutzer) ausgeblendet |
+| Seitenleiste | Administratoren | Eintrag an/aus, Name, Symbol |
 | Aufzeichnung | Administratoren | aufgezeichnete Personen, Speicherabstand (60 s), Umkreis „derselbe Ort“ (50 m), alten Verlauf löschen (Standard: nie) |
-| Adressen | Administratoren | Companion App (Geokodierter Standort), sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; Sensor pro Person |
-| Import und Export | Export: jeder (eigene Rechte), Import: Administratoren | CSV-/GPX-Download für einen Zeitraum; Import mit Vorschau |
+| Adressen | Administratoren | Companion App (Geokodierter Standort), sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; Sensor pro Person (wird automatisch gefunden) |
+| Import und Export | Export: jeder (eigene Rechte), Import: Administratoren | „Standortdaten herunterladen“ (Tag oder Zeitraum, Personen, CSV/GPX, mehrere Dateien als ZIP); Import mit Vorschau, Formathilfe und einem Text, mit dem ein KI-Assistent Daten anderer Apps umwandelt |
 | Diagnose | Administratoren | Tracker, Sensor „Geokodierter Standort“ und gespeicherte Tage pro Person |
 
-Administratoren wechseln zwischen **Meine Einstellungen** und **Standard für
-alle**. Jede persönliche Kategorie lässt sich sperren – für alle Nicht-Admins
-(mit Ausnahmen) oder für ausgewählte Benutzer; gesperrte Benutzer sehen sie
-ausgegraut mit den Standardwerten.
+Administratoren wechseln zwischen **Für mich** und **Standard für alle
+Benutzer**, können eine Kategorie oder alle ihre Einstellungen zum Standard
+machen und **ihre Einstellungen mit allen Benutzern synchronisieren**
+(Nicht-Admins bekommen dann laufend die Einstellungen des Administrators und
+keinen Einstellungen-Reiter; ihre eigenen Werte bleiben erhalten). Jede
+persönliche Kategorie lässt sich sperren – für alle Nicht-Admins (mit Ausnahmen)
+oder für ausgewählte Benutzer; gesperrte Benutzer sehen sie ausgegraut mit den
+Standardwerten.
+
+Schalter und Auswahlen speichern sofort, Text- und Zahlenfelder nur mit
+**Speichern** oder der Eingabetaste. Wer die Seite mit ungespeicherten Feldern
+verlässt, wird gefragt; nicht gespeicherte Werte werden beim nächsten Mal wieder
+angeboten. Alle Kategorien lassen sich auf- und zuklappen.
 
 **Hinweis zu „live sehen“:** Das begrenzt, was Whereabouts anzeigt. Jeder
 angemeldete Benutzer kann die Positionen der Personen grundsätzlich auch anderswo
@@ -325,11 +352,11 @@ füllt, eine Ansicht vom Typ **Panel** verwenden.
 | Einstellung | „Wo ist…?“ | „Standortverlauf“ |
 |---|---|---|
 | Titel | optional | optional |
-| Personen | wie auf der Einstellungsseite erlaubt und gewählt (oder weniger) | ebenso, nur Personen mit Verlauf, den man sehen darf |
+| Personen | wie auf der Einstellungsseite erlaubt und gewählt (oder weniger); ein Häkchen pro Person blendet sie bis zum Neuladen auf der Karte aus | ebenso, nur Personen mit Verlauf, den man sehen darf; die Personenknöpfe blenden Personen aus und ein |
 | Pro Person (nur diese Karte) | Anzeigename, Farbe, Bild, Adress-Sensor | Anzeigename, Farbe, Bild |
 | Karte | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO (eigener Schlüssel), Koordinaten öffnen in Google Maps (Standard), Apple Karten, OpenStreetMap, Waze oder HERE; auf Handy und Tablet mit App-Auswahl | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO |
 | Zonen | an/aus, Farbe von Zuhause und der übrigen Zonen, Namen ab Zoom | ebenso |
-| Anzeige | Infoleiste, Statusleiste, GPS-Genauigkeit, beim Start folgen, Neuladen | Start mit Karte oder Tabelle, Legende, Download-Knöpfe, automatisch neu laden (nur heute) |
+| Anzeige | Infoleiste, Statusleiste, GPS-Genauigkeit, beim Start folgen, automatisch aktualisieren und Intervall | Start mit Karte oder Tabelle, Legende, Download-Knopf, automatisch aktualisieren und Intervall; ein Tag oder ein Zeitraum bis 31 Tage |
 | Höhe | automatisch (ganze Höhe in einer Panel-Ansicht), ganze Bildschirmhöhe oder fest | ebenso |
 
 Ohne eigene Farbe bekommt eine Person in beiden Karten automatisch dieselbe
@@ -341,7 +368,7 @@ persons: [person.alex, person.sam]
 person_settings:
   person.alex: { color: "#378ADD" }
   person.sam: { name: Sam, color: "#D6409F", picture: /local/bilder/sam.jpg }
-tiles: esri          # esri | osm | carto (dann carto_api_key: ...)
+tiles: esri          # esri | osm | carto (Schlüssel auf der Einstellungsseite)
 map_style: auto      # auto | light | dark
 map_link: google     # google | apple | osm | waze | here | none
 map_link_choice: true
@@ -376,14 +403,18 @@ bleibt leer.
 
 ### Import und Export
 
-Import: **Konfigurieren → Verlauf importieren**. Unterstützt werden das
+Import: **Einstellungen → Import und Export** auf der Seite in der Seitenleiste
+(oder **Konfigurieren → Verlauf importieren**). Unterstützt werden das
 Whereabouts-CSV-Format, GPX (Tracks, Routen, Wegpunkte) und die Tagesdateien
 der ursprünglichen Skript-Version (einzeln oder als ZIP). Vorhandene Einträge
 werden übersprungen oder auf Wunsch ganze Tage ersetzt. Das Format steht in
 [FORMAT.md](FORMAT.md#deutsch).
 
-Export: aus der Verlaufskarte (CSV oder GPX) oder direkt über
-`/api/whereabouts/export?person=person.x&from=2026-01-01&to=2026-01-31&format=csv`.
+Export: **Standortdaten herunterladen** in der Verlaufskarte oder auf der
+Einstellungsseite – ein Tag oder ein Zeitraum, eine oder mehrere Personen, CSV
+oder GPX, eine Datei oder ein ZIP mit einer Datei pro Tag und/oder Person. Direkt:
+`/api/whereabouts/export?persons=person.x,person.y&from=2026-01-01&to=2026-01-31&format=csv`
+(optional `split_day=1`, `split_person=1`).
 
 ### Deinstallieren
 

@@ -3,18 +3,26 @@
     "step": {
       "user": {
         "title": "Whereabouts",
-        "description": "Live-Karte und Standortverlauf für deine Personen. Alles lässt sich später unter „Konfigurieren“ ändern.",
+        "description": "Live-Karte und Standortverlauf für deine Personen. Alles Weitere stellst du danach auf der Einstellungsseite ein: Seitenleiste → Standorte → Einstellungen.",
         "data": {
-          "live_card": "Karte „Wo ist…?“ (Live-Karte)",
-          "history_card": "Karte „Standortverlauf“",
-          "record_persons": "Verlauf dieser Personen aufzeichnen",
+          "persons": "Personen in Whereabouts",
+          "panel": "Eintrag in der Seitenleiste",
           "address_source": "Adressen für Orte unterwegs"
         },
         "data_description": {
-          "live_card": "Zeigt die Personen live auf einer Karte. Nutzt nur, was Home Assistant ohnehin weiß, es wird nichts gespeichert.",
-          "history_card": "Zeigt, wo die aufgezeichneten Personen an einem gewählten Tag waren – als Route oder Tabelle.",
-          "record_persons": "Aufgezeichnet wird erst, wenn du hier Personen auswählst. Der Verlauf liegt nur auf diesem Home Assistant (Ordner whereabouts im Konfigurationsordner) und bleibt erhalten, bis du ihn löschst.",
+          "persons": "Die angehakten Personen werden vorerst angelegt und gelten als Standard für alle; nur sie erscheinen in Whereabouts. Ändern kannst du das später auf der Einstellungsseite (Verwaltung → Personen in Whereabouts).",
+          "panel": "Eine Seite „Standorte“ mit den Reitern „Wo ist…?“, „Standortverlauf“ und „Einstellungen“. Ohne sie lassen sich die Dashboard-Karten trotzdem nutzen.",
           "address_source": "Companion App (Geokodierter Standort): die Adresse, die die Home-Assistant-Companion-App auf dem Smartphone schon ermittelt hat – bleibt lokal. Dafür muss in der App auf dem Smartphone der Sensor „Geokodierter Standort“ eingeschaltet sein (Einstellungen der Companion App → Sensoren bzw. Sensoren verwalten → Geokodierter Standort). Hat sie keine passende Adresse, wird ersatzweise OpenStreetMap gefragt (Standard): Dabei werden die Koordinaten dieses Ortes an nominatim.openstreetmap.org geschickt. Du kannst auch nur die Companion App, nur OpenStreetMap oder keine Adressen wählen."
+        }
+      },
+      "recording": {
+        "title": "Aufzeichnung",
+        "description": "Wessen Standortverlauf soll aufgezeichnet werden? Hier stehen nur die Personen aus dem ersten Schritt. Der Verlauf bleibt auf diesem Home Assistant und ist Teil jedes Backups.",
+        "data": {
+          "record_persons": "Verlauf dieser Personen aufzeichnen"
+        },
+        "data_description": {
+          "record_persons": "Hake Personen ab, deren Verlauf nicht aufgezeichnet werden soll. Ändern kannst du das später unter Einstellungen → Verwaltung → Aufzeichnung."
         }
       }
     },
@@ -28,40 +36,13 @@
         "title": "Whereabouts",
         "description": "Personen, Farben, Bilder, Rechte und die Seitenleiste stellst du auf der Einstellungsseite ein: [Einstellungen öffnen](/whereabouts/settings). Dort findest du auch alles Folgende.",
         "menu_options": {
-          "card_live": "Karte „Wo ist…?“",
-          "card_history": "Karte „Standortverlauf“",
           "recording": "Aufzeichnung",
           "addresses": "Adressen",
           "import_file": "Verlauf importieren"
         }
       },
-      "card_live": {
-        "title": "Karte „Wo ist…?“",
-        "description": "Zum Vergleich – die Karte „Standortverlauf“ zeigt gerade: {other}. Wählst du hier andere Personen, zeigen beide Karten unterschiedliche Personen.",
-        "data": {
-          "live_card": "Karte „Wo ist…?“ (Live-Karte)",
-          "show_persons_live": "Diese Personen in „Wo ist…?“ anzeigen (leer = alle)"
-        },
-        "data_description": {
-          "live_card": "Zeigt die Personen live auf einer Karte. Nutzt nur, was Home Assistant ohnehin weiß, es wird nichts gespeichert.",
-          "show_persons_live": "Ändert die Karte sofort. In den Einstellungen der Karte legst du Anzeigename, Farbe und Bild je Person fest und kannst dort auch weniger Personen zeigen."
-        }
-      },
-      "card_history": {
-        "title": "Karte „Standortverlauf“",
-        "description": "Zum Vergleich – die Karte „Wo ist…?“ zeigt gerade: {other}. Wählst du hier andere Personen, zeigen beide Karten unterschiedliche Personen.",
-        "data": {
-          "history_card": "Karte „Standortverlauf“",
-          "show_persons_history": "Diese Personen im „Standortverlauf“ anzeigen (leer = alle)"
-        },
-        "data_description": {
-          "history_card": "Zeigt, wo die aufgezeichneten Personen an einem gewählten Tag waren – als Route oder Tabelle.",
-          "show_persons_history": "Ändert die Karte sofort. Einen Verlauf haben nur aufgezeichnete Personen. Ausblenden löscht keinen Verlauf."
-        }
-      },
       "recording": {
         "title": "Aufzeichnung",
-        "description": "Tipp: Eine Person kann mehrere Tracker haben (Companion App und z. B. einen Router- oder ARP-Scan-Tracker fürs Heimnetz) – zuordnen unter Einstellungen → Personen, Home Assistant führt sie zusammen. Auf diese Weise nur das eigene Heimnetz überwachen und nur Geräte eintragen, auf denen auch die Companion App läuft.",
         "data": {
           "record_persons": "Verlauf dieser Personen aufzeichnen",
           "min_interval": "Positions-Updates am selben Ort höchstens speichern alle",

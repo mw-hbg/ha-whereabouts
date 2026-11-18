@@ -1,5 +1,105 @@
 # Changelog
 
+## Unreleased
+
+- Set-up in two steps: first the persons Whereabouts works with (all ticked) and
+  whether you want a sidebar entry (with a hint where the settings are), then
+  whose history is recorded. Everywhere else – cards, card editor, rights,
+  recording, addresses, import, download, diagnostics – only these persons can
+  be chosen, as ticks instead of Home Assistant's entity picker.
+- "Where is…?": a tick on each person tile hides the person on the map until
+  reload (tile greyed).
+- "Location history": person buttons in their colours hide and show persons (no
+  "All" button any more; nobody shown = empty map with a hint); names in the
+  status bar in the person's colour; zoom buttons at the bottom right; toggle
+  "Day | Period" for up to 31 days (arrows move by the period's length, "Today"
+  goes back, one continuous route, date column in the table); new entry window
+  (name with colour dot, place large, time and duration small, red "Delete
+  entry" button).
+- "Download location data" (history card and settings page): day or period,
+  persons, CSV or GPX, one file per day and/or person – several files come as a
+  ZIP.
+- Settings page: tabs "For me" / "Default for all users" with a coloured banner
+  and a "default"/"own" badge per setting; "Make default" per category and "Use
+  my settings for everybody"; administrators can synchronise their settings with
+  all users (non-admins get them live and no settings tab, their own values are
+  kept); explanation of locks and the lock's state as tooltip; every category
+  can be folded (General open, the rest closed, short info in the header,
+  "Expand all").
+- Persons: "Show in" both cards / only "Where is…?" / only "Location history".
+- Map: map styles without preview images, with a description and a link to
+  examples; the CARTO key directly under CARTO (administrators; a pasted URL is
+  fine, the key is checked once after saving, "Remove" button); OpenStreetMap
+  tiles no longer blocked ("403") because Home Assistant sends no referrer.
+- Zones: hide single zones and give single zones their own colour.
+- "Refresh interval" and "Refresh automatically" instead of "reload"; the
+  interval is greyed out while automatic refresh is off (also in the card
+  editor).
+- Administration: new category "Persons in Whereabouts"; "Sidebar" only has the
+  entry, name and icon (the cards are always available); "Users and rights": new
+  installations allow all persons by default, technical users (e.g. the MQTT
+  user) hidden unless switched on, rights chips blue also when they follow the
+  rule; "Addresses": shows which sensor was found automatically and lists only
+  sensors that deliver addresses.
+- Import: consistent controls with ⓘ, "What must the file look like?" and a
+  copyable prompt for converting other apps' data with an AI assistant.
+- Text and number fields save only with "Save" or Enter; switches, selections,
+  ticks and colours save at once. Leaving the settings with unsaved fields asks
+  first; unsaved values are offered again on return.
+
+---
+
+- Einrichtung in zwei Schritten: zuerst die Personen, mit denen Whereabouts
+  arbeitet (alle angehakt), und ob es einen Eintrag in der Seitenleiste geben
+  soll (mit Hinweis, wo die Einstellungen sind), dann wessen Verlauf
+  aufgezeichnet wird. Überall sonst – Karten, Karteneditor, Rechte, Aufzeichnung,
+  Adressen, Import, Download, Diagnose – stehen nur diese Personen zur Auswahl,
+  als Häkchen statt der Entitätsauswahl von Home Assistant.
+- „Wo ist…?“: Ein Häkchen an jeder Personenkachel blendet die Person bis zum
+  Neuladen auf der Karte aus (Kachel ausgegraut).
+- „Standortverlauf“: Personenknöpfe in ihren Farben blenden Personen aus und ein
+  (kein „Alle“-Knopf mehr; niemand gewählt = leere Karte mit Hinweis); Namen in
+  der Statusleiste in der Farbe der Person; Zoomknöpfe unten rechts; Umschalter
+  „Tag | Zeitraum“ für bis zu 31 Tage (Pfeile springen um die Länge des
+  Zeitraums, „Heute“ führt zurück, eine durchgehende Route, Datumsspalte in der
+  Tabelle); neues Eintragsfenster (Name mit Farbpunkt, Ort groß, Zeit und Dauer
+  klein, roter Knopf „Eintrag löschen“).
+- „Standortdaten herunterladen“ (Verlaufskarte und Einstellungsseite): Tag oder
+  Zeitraum, Personen, CSV oder GPX, eine Datei pro Tag und/oder Person – mehrere
+  Dateien kommen als ZIP.
+- Einstellungsseite: Reiter „Für mich“ / „Standard für alle Benutzer“ mit
+  farbigem Hinweis und Kennzeichen „Standard“/„eigene“ an jeder Einstellung;
+  „Als Standard festlegen“ pro Kategorie und „Meine Einstellungen für alle
+  übernehmen“; Administratoren können ihre Einstellungen mit allen Benutzern
+  synchronisieren (Nicht-Admins bekommen sie laufend und keinen
+  Einstellungen-Reiter, ihre eigenen Werte bleiben erhalten); Erklärung der
+  Sperren und Zustand des Schlosses als Tooltip; alle Kategorien auf- und
+  zuklappbar (Allgemein offen, der Rest zu, Kurzinfo im Kopf, „Alle
+  aufklappen“).
+- Personen: „Anzeigen in“ beiden Karten / nur „Wo ist…?“ / nur
+  „Standortverlauf“.
+- Karte: Kartenstile ohne Vorschaubilder, mit Beschreibung und Link zu
+  Beispielen; der CARTO-Schlüssel direkt unter CARTO (Administratoren; eine
+  eingefügte URL geht auch, der Schlüssel wird nach dem Speichern einmal
+  geprüft, Knopf „Entfernen“); OpenStreetMap-Kacheln nicht mehr gesperrt („403“),
+  weil Home Assistant keinen Referrer schickt.
+- Zonen: einzelne Zonen ausblenden und einzelnen Zonen eine eigene Farbe geben.
+- „Aktualisierungsintervall“ und „Automatisch aktualisieren“ statt „neu laden“;
+  das Intervall ist ausgegraut, solange das automatische Aktualisieren aus ist
+  (auch im Karteneditor).
+- Verwaltung: neue Kategorie „Personen in Whereabouts“; „Seitenleiste“ hat nur
+  noch Eintrag, Name und Symbol (die Karten gibt es immer); „Benutzer und
+  Rechte“: neue Installationen erlauben standardmäßig alle Personen, technische
+  Benutzer (z. B. der MQTT-Benutzer) ausgeblendet, solange nicht eingeschaltet,
+  Rechte-Chips auch nach Regel blau; „Adressen“: zeigt, welcher Sensor
+  automatisch gefunden wurde, und bietet nur Sensoren an, die Adressen liefern.
+- Import: einheitliche Bedienelemente mit ⓘ, „Wie muss die Datei aussehen?“ und
+  ein kopierbarer Text, mit dem ein KI-Assistent Daten anderer Apps umwandelt.
+- Text- und Zahlenfelder speichern nur mit „Speichern“ oder der Eingabetaste;
+  Schalter, Auswahlen, Häkchen und Farben sofort. Wer die Einstellungen mit
+  ungespeicherten Feldern verlässt, wird gefragt; nicht gespeicherte Werte werden
+  beim nächsten Mal wieder angeboten.
+
 ## 0.2.1
 
 - Fix: the settings page (and sometimes the whole sidebar page) stayed empty

@@ -11,20 +11,18 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResu
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 
-from . import merged_options
+from . import base_persons, merged_options
 from .const import (
     ADDRESS_SOURCES,
     CONF_ADDRESS_MAX_DISTANCE,
     CONF_ADDRESS_SENSORS,
     CONF_ADDRESS_SOURCE,
-    CONF_HISTORY_CARD,
-    CONF_LIVE_CARD,
     CONF_MIN_INTERVAL,
+    CONF_PANEL,
+    CONF_PERSONS,
     CONF_RECORD_PERSONS,
     CONF_RETENTION_DAYS,
     CONF_SAME_PLACE_DISTANCE,
-    CONF_SHOW_PERSONS_HISTORY,
-    CONF_SHOW_PERSONS_LIVE,
     DEFAULT_OPTIONS,
     DOMAIN,
     NAME,
@@ -54,36 +52,64 @@ def _number(minimum: int, maximum: int, unit: str) -> selector.NumberSelector:
     )
 
 
-_PERSONS = selector.EntitySelector(selector.EntitySelectorConfig(domain="person", multiple=True))
-
-
-def _basic_schema(values: dict) -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(CONF_LIVE_CARD, default=values[CONF_LIVE_CARD]): selector.BooleanSelector(),
-            vol.Required(CONF_HISTORY_CARD, default=values[CONF_HISTORY_CARD]): selector.BooleanSelector(),
-            vol.Optional(CONF_RECORD_PERSONS, default=values[CONF_RECORD_PERSONS]): _PERSONS,
-            vol.Required(CONF_ADDRESS_SOURCE, default=values[CONF_ADDRESS_SOURCE]): _select(
-                ADDRESS_SOURCES, CONF_ADDRESS_SOURCE
-            ),
-        }
+def _person_list(hass: HomeAssistant, entity_ids: list[str]) -> selector.SelectSelector:
+    """Persons as a list with ticks (not Home Assistant's entity picker)."""
+    options = []
+    for entity_id in entity_ids:
+        state = hass.states.get(entity_id)
+        options.append({"value": entity_id, "label": state.name if state else entity_id})
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(options=options, multiple=True, mode=selector.SelectSelectorMode.LIST)
     )
 
 
 class WhereaboutsConfigFlow(ConfigFlow, domain=DOMAIN):
-    """First set-up: which cards, whose history, where addresses come from."""
+    """First set-up: which persons, whose history, sidebar, addresses."""
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        self._options: dict[str, Any] = {}
+        self._chosen: list[str] = []
+
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Step 1: the persons Whereabouts works with, sidebar entry, addresses."""
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
+        everyone = sorted(self.hass.states.async_entity_ids("person"))
         if user_input is not None:
-            options = {**DEFAULT_OPTIONS, **user_input}
-            if not options[CONF_HISTORY_CARD]:
-                options[CONF_RECORD_PERSONS] = []
-            return self.async_create_entry(title=NAME, data={}, options=options)
-        return self.async_show_form(step_id="user", data_schema=_basic_schema(DEFAULT_OPTIONS))
+            chosen = [p for p in everyone if p in user_input.get(CONF_PERSONS, [])]
+            self._options = {
+                **DEFAULT_OPTIONS,
+                # all chosen = "all persons" (new persons appear automatically)
+                CONF_PERSONS: [] if set(chosen) == set(everyone) else chosen,
+                CONF_PANEL: user_input[CONF_PANEL],
+                CONF_ADDRESS_SOURCE: user_input[CONF_ADDRESS_SOURCE],
+            }
+            self._chosen = chosen
+            if not chosen:
+                return self.async_create_entry(title=NAME, data={}, options=self._options)
+            return await self.async_step_recording()
+        schema = vol.Schema(
+            {
+                vol.Optional(CONF_PERSONS, default=everyone): _person_list(self.hass, everyone),
+                vol.Required(CONF_PANEL, default=True): selector.BooleanSelector(),
+                vol.Required(CONF_ADDRESS_SOURCE, default=DEFAULT_OPTIONS[CONF_ADDRESS_SOURCE]): _select(
+                    ADDRESS_SOURCES, CONF_ADDRESS_SOURCE
+                ),
+            }
+        )
+        return self.async_show_form(step_id="user", data_schema=schema)
+
+    async def async_step_recording(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Step 2: whose history is recorded - only persons from step 1, all ticked."""
+        if user_input is not None:
+            record = [p for p in self._chosen if p in user_input.get(CONF_RECORD_PERSONS, [])]
+            return self.async_create_entry(title=NAME, data={}, options={**self._options, CONF_RECORD_PERSONS: record})
+        schema = vol.Schema(
+            {vol.Optional(CONF_RECORD_PERSONS, default=self._chosen): _person_list(self.hass, self._chosen)}
+        )
+        return self.async_show_form(step_id="recording", data_schema=schema)
 
     @staticmethod
     @callback
@@ -100,60 +126,10 @@ class WhereaboutsOptionsFlow(OptionsFlow):
         return merged_options(self.config_entry)
 
     def _save(self, changes: dict) -> ConfigFlowResult:
-        options = {**self._values(), **changes}
-        if not options[CONF_HISTORY_CARD]:
-            options[CONF_RECORD_PERSONS] = []
-        return self.async_create_entry(data=options)
-
-    def _names(self, entity_ids: list[str]) -> str:
-        """Persons of the other card, for comparison (empty = all)."""
-        if not entity_ids:
-            return "alle" if (self.hass.config.language or "").startswith("de") else "all"
-        names = []
-        for entity_id in entity_ids:
-            state = self.hass.states.get(entity_id)
-            names.append(state.name if state else entity_id)
-        return ", ".join(names)
+        return self.async_create_entry(data={**self._values(), **changes})
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        return self.async_show_menu(
-            step_id="init",
-            menu_options=["card_live", "card_history", "recording", "addresses", "import_file"],
-        )
-
-    async def async_step_card_live(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """The "Where is…?" card: on/off and whom it shows."""
-        values = self._values()
-        if user_input is not None:
-            return self._save(user_input)
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_LIVE_CARD, default=values[CONF_LIVE_CARD]): selector.BooleanSelector(),
-                vol.Optional(CONF_SHOW_PERSONS_LIVE, default=values[CONF_SHOW_PERSONS_LIVE]): _PERSONS,
-            }
-        )
-        return self.async_show_form(
-            step_id="card_live",
-            data_schema=schema,
-            description_placeholders={"other": self._names(values[CONF_SHOW_PERSONS_HISTORY])},
-        )
-
-    async def async_step_card_history(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """The history card: on/off and whom it shows."""
-        values = self._values()
-        if user_input is not None:
-            return self._save(user_input)
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_HISTORY_CARD, default=values[CONF_HISTORY_CARD]): selector.BooleanSelector(),
-                vol.Optional(CONF_SHOW_PERSONS_HISTORY, default=values[CONF_SHOW_PERSONS_HISTORY]): _PERSONS,
-            }
-        )
-        return self.async_show_form(
-            step_id="card_history",
-            data_schema=schema,
-            description_placeholders={"other": self._names(values[CONF_SHOW_PERSONS_LIVE])},
-        )
+        return self.async_show_menu(step_id="init", menu_options=["recording", "addresses", "import_file"])
 
     async def async_step_recording(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Whose history is recorded, how often, how long it is kept."""
@@ -162,7 +138,9 @@ class WhereaboutsOptionsFlow(OptionsFlow):
             return self._save(user_input)
         schema = vol.Schema(
             {
-                vol.Optional(CONF_RECORD_PERSONS, default=values[CONF_RECORD_PERSONS]): _PERSONS,
+                vol.Optional(CONF_RECORD_PERSONS, default=values[CONF_RECORD_PERSONS]): _person_list(
+                    self.hass, base_persons(self.hass, values)
+                ),
                 vol.Required(CONF_MIN_INTERVAL, default=values[CONF_MIN_INTERVAL]): _number(10, 3600, "s"),
                 vol.Required(CONF_SAME_PLACE_DISTANCE, default=values[CONF_SAME_PLACE_DISTANCE]): _number(
                     10, 1000, "m"

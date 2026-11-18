@@ -15,8 +15,6 @@ GEOCODE_CACHE_FILE = "geocode_cache.json"
 CONF_LIVE_CARD = "live_card"
 CONF_HISTORY_CARD = "history_card"
 CONF_RECORD_PERSONS = "record_persons"
-CONF_SHOW_PERSONS_LIVE = "show_persons_live"  # persons in "Where is…?" (empty = all)
-CONF_SHOW_PERSONS_HISTORY = "show_persons_history"  # persons in the history card (empty = all)
 CONF_ADDRESS_SOURCE = "address_source"
 CONF_ADDRESS_SENSORS = "address_sensors"  # {person entity_id: sensor entity_id}
 CONF_MIN_INTERVAL = "min_interval"
@@ -25,6 +23,7 @@ CONF_ADDRESS_MAX_DISTANCE = "address_max_distance"
 CONF_HISTORY_ACCESS = "history_access"
 CONF_DELETE_ACCESS = "delete_access"
 CONF_RETENTION_DAYS = "retention_days"
+CONF_PERSONS = "persons"  # persons Whereabouts works with at all (empty = all)
 CONF_PANEL = "panel"  # entry in the sidebar
 CONF_PANEL_TITLE = "panel_title"  # empty = "Standorte" / "Whereabouts" by system language
 CONF_PANEL_ICON = "panel_icon"
@@ -50,11 +49,10 @@ DELETE_ACCESS_LEVELS = [ACCESS_ADMINS_AND_SELF, ACCESS_ADMINS]
 DEFAULT_OPTIONS: dict = {
     CONF_LIVE_CARD: True,
     CONF_HISTORY_CARD: True,
+    # Persons Whereabouts works with; empty = every person in Home Assistant.
+    CONF_PERSONS: [],
     # Privacy first: nothing is recorded until persons are chosen.
     CONF_RECORD_PERSONS: [],
-    # Shown in the cards; empty = every person in Home Assistant.
-    CONF_SHOW_PERSONS_LIVE: [],
-    CONF_SHOW_PERSONS_HISTORY: [],
     # The Companion app's geocoded location first; only if it has no fitting
     # address, OpenStreetMap (sends the coordinates of that place).
     CONF_ADDRESS_SOURCE: ADDRESS_SOURCE_PHONE_OSM,
@@ -62,8 +60,6 @@ DEFAULT_OPTIONS: dict = {
     CONF_MIN_INTERVAL: 60,
     CONF_SAME_PLACE_DISTANCE: 50,
     CONF_ADDRESS_MAX_DISTANCE: 150,
-    CONF_HISTORY_ACCESS: ACCESS_ADMINS_AND_SELF,
-    CONF_DELETE_ACCESS: ACCESS_ADMINS_AND_SELF,
     # 0 = keep forever. Nothing is ever deleted automatically by default.
     CONF_RETENTION_DAYS: 0,
     CONF_PANEL: True,

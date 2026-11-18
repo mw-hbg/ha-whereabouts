@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - New page in the sidebar ("Whereabouts", German "Standorte") with the tabs
   "Where is…?", "Location history" and "Settings". Tab names turn into symbols

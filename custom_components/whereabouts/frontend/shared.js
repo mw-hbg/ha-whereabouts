@@ -411,6 +411,21 @@ export function sinceText(hass, t, iso) {
   return `${dt.toLocaleDateString(language(hass), { day: '2-digit', month: '2-digit' })} ${time}`;
 }
 
+// How current shown data is: "2 minutes ago", from one hour on the time,
+// then "yesterday 14:05", older ones with the full date.
+export function standText(hass, t, date) {
+  const dt = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(dt.getTime())) return '–';
+  const minutes = Math.floor((Date.now() - dt.getTime()) / 60000);
+  if (minutes < 1) return t('just_now');
+  if (minutes < 60) return minutes === 1 ? t('minute_ago') : t('minutes_ago', { n: minutes });
+  const time = t('time', { time: clock(hass, dt) });
+  const same = (a, b) => a.toDateString() === b.toDateString();
+  if (same(dt, new Date())) return time;
+  if (same(dt, new Date(Date.now() - 86400000))) return t('yesterday', { time });
+  return `${dt.toLocaleDateString(language(hass), { day: '2-digit', month: '2-digit', year: 'numeric' })} ${time}`;
+}
+
 export function agoText(t, iso) {
   const dt = new Date(iso);
   if (Number.isNaN(dt.getTime())) return '–';
@@ -545,9 +560,11 @@ export function applyHeight(el, config) {
 export function cardConfig(defaults, settings, raw, kind) {
   const own = { ...(settings || {}) };
   const interval = own[kind === 'live' ? 'live_refresh_interval' : 'history_refresh_interval'];
-  ['live_refresh_interval', 'history_refresh_interval', 'view_live', 'view_history', 'view_settings', 'start_view']
-    .forEach((key) => delete own[key]);
+  const auto = own[kind === 'live' ? 'live_auto_refresh' : 'history_auto_refresh'];
+  ['live_refresh_interval', 'history_refresh_interval', 'live_auto_refresh', 'history_auto_refresh',
+    'view_live', 'view_history', 'view_settings', 'start_view'].forEach((key) => delete own[key]);
   if (interval) own.refresh_interval = interval;
+  if (auto !== undefined) own.auto_refresh = auto;
   if (!own.carto_api_key) delete own.carto_api_key;
   const persons = { ...(own.person_settings || {}) };
   Object.entries((raw && raw.person_settings) || {}).forEach(([id, entry]) => { persons[id] = { ...(persons[id] || {}), ...entry }; });

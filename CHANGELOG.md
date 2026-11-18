@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+- Fix: the settings page (and sometimes the whole sidebar page) stayed empty
+  when Home Assistant created the page before its code was ready.
+- Sidebar page fills the whole height; tab names in normal spelling; no page
+  title next to the tabs.
+- "Where is…?": the button "show everyone and follow" is gone.
+- "Location history": reload button at the bottom right with "Reload in … s",
+  like "Where is…?". Both maps reload every 30 seconds by default; the interval
+  can be changed and automatic reloading switched off. Then the bottom shows how
+  current the data is ("2 minutes ago", "14:05", "yesterday 14:05", date and
+  time); the button still reloads on click.
+
+---
+
+- Fehler behoben: Die Einstellungsseite (manchmal die ganze Seite in der
+  Seitenleiste) blieb leer, wenn Home Assistant die Seite anlegte, bevor ihr Code
+  bereit war.
+- Die Seite in der Seitenleiste füllt die ganze Höhe; Reiternamen in normaler
+  Schreibweise; kein Seitentitel mehr neben den Reitern.
+- „Wo ist…?“: Der Knopf „Alle zeigen und mitverfolgen“ ist weg.
+- „Standortverlauf“: Neu-laden-Knopf unten rechts mit „Neu laden in … s“, wie bei
+  „Wo ist…?“. Beide Karten laden standardmäßig alle 30 Sekunden neu; der Abstand
+  lässt sich ändern und das automatische Neuladen abschalten. Dann steht unten,
+  auf welchem Stand die Daten sind („vor 2 Minuten“, „14:05 Uhr“, „gestern
+  14:05 Uhr“, Datum und Uhrzeit); der Knopf lädt weiterhin auf Klick neu.
+
 ## 0.2.0
 
 - New page in the sidebar ("Whereabouts", German "Standorte") with the tabs

@@ -7,7 +7,8 @@ export const HISTORY_DEFAULTS = {
   default_view: 'map', // map | table
   show_legend: true,
   show_export: true,
-  refresh_interval: 120,
+  auto_refresh: true,
+  refresh_interval: 30,
 };
 
 const CHECK = '<div class="checkbox"><svg viewBox="0 0 24 24"><polyline points="5 13 10 18 19 7"></polyline></svg></div>';
@@ -148,11 +149,12 @@ export function defineHistoryCard(S) {
         this._barObserver = new ResizeObserver(() => this._layout());
         this._barObserver.observe(this.querySelector('.controls'));
       }
-      this._interval = Math.max(30, Number(this._config.refresh_interval) || 120);
+      this._auto = this._config.auto_refresh !== false;
+      this._interval = Math.max(10, Number(this._config.refresh_interval) || 30);
       this._rest = this._interval;
       this._renderCountdown();
       this._timer = setInterval(() => {
-        if (this._date !== this._todayStr()) { this._rest = this._interval; this._renderCountdown(); return; }
+        if (!this._auto) { this._renderCountdown(); return; }
         this._rest -= 1;
         if (this._rest <= 0) { this._rest = this._interval; this._autoRefresh(); }
         this._renderCountdown();
@@ -167,22 +169,25 @@ export function defineHistoryCard(S) {
       document.removeEventListener('keydown', this._keyHandler);
     }
 
-    // Ring around the reload button: runs only for today (other days do not change).
+    // Automatic reload: "Reload in 12 s" and a ring around the button;
+    // switched off: how current the shown data is, the button stays.
     _renderCountdown() {
+      const t = this._t;
       const button = this.querySelector('.neuladen');
-      if (!button) return;
-      const today = this._date === this._todayStr();
-      button.classList.toggle('still', !today);
+      const rest = this.querySelector('.statusbar .rest');
+      if (!button || !rest) return;
+      const auto = this._auto !== false;
+      button.classList.toggle('ohne-ring', !auto);
       const ring = button.querySelector('.ring');
       const length = 2 * Math.PI * 15;
       ring.style.strokeDasharray = length.toFixed(2);
-      ring.style.strokeDashoffset = today ? (length * (1 - this._rest / this._interval)).toFixed(2) : length.toFixed(2);
-      button.title = today ? this._t('reload_in', { n: this._rest }) : this._t('reload_now');
+      ring.style.strokeDashoffset = (length * (1 - this._rest / this._interval)).toFixed(2);
+      rest.textContent = auto ? t('reload_in', { n: this._rest })
+        : (this._loadedAt ? t('data_as_of', { when: S.standText(this._hass, t, this._loadedAt) }) : '');
     }
 
     _autoRefresh() {
-      // Only today, visible, and when the user is not in the middle of something.
-      if (this._date !== this._todayStr()) return;
+      // Only when visible and the user is not in the middle of something.
       if (document.hidden || !this.isConnected) return;
       if (this._selectMode) return;
       if (this._map && this._map._popup && this._map.hasLayer(this._map._popup)) return;
@@ -301,9 +306,12 @@ export function defineHistoryCard(S) {
             .controls button:disabled { opacity: 0.4; cursor: default; }
             .controls button.aktiv { background: var(--primary-color); color: var(--text-primary-color, #fff); }
             .controls button.icon { padding: 8px 12px; font-size: 18px; line-height: 1; }
-            .controls button.neuladen { position: relative; width: 38px; height: 38px; padding: 0; border-radius: 50%;
-                                        display: inline-flex; align-items: center; justify-content: center; }
-            .neuladen svg.ringe { position: absolute; inset: 1px; width: 34px; height: 34px; }
+            .neuladen { flex: 0 0 auto; position: relative; width: 34px; height: 34px; padding: 0; border: none; border-radius: 50%;
+                        background: transparent; color: var(--primary-text-color); cursor: pointer;
+                        display: inline-flex; align-items: center; justify-content: center; }
+            .neuladen:hover { background: rgba(127,127,127,.15); }
+            .neuladen.ohne-ring svg.ringe { display: none; }
+            .neuladen svg.ringe { position: absolute; inset: 0; width: 34px; height: 34px; }
             .neuladen .ring-hg { fill: none; stroke: rgba(127,127,127,.25); stroke-width: 2; }
             .neuladen .ring { fill: none; stroke: var(--primary-color, #03a9f4); stroke-width: 2; stroke-linecap: round;
                               transform: rotate(-90deg); transform-origin: 17px 17px; transition: stroke-dashoffset 1s linear; }
@@ -362,8 +370,10 @@ export function defineHistoryCard(S) {
             .tabelle .checkbox svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 3; display: none; }
             .tabelle tr.gewaehlt .checkbox svg { display: block; }
             .leer { padding: 30px; text-align: center; color: var(--secondary-text-color); font-size: 14px; }
-            .statusbar { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; text-align: center; font-size: 13px;
-                         color: var(--secondary-text-color); padding: 8px 14px; line-height: 1.6; border-top: 1px solid var(--divider-color); }
+            .statusbar .infos { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+            .statusbar .rest { font-variant-numeric: tabular-nums; }
+            .statusbar { display: flex; align-items: center; gap: 8px; text-align: center; font-size: 13px;
+                         color: var(--secondary-text-color); padding: 4px 8px 4px 14px; line-height: 1.6; border-top: 1px solid var(--divider-color); }
             .statusbar.fehler .status { color: var(--error-color, #db4437); }
             .statusbar .export { display: inline-flex; gap: 6px; }
             .statusbar .export button { font: inherit; font-size: 12px; padding: 3px 8px; border: 1px solid var(--divider-color);
@@ -390,10 +400,6 @@ export function defineHistoryCard(S) {
               <div class="aktionen">
                 <button class="auswahlBtn" style="display:none;">${esc(t('multi_select'))}</button>
                 <button class="ansicht"></button>
-                <button class="neuladen" title="${esc(t('reload_now'))}" aria-label="${esc(t('reload_now'))}">
-                  <svg class="ringe" viewBox="0 0 34 34" aria-hidden="true"><circle class="ring-hg" cx="17" cy="17" r="15"/><circle class="ring" cx="17" cy="17" r="15"/></svg>
-                  <svg class="pfeil" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-                </button>
               </div>
             </div>
           </div>
@@ -405,8 +411,15 @@ export function defineHistoryCard(S) {
           <div class="wa-map"></div>
           <div class="tabelle"></div>
           <div class="leer" style="display:none;"></div>
-          <div class="statusbar"><span class="status"></span>
-            ${c.show_export ? `<span class="export"><button data-format="csv">${esc(t('export_csv'))}</button><button data-format="gpx">${esc(t('export_gpx'))}</button></span>` : ''}
+          <div class="statusbar">
+            <div class="infos"><span class="status"></span>
+              ${c.show_export ? `<span class="export"><button data-format="csv">${esc(t('export_csv'))}</button><button data-format="gpx">${esc(t('export_gpx'))}</button></span>` : ''}
+              <span class="rest"></span>
+            </div>
+            <button class="neuladen" title="${esc(t('reload_now'))}" aria-label="${esc(t('reload_now'))}">
+              <svg class="ringe" viewBox="0 0 34 34" aria-hidden="true"><circle class="ring-hg" cx="17" cy="17" r="15"/><circle class="ring" cx="17" cy="17" r="15"/></svg>
+              <svg class="pfeil" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            </button>
           </div>
         </ha-card>`;
 
@@ -514,6 +527,7 @@ export function defineHistoryCard(S) {
       const results = await Promise.allSettled(persons.map((p) =>
         this._hass.callWS({ type: 'whereabouts/history', person: p.id, date: day })));
       if (number !== this._loadNo) return; // something newer was requested meanwhile
+      this._loadedAt = new Date();
 
       const points = [];
       const failed = [];

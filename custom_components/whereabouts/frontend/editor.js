@@ -74,13 +74,15 @@ export function defineEditor(S, defaults) {
           { name: 'show_status_bar', selector: { boolean: {} } },
           { name: 'show_accuracy', selector: { boolean: {} } },
           { name: 'follow', selector: { boolean: {} } },
+          { name: 'auto_refresh', selector: { boolean: {} } },
           { name: 'refresh_interval', selector: { number: { min: 5, max: 3600, step: 5, mode: 'box', unit_of_measurement: 's' } } },
         ]
         : [
           select('default_view', ['map', 'table']),
           { name: 'show_legend', selector: { boolean: {} } },
           { name: 'show_export', selector: { boolean: {} } },
-          { name: 'refresh_interval', selector: { number: { min: 30, max: 3600, step: 10, mode: 'box', unit_of_measurement: 's' } } },
+          { name: 'auto_refresh', selector: { boolean: {} } },
+          { name: 'refresh_interval', selector: { number: { min: 10, max: 3600, step: 5, mode: 'box', unit_of_measurement: 's' } } },
         ];
       const zones = [
         { name: 'show_zones', selector: { boolean: {} } },

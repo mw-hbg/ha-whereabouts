@@ -70,13 +70,15 @@ CATEGORIES: dict[str, dict[str, tuple[Any, Any]]] = {
         "show_status_bar": (True, bool),
         "show_accuracy": (True, bool),
         "follow": (True, bool),
+        "live_auto_refresh": (True, bool),
         "live_refresh_interval": (30, vol.All(vol.Coerce(int), vol.Range(min=5, max=3600))),
     },
     "history": {
         "default_view": ("map", vol.In(["map", "table"])),
         "show_legend": (True, bool),
         "show_export": (True, bool),
-        "history_refresh_interval": (120, vol.All(vol.Coerce(int), vol.Range(min=30, max=3600))),
+        "history_auto_refresh": (True, bool),
+        "history_refresh_interval": (30, vol.All(vol.Coerce(int), vol.Range(min=10, max=3600))),
     },
 }
 

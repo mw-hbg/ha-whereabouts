@@ -12,7 +12,7 @@ const VIEWS = [
 
 const CSS = `
   whereabouts-panel { display: block; height: 100%; }
-  .wa-panel { display: flex; flex-direction: column; height: 100%; background: var(--primary-background-color);
+  .wa-panel { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--primary-background-color);
               color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, inherit); }
   .wa-panel .wap-kopf { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; height: var(--header-height, 56px);
                     padding: 0 4px 0 12px; box-sizing: border-box;
@@ -28,7 +28,7 @@ const CSS = `
   .wa-panel .wap-reiter { flex: 1 1 auto; min-width: 0; display: flex; justify-content: flex-start; height: 100%; overflow: hidden; }
   .wa-panel .wap-reiter button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; height: 100%;
                              padding: 0 16px; border: none; background: none; color: inherit; opacity: .75; cursor: pointer;
-                             font: inherit; font-size: 14px; font-weight: 500; letter-spacing: .02em; text-transform: uppercase;
+                             font: inherit; font-size: 15px; font-weight: 500;
                              border-bottom: 2px solid transparent; box-sizing: border-box; }
   .wa-panel .wap-reiter button:hover { opacity: 1; background: rgba(255,255,255,.08); }
   .wa-panel .wap-reiter button.wap-aktiv { opacity: 1; border-bottom-color: currentColor; }
@@ -56,6 +56,15 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
       super();
       this._pages = {};
       this._view = null;
+      // Home Assistant may create the element (and set hass, route ...) before
+      // this class is defined: take those values over now.
+      ['panel', 'narrow', 'route', 'hass'].forEach((name) => {
+        if (Object.prototype.hasOwnProperty.call(this, name)) {
+          const value = this[name];
+          delete this[name];
+          this[name] = value;
+        }
+      });
     }
 
     set hass(hass) {
@@ -138,7 +147,6 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
         this._root.innerHTML = `
           <div class="wap-kopf">
             <button class="wap-menue" type="button" title="${esc(t('menu'))}" aria-label="${esc(t('menu'))}">${MENU_ICON}</button>
-            <div class="wap-titel">${esc(title)}</div>
             <nav class="wap-reiter" role="tablist">
               ${VIEWS.filter((v) => this._visible.includes(v.id)).map((v) => `
                 <button type="button" role="tab" data-view="${v.id}" title="${esc(t(v.label))}" aria-label="${esc(t(v.label))}">

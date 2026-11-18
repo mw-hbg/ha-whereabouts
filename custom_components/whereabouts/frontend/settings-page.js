@@ -27,11 +27,12 @@ const PERSONAL = [
   ] },
   { id: 'live', icon: 'mdi:map-marker-account', weight: 'more', fields: [
     { key: 'show_info_bar', sel: B }, { key: 'show_status_bar', sel: B }, { key: 'show_accuracy', sel: B },
-    { key: 'follow', sel: B }, { key: 'live_refresh_interval', sel: num(5, 3600, 5, 's') },
+    { key: 'follow', sel: B }, { key: 'live_auto_refresh', sel: B }, { key: 'live_refresh_interval', sel: num(5, 3600, 5, 's') },
   ] },
   { id: 'history', icon: 'mdi:map-clock', weight: 'more', fields: [
     { key: 'default_view', sel: (t) => sel(['map', 'table'].map((v) => ({ value: v, label: t(`ed_view_${v}`) }))) },
-    { key: 'show_legend', sel: B }, { key: 'show_export', sel: B }, { key: 'history_refresh_interval', sel: num(30, 3600, 10, 's') },
+    { key: 'show_legend', sel: B }, { key: 'show_export', sel: B }, { key: 'history_auto_refresh', sel: B },
+    { key: 'history_refresh_interval', sel: num(10, 3600, 5, 's') },
   ] },
 ];
 

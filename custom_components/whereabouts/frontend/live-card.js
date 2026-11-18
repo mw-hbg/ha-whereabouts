@@ -7,6 +7,7 @@ export const LIVE_DEFAULTS = {
   show_info_bar: true,
   show_status_bar: true,
   show_accuracy: true,
+  auto_refresh: true,
   refresh_interval: 30,
   follow: true,
 };
@@ -14,7 +15,6 @@ export const LIVE_DEFAULTS = {
 const MAX_ACCURACY = 1000; // larger accuracy circles are not drawn
 const CLUSTER_PX = 46; // pins closer than this (on screen) become one pin
 const AVATAR = 38; // size of a picture in a pin
-const FIT_ICON = '<path fill="currentColor" d="M5 5h5V3H3v7h2V5zm9-2v2h5v5h2V3h-7zm5 16h-5v2h7v-7h-2v5zM5 14H3v7h7v-2H5v-5zm4-5v6h6V9H9z"/>';
 
 export function defineLiveCard(S) {
   class WhereaboutsLiveCard extends HTMLElement {
@@ -163,9 +163,11 @@ export function defineLiveCard(S) {
         });
         this._resizeObserver.observe(mapDiv);
       }
+      this._auto = this._config.auto_refresh !== false;
       this._interval = Math.max(5, Number(this._config.refresh_interval) || 30);
       this._rest = this._interval;
       this._tick = setInterval(() => {
+        if (!this._auto) { this._renderCountdown(); return; }
         this._rest -= 1;
         if (this._rest <= 0) this._reload();
         else this._renderCountdown();
@@ -231,13 +233,6 @@ export function defineLiveCard(S) {
           .status .seit { font-weight: 400; color: var(--wa-leise); }
           .adresse, .ortung { font-size: .92em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
           .ortung { color: var(--wa-leise); }
-          .alle { position: absolute; left: 12px; bottom: 26px; z-index: 1000; width: 44px; height: 44px; border-radius: 50%;
-                  border: none; cursor: pointer; color: var(--wa-text); background: var(--wa-glas);
-                  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 2px 10px rgba(0,0,0,.18);
-                  display: flex; align-items: center; justify-content: center; }
-          .alle.aktiv { color: #fff; background: #555; }
-          .wa-live.dark .alle.aktiv { background: #e8eaed; color: #202124; }
-          .alle svg { width: 22px; height: 22px; }
           .wa-marker { background: none; border: none; }
           .wa-marker .pin { position: relative; display: inline-flex; flex-wrap: wrap; gap: 3px; padding: 3px; box-sizing: border-box;
                             border-radius: 999px; background: var(--rand); box-shadow: 0 2px 7px rgba(0,0,0,.4); cursor: pointer;
@@ -295,6 +290,7 @@ export function defineLiveCard(S) {
                       background: transparent; color: var(--primary-text-color, var(--wa-text)); cursor: pointer;
                       display: flex; align-items: center; justify-content: center; padding: 0; }
           .neuladen:hover { background: rgba(127,127,127,.15); }
+          .neuladen.ohne-ring svg:not(.pfeil) { display: none; }
           .neuladen svg { position: absolute; inset: 0; width: 34px; height: 34px; }
           .neuladen .ring-hg { fill: none; stroke: rgba(127,127,127,.25); stroke-width: 2; }
           .neuladen .ring { fill: none; stroke: var(--primary-color, #03a9f4); stroke-width: 2; stroke-linecap: round;
@@ -325,9 +321,6 @@ export function defineLiveCard(S) {
                   <div class="ortung"></div>
                 </div>
               </button>`).join('')}</div>` : ''}
-            <button class="alle${this._follow ? ' aktiv' : ''}" type="button" title="${S.escapeHtml(t('show_all'))}" aria-label="${S.escapeHtml(t('show_all'))}">
-              <svg viewBox="0 0 24 24" aria-hidden="true">${FIT_ICON}</svg>
-            </button>
           </div>
           ${c.show_status_bar ? `<div class="statusbar">
             <div class="infos">
@@ -343,7 +336,6 @@ export function defineLiveCard(S) {
         </div>`;
 
       this.querySelectorAll('.person').forEach((b) => b.addEventListener('click', () => this._goTo(b.dataset.person)));
-      this.querySelector('.alle').addEventListener('click', () => { this._setFollow(true); this._fitAll(true); });
       const reload = this.querySelector('.neuladen');
       if (reload) {
         reload.addEventListener('click', () => {
@@ -477,20 +469,30 @@ export function defineLiveCard(S) {
           link.onclick = null;
         }
       });
-      bar.querySelector('.zuletzt').textContent = this._updated
-        ? t('updated', { time: t('time', { time: S.clock(this._hass, this._updated, true) }) }) : '–';
       this._renderCountdown();
     }
 
+    // Automatic reload: "Updated 14:05:12 · Reload in 12 s" with a ring;
+    // switched off: only how current the data is, the button stays.
     _renderCountdown() {
-      const rest = this.querySelector('.statusbar .rest');
-      if (rest) rest.textContent = this._t('reload_in', { n: this._rest });
-      const ring = this.querySelector('.neuladen .ring');
-      if (ring) {
-        const length = 2 * Math.PI * 15;
-        ring.style.strokeDasharray = length.toFixed(2);
-        ring.style.strokeDashoffset = (length * (1 - this._rest / this._interval)).toFixed(2);
-      }
+      const t = this._t;
+      const bar = this.querySelector('.statusbar');
+      if (!bar) return;
+      const auto = this._auto !== false;
+      const last = bar.querySelector('.zuletzt');
+      const rest = bar.querySelector('.rest');
+      last.textContent = auto
+        ? (this._updated ? t('updated', { time: t('time', { time: S.clock(this._hass, this._updated, true) }) }) : '–')
+        : (this._updated ? t('data_as_of', { when: S.standText(this._hass, t, this._updated) }) : '–');
+      rest.textContent = auto ? t('reload_in', { n: this._rest }) : '';
+      rest.hidden = !auto;
+      if (rest.previousElementSibling) rest.previousElementSibling.hidden = !auto;
+      const button = bar.querySelector('.neuladen');
+      button.classList.toggle('ohne-ring', !auto);
+      const ring = button.querySelector('.ring');
+      const length = 2 * Math.PI * 15;
+      ring.style.strokeDasharray = length.toFixed(2);
+      ring.style.strokeDashoffset = (length * (1 - this._rest / this._interval)).toFixed(2);
     }
 
     // Info bar: move to the person (no zoom out/in), then open the info window.

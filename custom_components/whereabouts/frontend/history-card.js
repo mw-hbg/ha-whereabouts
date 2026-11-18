@@ -99,9 +99,18 @@ export function defineHistoryCard(S, D) {
 
     // Back on this map (other tab, other dashboard): everybody visible again.
     activate() {
-      if (!this._ready || !this._hidden.size) return;
-      this._hidden.clear();
-      this._afterPersons();
+      if (!this._ready) return;
+      if (this._hidden.size) {
+        this._hidden.clear();
+        this._afterPersons();
+      }
+      this._overview();
+    }
+
+    // Map back on everything shown - as soon as the map has its size again.
+    _overview() {
+      if (!this._map || this._tableView) { this._staleView = true; return; }
+      S.whenSized(this.querySelector('.wa-map'), () => this._fit());
     }
 
     getCardSize() {
@@ -161,6 +170,7 @@ export function defineHistoryCard(S, D) {
       this._map = null;
       this._tiles = [];
       this._legend = null;
+      this._overviewButton = null;
       this._routeLayer = null;
       this._markerLayer = null;
       this._endLayer = null;
@@ -277,7 +287,6 @@ export function defineHistoryCard(S, D) {
       this._date = from;
       this._to = to;
       this._unit = unit || (from === to ? 'day' : 'days');
-      if (!this._multiDay() && this._mode === 'heat') this._mode = 'route';
       this._updateDateControls();
       this._rest = this._interval;
       this._renderCountdown();
@@ -292,15 +301,19 @@ export function defineHistoryCard(S, D) {
       this._setPeriod(from, to, this._unit);
     }
 
-    async _today() {
+    // "Today": a period → only today; only today already → everything as after opening the page.
+    _today() {
       const today = this._todayStr();
-      if (this._unit === 'month') this._setPeriod(`${today.slice(0, 8)}01`, today, 'month');
-      else if (this._unit === 'year') this._setPeriod(`${today.slice(0, 4)}-01-01`, today, 'year');
-      else {
-        const P = await pickerModule;
-        const n = P.daysBetween(this._date, this._to);
-        this._setPeriod(P.addDays(today, -(n - 1)), today, this._unit);
+      if (this._date === today && this._to === today) {
+        this._hidden.clear();
+        this._mode = 'route';
+        this._withHome = false;
+        if (this._selectMode) this._setSelectMode(false);
+        if (this._tableView && !this._mapError) this._tableView = false;
+        this._updatePersonButtons();
+        this._updateView();
       }
+      this._setPeriod(today, today, 'day');
     }
 
     async _pick() {
@@ -320,15 +333,13 @@ export function defineHistoryCard(S, D) {
       if (label) label.textContent = P.rangeText(S.language(this._hass), this._date, this._to);
       const isToday = this._to >= today;
       this.querySelector('.nextDay').disabled = isToday;
-      const sameLength = this._date === P.addDays(today, -(P.daysBetween(this._date, this._to) - 1));
-      this.querySelector('.today').disabled = isToday && (this._unit === 'day' || this._unit === 'days' ? sameLength : true);
       this.querySelector('.prevDay').disabled = Boolean(this._first && this._date <= this._first);
       this.querySelectorAll('.prevDay, .nextDay').forEach((b) => {
         const prev = b.classList.contains('prevDay');
         b.title = this._t(this._multiDay() ? (prev ? 'prev_range' : 'next_range') : (prev ? 'prev_day' : 'next_day'));
       });
       const modes = this.querySelector('.modus');
-      if (modes) modes.hidden = !this._multiDay() || this._tableView;
+      if (modes) modes.hidden = this._tableView;
       this._layout();
     }
 
@@ -627,6 +638,7 @@ export function defineHistoryCard(S, D) {
         const mapDiv = this.querySelector('.wa-map');
         this._map = window.L.map(mapDiv, { zoomControl: false }).setView([home.latitude || 0, home.longitude || 0], 14);
         window.L.control.zoom({ position: 'bottomright', zoomInTitle: this._t('zoom_in'), zoomOutTitle: this._t('zoom_out') }).addTo(this._map);
+        this._overviewButton = S.overviewControl(this._map, this._t('overview'), () => this._fit());
         this._setTiles(S.isDark(this._hass, this._config.map_style));
         S.watchZoneNames(this._map, mapDiv, this._config);
         this._map.on('zoomend', () => this._simplify());
@@ -769,7 +781,7 @@ export function defineHistoryCard(S, D) {
       if (!persons.length && !failed.length) parts.push(esc(t('no_person_selected')));
       else if (!points.length) { if (!failed.length) parts.push(esc(t(this._multiDay() ? 'no_data_range' : 'no_data'))); }
       else if (this._persons.length > 1) {
-        parts.push(persons.map((p) => `<span class="wer p-${p.key}">${esc(p.name)}</span>: ${esc(this._countText(points.filter((x) => x.person === p.id).length))}`).join(' · '));
+        parts.push(persons.map((p) => `<span class="wer p-${p.key}">${esc(p.name)}:</span> ${esc(this._countText(points.filter((x) => x.person === p.id).length))}`).join(' · '));
       } else parts.push(esc(this._countText(points.length)));
       let text = parts.join('');
       if (this._multiDay()) {
@@ -824,7 +836,7 @@ export function defineHistoryCard(S, D) {
     }
 
     _heat() {
-      return this._mode === 'heat' && this._multiDay();
+      return this._mode === 'heat';
     }
 
     // Layers of the route (or heatmap) for a map; used for the shown map and the picture.
@@ -960,6 +972,8 @@ export function defineHistoryCard(S, D) {
       };
       legend.addTo(this._map);
       this._legend = legend;
+      // The overview button stays above the legend.
+      if (this._overviewButton) { this._map.removeControl(this._overviewButton); this._overviewButton.addTo(this._map); }
     }
 
     // Header: colour dot, name, close; the place large with a link to the map app; time and duration small;
@@ -1380,7 +1394,7 @@ export function defineHistoryCard(S, D) {
         }
       }
       const modes = this.querySelector('.modus');
-      if (modes) modes.hidden = !this._multiDay() || this._tableView;
+      if (modes) modes.hidden = this._tableView;
       this._layout();
     }
   }

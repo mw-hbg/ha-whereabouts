@@ -397,7 +397,8 @@ export function defineLiveCard(S) {
         const mapDiv = this.querySelector('.wa-map');
         this._map = L.map(mapDiv, { zoomControl: false })
           .setView([home.latitude || 0, home.longitude || 0], 12);
-        L.control.zoom({ position: 'bottomright' }).addTo(this._map);
+        L.control.zoom({ position: 'bottomright', zoomInTitle: this._t('zoom_in'), zoomOutTitle: this._t('zoom_out') }).addTo(this._map);
+        S.overviewControl(this._map, this._t('overview'), () => { this._setFollow(true); this._fitAll(true); });
         this._setTiles(S.isDark(this._hass, this._config.map_style));
         ['dragstart', 'zoomstart'].forEach((ev) => this._map.on(ev, () => { if (!this._programmatic) this._setFollow(false); }));
         S.watchZoneNames(this._map, mapDiv, this._config);
@@ -502,7 +503,12 @@ export function defineLiveCard(S) {
       this._closePanel(false);
       if (this._map) {
         this._setFollow(true);
-        setTimeout(() => { if (this._map) { this._map.invalidateSize(); this._fitAll(false); } }, 0);
+        // A view shown again has no size for a moment: wait for it, then show everybody.
+        S.whenSized(this.querySelector('.wa-map'), () => {
+          if (!this._map) return;
+          this._map.invalidateSize();
+          this._fitAll(false);
+        });
       }
     }
 

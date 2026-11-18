@@ -385,6 +385,22 @@ def test_import_merges_into_gaps(tmp_path):
     assert storage.days("alex") == ["2026-06-24"]
 
 
+def test_import_skips_existing_days(tmp_path):
+    storage = HistoryStorage(str(tmp_path))
+    storage.import_points("alex", [Point("2026-06-24", "08:00:00", "home", *HOME, end="12:00:00")])
+    points = [
+        Point("2026-06-24", "13:00:00", "not_home", 48.1, 9.1, "Main Street 1"),  # day with data
+        Point("2026-06-25", "09:00:00", "home", *HOME),  # a new day
+    ]
+    plan = {day["date"]: day for day in storage.import_plan("alex", points, "skip")}
+    assert plan["2026-06-24"]["status"] == "skip" and plan["2026-06-24"]["new"] == 0
+    assert plan["2026-06-25"]["status"] == "new" and plan["2026-06-25"]["new"] == 1
+    outcome = storage.import_points("alex", points, skip_existing=True)
+    assert outcome == {"added": 1, "skipped": 1, "days": 1}
+    assert [s.start for s in storage.read_day("alex", "2026-06-24")] == ["08:00:00"]
+    assert storage.days("alex") == ["2026-06-24", "2026-06-25"]
+
+
 async def test_users_are_marked_technical(hass: HomeAssistant, hass_ws_client, hass_admin_user):
     await _setup(hass, hass_admin_user.id)
     await hass.auth.async_create_user("MQTT", group_ids=["system-users"])

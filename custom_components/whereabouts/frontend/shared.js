@@ -58,7 +58,8 @@ export function translator(hass) {
   const lang = language(hass);
   return (key, vars = {}) => {
     const text = (translations[lang] && translations[lang][key]) || (translations.en && translations.en[key]) || key;
-    return text.replace(/\{(\w+)\}/g, (_, name) => (name in vars ? String(vars[name]) : `{${name}}`));
+    // {n|one|many}: the word for one or for several, depending on the number n.
+    return text.replace(/\{(\w+)\|([^|{}]*)\|([^{}]*)\}/g, (_, name, one, many) => (Number(vars[name]) === 1 ? one : many)).replace(/\{(\w+)\}/g, (_, name) => (name in vars ? String(vars[name]) : `{${name}}`));
   };
 }
 
@@ -215,7 +216,38 @@ export const MAP_CSS = `
   .wa-ersatz { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 900; max-width: calc(100% - 140px);
                padding: 6px 12px; border-radius: 8px; font-size: 12px; line-height: 1.4; text-align: center;
                background: rgba(0,0,0,.72); color: #fff; pointer-events: none; }
+  .leaflet-bar a.wa-uebersicht { display: flex; align-items: center; justify-content: center; }
+  .leaflet-bar a.wa-uebersicht svg { width: 20px; height: 20px; fill: currentColor; }
 `;
+
+// Button bottom left: back to the overview of everything shown (not "my location").
+const FIT_ICON = 'M17 4h3a2 2 0 0 1 2 2v2h-2V6h-3V4M4 8V6h3V4H4a2 2 0 0 0-2 2v2h2m16 8v2h-3v2h3a2 2 0 0 0 2-2v-2h-2M7 18H4v-2H2v2a2 2 0 0 0 2 2h3v-2M18 8H6v8h12V8m-2 6H8v-4h8v4Z';
+export function overviewControl(map, title, onClick) {
+  const L = window.L;
+  const control = L.control({ position: 'bottomleft' });
+  control.onAdd = () => {
+    const bar = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+    const a = L.DomUtil.create('a', 'wa-uebersicht', bar);
+    a.href = '#';
+    a.title = title;
+    a.setAttribute('role', 'button');
+    a.setAttribute('aria-label', title);
+    a.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${FIT_ICON}"/></svg>`;
+    L.DomEvent.disableClickPropagation(bar);
+    L.DomEvent.on(a, 'click', (ev) => { L.DomEvent.preventDefault(ev); onClick(); });
+    return bar;
+  };
+  return control.addTo(map);
+}
+
+// Run fn once the element really has a size (a view that is just being shown
+// again has none for a moment). Gives up after a few seconds.
+export function whenSized(el, fn, tries = 100) {
+  if (!el) return;
+  if (el.isConnected && el.clientWidth > 0 && el.clientHeight > 0) { fn(); return; }
+  if (tries <= 0) return;
+  requestAnimationFrame(() => setTimeout(() => whenSized(el, fn, tries - 1), 30));
+}
 
 // Hint on the map that the chosen map service failed (for administrators).
 export function fallbackNotice(container, t) {

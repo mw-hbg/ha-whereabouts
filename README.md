@@ -92,7 +92,7 @@ what it does; actions that delete or overwrite something ask first.
 | Sidebar | administrators | sidebar entry on/off, name, icon |
 | Recording | administrators | recorded persons, store interval (60 s), "same place" radius (50 m), deleting old history (default: never) |
 | Addresses | administrators | Companion app (geocoded location), otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; sensor per person (found automatically) |
-| Import and export | export: everybody (own rights), import: administrators | "Export data" (day or period, persons, CSV/GPX, several files as ZIP); import that merges into gaps of existing days (or replaces them) with a preview per day, format help and a prompt for converting other apps' data with an AI assistant |
+| Import and export | export: everybody (own rights), import: administrators | "Export data" (day or period, persons, CSV/GPX, several files as ZIP); import that merges into gaps of existing days (or skips or replaces them) with a preview per day, format help and a prompt for converting other apps' data with an AI assistant |
 | Diagnostics | administrators | trackers, geocoded-location sensor and stored days per person |
 
 Administrators choose whose settings they edit: **Me**, **Default for all users**
@@ -193,8 +193,9 @@ Import: **Settings → Import and export** on the sidebar page (or **Configure �
 Import history**). Supported are the Whereabouts CSV
 format, GPX (tracks, routes, waypoints) and the daily files of the original
 script version (single file or ZIP). By default existing days are merged: only
-entries that fall into a gap (a time without a stored stay) are added; or whole
-days are replaced if you choose so. A preview shows per day what would happen,
+entries that fall into a gap (a time without a stored stay) are added. You can
+also skip days that already have data (only new days are taken) or replace whole
+days. A preview shows per day what would happen,
 and you tick the days to import. The format is described in [FORMAT.md](FORMAT.md#english).
 
 Export: **Export data** in the history card or on the settings page – a day or a
@@ -311,7 +312,7 @@ oder überschreibt, fragt vorher nach.
 | Seitenleiste | Administratoren | Eintrag an/aus, Name, Symbol |
 | Aufzeichnung | Administratoren | aufgezeichnete Personen, Speicherabstand (60 s), Umkreis „derselbe Ort“ (50 m), alten Verlauf löschen (Standard: nie) |
 | Adressen | Administratoren | Companion App (Geokodierter Standort), sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; Sensor pro Person (wird automatisch gefunden) |
-| Import und Export | Export: jeder (eigene Rechte), Import: Administratoren | „Daten exportieren“ (Tag oder Zeitraum, Personen, CSV/GPX, mehrere Dateien als ZIP); Import, der Lücken vorhandener Tage ergänzt (oder sie ersetzt), mit Vorschau pro Tag, Formathilfe und einem Text, mit dem ein KI-Assistent Daten anderer Apps umwandelt |
+| Import und Export | Export: jeder (eigene Rechte), Import: Administratoren | „Daten exportieren“ (Tag oder Zeitraum, Personen, CSV/GPX, mehrere Dateien als ZIP); Import, der Lücken vorhandener Tage ergänzt (oder sie überspringt oder ersetzt), mit Vorschau pro Tag, Formathilfe und einem Text, mit dem ein KI-Assistent Daten anderer Apps umwandelt |
 | Diagnose | Administratoren | Tracker, Sensor „Geokodierter Standort“ und gespeicherte Tage pro Person |
 
 Administratoren wählen, wessen Einstellungen sie bearbeiten: **Mir**, **Standard
@@ -418,7 +419,8 @@ Import: **Einstellungen → Import und Export** auf der Seite in der Seitenleist
 Whereabouts-CSV-Format, GPX (Tracks, Routen, Wegpunkte) und die Tagesdateien
 der ursprünglichen Skript-Version (einzeln oder als ZIP). Vorhandene Tage werden
 standardmäßig abgeglichen: Nur Einträge, die in eine Lücke fallen (eine Zeit ohne
-gespeicherten Aufenthalt), kommen dazu; auf Wunsch werden ganze Tage ersetzt. Eine
+gespeicherten Aufenthalt), kommen dazu. Du kannst auch Tage mit Daten überspringen (nur neue Tage werden
+übernommen) oder ganze Tage ersetzen. Eine
 Vorschau zeigt pro Tag, was passieren würde, und du hakst die Tage an. Das Format steht in
 [FORMAT.md](FORMAT.md#deutsch).
 

@@ -212,6 +212,9 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
     _show(view) {
       if (!this._root || !this._info || !this._info.available) return;
       if (!this._visible.includes(view) && view !== 'settings') view = this._visible[0] || 'settings';
+      // The tab that is left may want to remember where it was (before it is hidden).
+      const left = this._shown && this._shown !== view ? this._pages[this._shown] : null;
+      if (left && left.deactivate) left.deactivate();
       this._view = view;
       this._root.querySelectorAll('.wap-reiter button').forEach((b) => {
         const on = b.dataset.view === view;

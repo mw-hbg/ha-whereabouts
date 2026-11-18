@@ -20,11 +20,14 @@ async def import_bytes(
     same_place_distance: float,
     preview: bool = False,
     days: list[str] | None = None,
+    mode: str | None = None,
 ) -> dict:
     """Read a file and store its points (or only plan it with preview=True).
 
-    Without ``replace`` the file is merged: only entries that fall into gaps
-    of stored days are added. ``days`` ("person|YYYY-MM-DD") limits the import
+    ``mode``: "merge" (only entries that fall into gaps of stored days are
+    added), "replace" (imported days replace stored days) or "skip" (days
+    that already have data are left alone). Without it, ``replace`` decides
+    between "replace" and "merge". ``days`` ("person|YYYY-MM-DD") limits the import
     to the days ticked in the preview.
     """
     # Zones are read here (event loop); the importer runs in the executor.
@@ -59,7 +62,8 @@ async def import_bytes(
     runtime = hass.data.get(DOMAIN)
     if runtime is None:
         raise ImportError_("not_set_up")
-    mode = "replace" if replace else "merge"
+    if mode not in ("merge", "replace", "skip"):
+        mode = "replace" if replace else "merge"
     if preview:
         plan = []
         for dest, points in sorted(by_person.items()):
@@ -80,7 +84,7 @@ async def import_bytes(
         wanted = None if days is None else [d.split("|", 1)[1] for d in days if d.split("|", 1)[0] == dest]
         outcome = await hass.async_add_executor_job(
             lambda dest=dest, points=points, wanted=wanted: runtime.storage.import_points(
-                dest, points, replace, wanted, True
+                dest, points, mode == "replace", wanted, True, mode == "skip"
             )
         )
         added += outcome["added"]

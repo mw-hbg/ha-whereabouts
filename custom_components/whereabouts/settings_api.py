@@ -627,7 +627,7 @@ class ImportView(HomeAssistantView):
                         return self.json({"error": "too_large"}, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
                     chunks.append(chunk)
                 data = b"".join(chunks)
-            elif part.name in ("person", "replace", "preview"):
+            elif part.name in ("person", "replace", "preview", "mode"):
                 fields[part.name] = (await part.text())[:120]
             elif part.name == "days":
                 fields["days"] = (await part.text())[:200_000]
@@ -649,6 +649,7 @@ class ImportView(HomeAssistantView):
                 float(runtime.options[CONF_SAME_PLACE_DISTANCE]),
                 preview=fields.get("preview") == "true",
                 days=days,
+                mode=fields.get("mode"),
             )
         except ImportError_ as err:
             return self.json({"error": err.key, "detail": err.detail}, HTTPStatus.BAD_REQUEST)

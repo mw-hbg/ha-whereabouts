@@ -337,11 +337,18 @@ class HistoryStorage:
             for day, day_points in sorted(self._by_day(points).items()):
                 rows = self._read_rows(self.path(person, day))
                 existing = len(build_stays(rows, self.same_place_distance))
-                new = list(day_points) if mode == "replace" or not rows else self._gap_points(rows, day_points)
+                if mode == "replace" or not rows:
+                    new = list(day_points)
+                elif mode == "skip":
+                    new = []
+                else:
+                    new = self._gap_points(rows, day_points)
                 if not rows:
                     status = "new"
                 elif mode == "replace":
                     status = "replace"
+                elif mode == "skip":
+                    status = "skip"
                 else:
                     status = "add" if new else "complete"
                 plan.append(
@@ -370,6 +377,7 @@ class HistoryStorage:
         replace_days: bool = False,
         days: Iterable[str] | None = None,
         merge: bool = True,
+        skip_existing: bool = False,
     ) -> dict:
         """Store imported points.
 
@@ -377,6 +385,7 @@ class HistoryStorage:
         - otherwise (``merge``): only points that fall into a gap of the stored
           day are added (see ``_gap_points``); with ``merge=False`` only rows
           with exactly the same start time are skipped (older behaviour).
+        - ``skip_existing``: days that already have data are left alone.
         - ``days``: only these dates are touched (from the preview).
         """
         wanted = set(days) if days is not None else None
@@ -386,9 +395,12 @@ class HistoryStorage:
             for day, day_points in sorted(self._by_day(points).items()):
                 if wanted is not None and day not in wanted:
                     continue
-                touched += 1
                 path = self.path(person, day)
                 rows = [] if replace_days else self._read_rows(path)
+                if rows and skip_existing:
+                    skipped += len(day_points)
+                    continue
+                touched += 1
                 if rows and merge:
                     keep = self._gap_points(rows, day_points)
                     skipped += len(day_points) - len(keep)

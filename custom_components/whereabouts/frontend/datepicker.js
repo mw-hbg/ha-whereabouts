@@ -125,7 +125,7 @@ export function openDatePicker({ t, lang, from, to, today, days, first }) {
   const state = { from, to, unit: 'days', picking: false, preset: '' };
   const shown = parseDate(to);
   let month = new Date(shown.getFullYear(), shown.getMonth(), 1);
-  const has = (d) => !days || days.has(d);
+  const has = (d) => !(days instanceof Set) || days.has(d);
   const allowed = (d) => d <= today && (!first || d >= first) && has(d);
 
   return new Promise((resolve) => {

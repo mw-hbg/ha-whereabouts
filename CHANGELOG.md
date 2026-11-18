@@ -1,5 +1,52 @@
 # Changelog
 
+## Unreleased
+
+- Both maps: new button "Show everything" bottom left (back to everybody, or to
+  all points of the period). Coming back to a map – tab on the sidebar page or
+  dashboard view – now really resets zoom and position (the history did not do
+  it at all, "Where is…?" tried before the map had its size again).
+- "Location history": "Today" can always be clicked – from a period it jumps to
+  today; if only today is shown it resets everything as after opening the page.
+  Heatmap also for a single day. Colons in the status bar in the person's colour.
+- "Export data": the date picker did not open (only the dimming was shown).
+- Import: new choice "Skip" for existing days (only days without data are
+  taken); "1 entry", "1 day" in singular; the tick in the header is no longer set
+  when nothing can be chosen.
+- Settings page: "Discard" next to "Save" for unsaved fields; resetting an area
+  also throws away its unsaved changes; coming back within a minute keeps
+  position and open areas, later the page starts at the top as when opened
+  (areas with unsaved changes stay open); the page no longer jumps up after
+  saving the sidebar name or icon; a field reached from a link flashes only once;
+  "Settings of", "Use my settings for everybody", "Make default" and the users
+  table only appear when there are users besides administrators.
+
+---
+
+- Beide Karten: neuer Knopf „Gesamtübersicht“ unten links (zurück auf alle bzw.
+  auf alle Punkte des Zeitraums). Beim Zurückkehren zu einer Karte – Reiter auf der
+  Seite in der Seitenleiste oder Dashboard-Ansicht – werden Zoom und Position jetzt
+  wirklich zurückgesetzt (der Verlauf tat es gar nicht, „Wo ist…?“ zu früh, bevor
+  die Karte wieder ihre Größe hatte).
+- „Standortverlauf“: „Heute“ ist immer klickbar – aus einem Zeitraum springt es auf
+  heute; wird nur heute gezeigt, setzt es alles zurück wie beim Öffnen der Seite.
+  Heatmap auch für einen einzelnen Tag. Doppelpunkte in der Statusleiste in der
+  Farbe der Person.
+- „Daten exportieren“: Die Datumsauswahl öffnete sich nicht (nur die Abdunklung
+  war zu sehen).
+- Import: neue Wahl „Überspringen“ für vorhandene Tage (nur Tage ohne Daten werden
+  übernommen); „1 Eintrag“, „1 Tag“ in der Einzahl; der Haken in der Kopfzeile ist
+  nicht mehr gesetzt, wenn nichts gewählt werden kann.
+- Einstellungsseite: „Verwerfen“ neben „Speichern“ bei ungespeicherten Feldern;
+  Zurücksetzen eines Bereichs verwirft auch dessen ungespeicherte Änderungen;
+  Rückkehr innerhalb einer Minute behält Position und offene Bereiche, später
+  beginnt die Seite oben wie beim Öffnen (Bereiche mit ungespeicherten Änderungen
+  bleiben offen); die Seite springt nach dem Speichern von Name oder Symbol in der
+  Seitenleiste nicht mehr hoch; ein über einen Link angesprungenes Feld leuchtet
+  nur einmal auf; „Einstellungen von“, „Meine Einstellungen für alle übernehmen“,
+  „Als Standard übernehmen“ und die Benutzertabelle erscheinen nur, wenn es
+  außer Administratoren weitere Benutzer gibt.
+
 ## 0.4.0
 
 - Settings page: "fix" instead of "lock" throughout; the page keeps its position

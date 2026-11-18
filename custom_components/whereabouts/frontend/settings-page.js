@@ -366,6 +366,7 @@ export function defineSettingsPage(S, D) {
   const maybe = (t, key, fallback) => { const text = t(key); return text === key ? fallback : text; };
   const esc = (v) => S.escapeHtml(v);
   const VIEW_KEY = 'whereabouts-settings-view';
+  const KEEP_VIEW_MS = 60000; // back within a minute: same place; later: page from the top
 
   class WhereaboutsSettings extends HTMLElement {
     constructor() {
@@ -378,6 +379,11 @@ export function defineSettingsPage(S, D) {
       this._showTechnical = false;
       this._userFilter = 'all';
       this._import = { person: '', mode: 'merge' };
+      this._lastAnchor = null; // where the page was last seen (kept while scrolling)
+      this._onScroll = () => {
+        if (this._scrollFrame) return;
+        this._scrollFrame = requestAnimationFrame(() => { this._scrollFrame = null; this._noteAnchor(); });
+      };
       this._beforeUnload = (e) => {
         if (!this._pending.size) return undefined;
         e.preventDefault();
@@ -397,6 +403,7 @@ export function defineSettingsPage(S, D) {
       if (this._unsub) { this._unsub(); this._unsub = null; }
       if (this._observer) { this._observer.disconnect(); this._observer = null; }
       window.removeEventListener('beforeunload', this._beforeUnload);
+      document.removeEventListener('scroll', this._onScroll, true);
       // Left through Home Assistant's sidebar (or rebuilt by it): keep what was not saved and where we were.
       if (this._pending.size) this._storeDrafts();
       this._storeView();
@@ -404,6 +411,7 @@ export function defineSettingsPage(S, D) {
 
     connectedCallback() {
       window.addEventListener('beforeunload', this._beforeUnload);
+      document.addEventListener('scroll', this._onScroll, { capture: true, passive: true });
       if (this._hass && !this._unsub && this._data) {
         this._unsub = S.subscribeInfo(this._hass, (info) => { this._info = info; this._refreshSoon(); });
         this._render();
@@ -512,6 +520,11 @@ export function defineSettingsPage(S, D) {
       return name in own ? Boolean(own[name]) : Boolean((admin.all_flags || {})[name]);
     }
 
+    // Are there users besides administrators (technical ones like MQTT not counted)?
+    _hasOtherUsers() {
+      return this._data.admin.users.some((u) => u.active && !u.is_admin && !u.technical);
+    }
+
     _editableUsers() {
       return this._data.admin.users.filter((u) => u.active && !u.is_admin && (this._showTechnical || !u.technical));
     }
@@ -543,11 +556,64 @@ export function defineSettingsPage(S, D) {
       scroller.scrollTop += card.getBoundingClientRect().top - top - anchor.offset;
     }
 
+    // Only while the page is shown: once Home Assistant has taken it away nothing can be measured.
+    _noteAnchor() {
+      if (!this.isConnected || !this.getClientRects().length || !this.querySelector('.kat')) return;
+      this._lastAnchor = this._anchor();
+    }
+
+    // Called by the sidebar page when another tab is shown.
+    deactivate() {
+      this._noteAnchor();
+      this._leftAt = Date.now();
+    }
+
+    // Back on this tab: within a minute the same place, later the page as when opened.
+    activate() {
+      if (!this._data) return;
+      const away = this._leftAt ? Date.now() - this._leftAt : 0;
+      this._leftAt = null;
+      if (away <= KEEP_VIEW_MS) {
+        const anchor = this._lastAnchor;
+        S.whenSized(this.querySelector('.wa-set'), () => this._restoreAnchor(anchor));
+        return;
+      }
+      this._resetView();
+    }
+
+    // Start state: own settings, main areas open, at the top. Areas with unsaved changes stay open.
+    _resetView() {
+      const unsaved = new Set([...this._pending.keys()].map((id) => {
+        const row = this.querySelector(`[data-pid="${window.CSS.escape(id)}"]`);
+        const card = row && row.closest('.kat');
+        return card && card.dataset.kat;
+      }).filter(Boolean));
+      const start = new Set(PERSONAL.filter((c) => c.weight === 'main').map((c) => c.id));
+      if (this._scope !== 'own' && !this._pending.size) {
+        this._scope = 'own';
+        this._user = null;
+        this._open = start;
+        this._pendingAnchor = null;
+        this._render();
+      } else {
+        this.querySelectorAll('.kat').forEach((card) => {
+          const id = card.dataset.kat;
+          this._setOpen(id, unsaved.size ? unsaved.has(id) : start.has(id));
+        });
+      }
+      this._lastAnchor = null;
+      S.whenSized(this.querySelector('.wa-set'), () => requestAnimationFrame(() => {
+        const scroller = this._scroller();
+        if (scroller) scroller.scrollTop = 0;
+      }));
+    }
+
     _storeView() {
       if (!this._data) return;
+      const shown = this.isConnected && this.getClientRects().length && this.querySelector('.kat');
       try {
         window.sessionStorage.setItem(VIEW_KEY, JSON.stringify({
-          time: Date.now(), anchor: this._anchor(), open: this._open ? [...this._open] : null,
+          time: Date.now(), anchor: shown ? this._anchor() : this._lastAnchor, open: this._open ? [...this._open] : null,
           scope: this._scope === 'user' ? 'own' : this._scope, success: this._success,
         }));
       } catch (err) { /* no storage */ }
@@ -557,10 +623,11 @@ export function defineSettingsPage(S, D) {
       try {
         const view = JSON.parse(window.sessionStorage.getItem(VIEW_KEY) || 'null');
         window.sessionStorage.removeItem(VIEW_KEY);
-        if (!view || Date.now() - view.time > 60000) return;
+        if (!view || Date.now() - view.time > KEEP_VIEW_MS) return;
         if (view.open) this._open = new Set(view.open);
         if (view.scope) this._scope = view.scope;
         this._pendingAnchor = view.anchor;
+        this._lastAnchor = view.anchor;
         if (view.success && view.success.until > Date.now()) this._success = view.success;
       } catch (err) { /* nothing */ }
     }
@@ -612,7 +679,7 @@ export function defineSettingsPage(S, D) {
             </div>
             <div class="entwuerfe"></div>
             <div class="erfolg-oben"></div>
-            ${this._admin ? `<div class="wessen">
+            ${this._admin && (this._hasOtherUsers() || this._scope !== 'own') ? `<div class="wessen">
               <label for="wa-wessen" class="hinweis">${esc(t('settings_of'))}</label>
               <select class="ein" id="wa-wessen">
                 <option value="own"${this._scope === 'own' ? ' selected' : ''}>${esc(t('scope_own'))}</option>
@@ -635,7 +702,7 @@ export function defineSettingsPage(S, D) {
       this._wire();
       this._showDrafts();
       this._showSuccess();
-      requestAnimationFrame(() => this._restoreAnchor(anchor));
+      requestAnimationFrame(() => { this._restoreAnchor(anchor); this._noteAnchor(); });
     }
 
     _categoryHtml(c, personal) {
@@ -666,7 +733,7 @@ export function defineSettingsPage(S, D) {
       const t = this._t;
       const own = this._ownValues(category);
       const canReset = !locked && (this._scope === 'defaults' ? true : own && Object.keys(own).length);
-      const promote = this._admin && this._scope === 'own';
+      const promote = this._admin && this._scope === 'own' && this._hasOtherUsers();
       if (!canReset && !promote) return '<div class="fuss" hidden></div>';
       return `<div class="fuss">
         ${promote ? `<button class="knopf standard-setzen" data-kat="${category}"${this._syncAll ? ' disabled' : ''}><ha-icon icon="mdi:account-multiple-check"></ha-icon>${esc(t('make_default'))}</button>` : ''}
@@ -705,6 +772,9 @@ export function defineSettingsPage(S, D) {
         const c = ADMIN.find((x) => x.id === b.dataset.kat);
         const name = t(`cat_${c.id}`);
         if (!await this._confirm(t('reset_category'), t('confirm_reset_options', { name }), t('reset'), true)) return;
+        this._discardIn(c.id);
+        this._noteAnchor();
+        this._storeView();
         if (await this._ws({ type: 'whereabouts/settings/options_reset', keys: c.reset }, true) !== null) {
           this._setSuccess(t('success_reset', { name }), c.id);
           this._reloadSoon(1200);
@@ -1059,8 +1129,10 @@ export function defineSettingsPage(S, D) {
       const t = this._t;
       const line = document.createElement('div');
       line.className = 'speicher';
-      line.innerHTML = `<span class="ungespeichert">${esc(t('not_saved'))}</span>
+      const unsavedHtml = `<span class="ungespeichert">${esc(t('not_saved'))}</span>
+        <button class="knopf verwerfen" type="button" data-immer="1"><ha-icon icon="mdi:undo"></ha-icon>${esc(t('discard'))}</button>
         <button class="knopf voll speichern" type="button" data-immer="1"><ha-icon icon="mdi:content-save"></ha-icon>${esc(t('save'))}</button>`;
+      line.innerHTML = unsavedHtml;
       row.appendChild(line);
       row.dataset.pid = spec.id;
       const state = { initial: spec.initial, current: spec.initial };
@@ -1074,9 +1146,9 @@ export function defineSettingsPage(S, D) {
       };
       const showUnsaved = () => {
         if (!line.querySelector('.speichern')) {
-          line.innerHTML = `<span class="ungespeichert">${esc(t('not_saved'))}</span>
-            <button class="knopf voll speichern" type="button" data-immer="1"><ha-icon icon="mdi:content-save"></ha-icon>${esc(t('save'))}</button>`;
+          line.innerHTML = unsavedHtml;
           line.querySelector('.speichern').addEventListener('click', () => api.save());
+          line.querySelector('.verwerfen').addEventListener('click', () => api.discard());
         }
         line.classList.add('an');
       };
@@ -1090,7 +1162,7 @@ export function defineSettingsPage(S, D) {
               label: spec.label,
               draft: spec.draft ? { ...spec.draft, id: spec.id, value: v } : null,
               save: () => api.save(),
-              discard: () => { api.reset(state.initial); api.set(state.initial); },
+              discard: () => api.discard(),
             });
           } else {
             if (line.querySelector('.speichern')) line.classList.remove('an');
@@ -1115,10 +1187,17 @@ export function defineSettingsPage(S, D) {
           if (row.isConnected) showSaved();
           return true;
         },
+        // Back to the saved value.
+        discard: () => {
+          api.reset(state.initial);
+          api.set(state.initial);
+          this._forgetDraft(spec.id);
+        },
         reset: () => {},
         focus: () => {},
       };
       line.querySelector('.speichern').addEventListener('click', () => api.save());
+      line.querySelector('.verwerfen').addEventListener('click', () => api.discard());
       row.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
         if (!this._pending.has(spec.id)) return;
@@ -1140,6 +1219,8 @@ export function defineSettingsPage(S, D) {
       entry.row.classList.remove('blitz');
       void entry.row.offsetWidth;
       entry.row.classList.add('blitz');
+      // Remove it again: a page shown again would replay the animation.
+      entry.row.addEventListener('animationend', () => entry.row.classList.remove('blitz'), { once: true });
       setTimeout(() => entry.api.focus(), 400);
     }
 
@@ -1268,6 +1349,7 @@ export function defineSettingsPage(S, D) {
         : this._scope === 'user' ? t('confirm_reset_user', { name, user: this._user.name })
           : t('confirm_reset_category', { name });
       if (!await this._confirm(t('reset_category'), text, t('reset'), true)) return;
+      this._discardIn(category);
       const message = { type: 'whereabouts/settings/reset', scope: this._scope === 'defaults' ? 'defaults' : 'own', category };
       if (this._scope === 'user') message.user_id = this._user.id;
       await this._ws(message, true);
@@ -1280,6 +1362,8 @@ export function defineSettingsPage(S, D) {
         const ok = await this._confirm(t('st_retention_days'), t('confirm_retention', { n: value }), t('save'), true);
         if (!ok) return false;
       }
+      this._noteAnchor(); // the sidebar entry may make Home Assistant rebuild the page
+      this._storeView();
       const ok = await this._ws({ type: 'whereabouts/settings/options', values: { [field.key]: value } });
       if (ok === null) return false;
       this._data.admin.options[field.key] = value;
@@ -1807,7 +1891,7 @@ export function defineSettingsPage(S, D) {
           </table></div><p class="kat-text klein">${esc(t('rights_by_admin'))}</p>`;
         return;
       }
-      this._usersTable(box);
+      if (this._hasOtherUsers()) this._usersTable(box);
       const admin = d.admin;
       const levels = ['all', 'own', 'none'];
       ['live', 'history', 'delete'].forEach((kind) => {
@@ -2007,7 +2091,7 @@ export function defineSettingsPage(S, D) {
         sel: sel([{ value: '', label: t('import_person_file') }, ...d.persons.map((p) => ({ value: p.entity_id, label: p.name }))]) },
       this._import.person, false, (value) => { this._import.person = value || ''; return true; }));
       box.appendChild(this._row({ key: 'import_mode', label: t('import_mode'), info: t('si_import_mode'),
-        sel: sel(['merge', 'replace'].map((v) => ({ value: v, label: t(`import_mode_${v}`) }))) },
+        sel: sel(['merge', 'skip', 'replace'].map((v) => ({ value: v, label: t(`import_mode_${v}`) }))) },
       this._import.mode, false, (value) => { this._import.mode = value || 'merge'; return true; }));
       const area = document.createElement('div');
       area.innerHTML = `<div class="ablage" tabindex="0" role="button">${esc(t('drop_file'))}</div>
@@ -2081,6 +2165,7 @@ export function defineSettingsPage(S, D) {
       form.append('file', fileObject);
       form.append('person', this._import.person || '');
       form.append('replace', this._import.mode === 'replace' ? 'true' : 'false');
+      form.append('mode', this._import.mode || 'merge');
       form.append('preview', preview ? 'true' : 'false');
       if (days) form.append('days', days.join(','));
       const response = await this._hass.fetchWithAuth('/api/whereabouts/import', { method: 'POST', body: form });
@@ -2133,7 +2218,7 @@ export function defineSettingsPage(S, D) {
             <div class="text">${esc(t('import_preview', { file: fileObject.name, n: preview.total, days: preview.days, persons: preview.persons.map(nameOf).join(', '), from: preview.first, to: preview.last }))}</div>
             ${replace ? `<div class="warnung" style="margin:8px 0">${esc(t('confirm_import_replace'))}</div>` : ''}
             <div class="vorschau-tabelle"><table>
-              <thead><tr><th><input type="checkbox" class="alle"${plan.length && plan.every((d) => d.new === 0 || chosen.has(`${d.person}|${d.date}`)) ? ' checked' : ''} aria-label="${esc(t('select_all'))}"></th>
+              <thead><tr><th><input type="checkbox" class="alle"${plan.some((d) => d.new > 0) && plan.every((d) => d.new === 0 || chosen.has(`${d.person}|${d.date}`)) ? ' checked' : ''}${plan.some((d) => d.new > 0) ? '' : ' disabled'} aria-label="${esc(t('select_all'))}"></th>
                 <th>${esc(t('col_date'))}</th><th>${esc(t('col_person'))}</th><th>${esc(t('import_existing'))}</th><th>${esc(t('import_new'))}</th><th>${esc(t('import_status'))}</th><th></th></tr></thead>
               <tbody>${plan.map((d, i) => `<tr>
                 <td><input type="checkbox" data-i="${i}"${chosen.has(`${d.person}|${d.date}`) ? ' checked' : ''}${d.new === 0 ? ' disabled' : ''}></td>
@@ -2248,6 +2333,27 @@ export function defineSettingsPage(S, D) {
       }
     }
 
+    // Throw away unsaved changes in one area (before it is reset).
+    _discardIn(category) {
+      const card = this.querySelector(`#kat-${category}`);
+      if (!card) return;
+      [...this._pending.entries()].forEach(([id, p]) => {
+        if (!card.querySelector(`[data-pid="${window.CSS.escape(id)}"]`)) return;
+        p.discard();
+        this._pending.delete(id);
+      });
+    }
+
+    _forgetDraft(id) {
+      const drafts = this._readDrafts();
+      const rest = drafts.filter((d) => d.id !== id);
+      if (rest.length === drafts.length) return;
+      try {
+        if (rest.length) window.localStorage.setItem(this._draftKey(), JSON.stringify(rest));
+        else window.localStorage.removeItem(this._draftKey());
+      } catch (err) { /* nothing */ }
+    }
+
     _clearDrafts() {
       try { window.localStorage.removeItem(this._draftKey()); } catch (err) { /* nothing */ }
     }
@@ -2257,6 +2363,11 @@ export function defineSettingsPage(S, D) {
       const drafts = this._readDrafts();
       if (!box || !drafts.length) return;
       const t = this._t;
+      drafts.forEach((d) => {
+        const entry = d.id && this._savables.get(d.id);
+        const card = entry && entry.row.closest('.kat');
+        if (card) this._setOpen(card.dataset.kat, true);
+      });
       box.innerHTML = `<div class="banner"><ha-icon icon="mdi:content-save-alert"></ha-icon>
         <span class="text">${esc(t('drafts_found'))}: ${drafts.map((d, i) => `<a href="#" class="feldlink" data-i="${i}">${esc(d.label)}</a>`).join(', ')}</span>
         <button class="knopf" data-wahl="verwerfen">${esc(t('discard'))}</button>

@@ -75,10 +75,10 @@ export function openDownloadDialog(S, { hass, t, persons, selected, from, to, da
 
   const render = async () => {
     const P = await picker;
-    const days = P.daysBetween(state.from, state.to);
+    const count = P.daysBetween(state.from, state.to); // number of days ("days" is the set with data)
     const several = state.persons.size > 1;
     const image = state.format === 'jpg';
-    const files = (state.perDay && days > 1 ? days : 1) * (state.perPerson && several ? state.persons.size : 1);
+    const files = (state.perDay && count > 1 ? count : 1) * (state.perPerson && several ? state.persons.size : 1);
     box.innerHTML = `<div class="fenster" role="dialog" aria-modal="true" aria-label="${esc(t('export_data'))}">
       <h3>${DOWNLOAD_ICON}${esc(t('export_data'))}</h3>
       <div class="abschnitt"><div class="titel">${esc(t('format'))}</div>
@@ -94,14 +94,14 @@ export function openDownloadDialog(S, { hass, t, persons, selected, from, to, da
       <div class="abschnitt${image ? ' aus' : ''}"><div class="titel">${esc(t('download_period'))}</div>
         <button type="button" class="zeitraum">${CALENDAR}${esc(P.rangeText(lang, state.from, state.to))}</button>
       </div>
-      ${!image && days > P.LARGE_DAYS ? `<div class="warnung">${esc(t('large_period_warning'))}</div>` : ''}
+      ${!image && count > P.LARGE_DAYS ? `<div class="warnung">${esc(t('large_period_warning'))}</div>` : ''}
       <div class="abschnitt${image ? ' aus' : ''}"><div class="titel">${esc(t('download_persons'))}</div>
         ${persons.map((p) => `<label><input type="checkbox" class="person" value="${esc(p.id)}"${state.persons.has(p.id) ? ' checked' : ''}>
           <span class="punkt" style="background:${S.safeColor(p.color, '#888')}"></span>${esc(p.name)}</label>`).join('')}
       </div>
       ${image ? '' : `<div class="abschnitt"><div class="titel">${esc(t('download_per_day'))}</div>
-        <label class="${days > 1 ? '' : 'aus'}"><input type="radio" name="tag" value="0"${state.perDay ? '' : ' checked'}${days > 1 ? '' : ' disabled'}>${esc(t('download_one_file'))}</label>
-        <label class="${days > 1 ? '' : 'aus'}"><input type="radio" name="tag" value="1"${state.perDay ? ' checked' : ''}${days > 1 ? '' : ' disabled'}>${esc(t('download_each_day'))}</label>
+        <label class="${count > 1 ? '' : 'aus'}"><input type="radio" name="tag" value="0"${state.perDay ? '' : ' checked'}${count > 1 ? '' : ' disabled'}>${esc(t('download_one_file'))}</label>
+        <label class="${count > 1 ? '' : 'aus'}"><input type="radio" name="tag" value="1"${state.perDay ? ' checked' : ''}${count > 1 ? '' : ' disabled'}>${esc(t('download_each_day'))}</label>
       </div>
       ${several ? `<div class="abschnitt"><div class="titel">${esc(t('download_per_person'))}</div>
         <label><input type="radio" name="person" value="0"${state.perPerson ? '' : ' checked'}>${esc(t('download_together'))}</label>

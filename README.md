@@ -82,10 +82,10 @@ what it does; actions that delete or overwrite something ask first.
 |---|---|---|
 | Views | every user | which tabs are shown, which one opens first |
 | Persons | every user | who appears, order, display name, colour, picture (address or upload); warning for similar colours |
-| Map | every user | light/dark, map style (Esri, OpenStreetMap, CARTO), where coordinates open (Google Maps, Apple Maps, OpenStreetMap, Waze, HERE; choice of apps on phones) |
+| Map | every user | light/dark, map style with example maps (Esri, OpenStreetMap, CARTO; automatic fallback if a service fails), where coordinates open (Google Maps, Apple Maps, OpenStreetMap, Waze, HERE; choice of apps on phones) |
 | Zones, "Where is…?" display, "Location history" display | every user (advanced) | zone colours, info bar, status bar, accuracy circle, following, start view, legend, reload |
 | Users and rights | administrators | rules for everybody (see live / see history / delete history: all, own person, nobody) and own rights per user |
-| Sidebar and cards | administrators | sidebar entry on/off, name, icon; cards on/off and their persons; CARTO key |
+| Sidebar and cards | administrators | sidebar entry on/off, name, icon; cards on/off and their persons; CARTO key (free, [request here](https://carto.com/basemaps/apikey/); every installation uses its own key) |
 | Recording | administrators | recorded persons, store interval (60 s), "same place" radius (50 m), deleting old history (default: never) |
 | Addresses | administrators | Companion app (geocoded location), otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; sensor per person |
 | Import and export | export: everybody (own rights), import: administrators | CSV / GPX download for a period; import with preview |
@@ -273,10 +273,10 @@ oder überschreibt, fragt vorher nach.
 |---|---|---|
 | Ansichten | jeder Benutzer | welche Reiter angezeigt werden, welcher zuerst erscheint |
 | Personen | jeder Benutzer | wer erscheint, Reihenfolge, Anzeigename, Farbe, Bild (Adresse oder hochladen); Warnung bei ähnlichen Farben |
-| Karte | jeder Benutzer | hell/dunkel, Kartenstil (Esri, OpenStreetMap, CARTO), wohin Koordinaten führen (Google Maps, Apple Karten, OpenStreetMap, Waze, HERE; am Handy mit App-Auswahl) |
+| Karte | jeder Benutzer | hell/dunkel, Kartenstil mit Beispielkarten (Esri, OpenStreetMap, CARTO; automatischer Ersatz, wenn ein Dienst ausfällt), wohin Koordinaten führen (Google Maps, Apple Karten, OpenStreetMap, Waze, HERE; am Handy mit App-Auswahl) |
 | Zonen, Anzeige „Wo ist…?“, Anzeige „Standortverlauf“ | jeder Benutzer (erweitert) | Zonenfarben, Infoleiste, Statusleiste, Genauigkeitskreis, Folgen, Startansicht, Legende, Neuladen |
 | Benutzer und Rechte | Administratoren | Regeln für alle (live sehen / Verlauf sehen / Verlauf löschen: alle, eigene Person, niemand) und eigene Rechte pro Benutzer |
-| Seitenleiste und Karten | Administratoren | Eintrag an/aus, Name, Symbol; Karten an/aus und ihre Personen; CARTO-Schlüssel |
+| Seitenleiste und Karten | Administratoren | Eintrag an/aus, Name, Symbol; Karten an/aus und ihre Personen; CARTO-Schlüssel (kostenlos, [hier beantragen](https://carto.com/basemaps/apikey/); jede Installation nutzt ihren eigenen) |
 | Aufzeichnung | Administratoren | aufgezeichnete Personen, Speicherabstand (60 s), Umkreis „derselbe Ort“ (50 m), alten Verlauf löschen (Standard: nie) |
 | Adressen | Administratoren | Companion App (Geokodierter Standort), sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; Sensor pro Person |
 | Import und Export | Export: jeder (eigene Rechte), Import: Administratoren | CSV-/GPX-Download für einen Zeitraum; Import mit Vorschau |

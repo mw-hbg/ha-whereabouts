@@ -198,7 +198,7 @@
   "st_map_style": "Light or dark",
   "si_map_style": "\"Like Home Assistant\" follows the light/dark mode of your theme.",
   "st_tiles": "Map style",
-  "si_tiles": "Esri needs no key. OpenStreetMap has no dark style, the map is darkened instead. CARTO needs an API key that the administrator enters under \"Sidebar and cards\"; without a key Esri is used. Your browser loads the map tiles directly from the chosen provider.",
+  "si_tiles": "The examples show Stuttgart the way the maps look (light or dark by your setting). Esri and OpenStreetMap need no key. CARTO needs a free key that the administrator enters once for everybody. If a service delivers no map at all any more (e.g. key blocked), the map switches by itself: CARTO → Esri → OpenStreetMap. Your browser loads the tiles directly from the provider.",
   "st_map_link": "Open coordinates in",
   "si_map_link": "A click on coordinates opens this map service. \"Nothing\" shows the coordinates without a link.",
   "st_map_link_choice": "On phones and tablets ask which app",
@@ -265,7 +265,7 @@
   "st_show_persons_history": "Persons in the history (empty = all)",
   "si_show_persons_history": "Whose history can be shown at all. Hiding does not delete any history.",
   "st_carto_api_key": "CARTO API key",
-  "si_carto_api_key": "Only needed for the map style CARTO. The key is sent to every user's browser (it loads the tiles with it) – do not use a secret key.",
+  "si_carto_api_key": "Only needed for the map style CARTO. Free via the link below: give your e-mail, the domain of your Home Assistant and briefly the purpose – the key arrives by e-mail, no CARTO account needed. The key is sent to every user's browser (it loads the tiles with it), so it is not secret. Everyone uses their own key; Whereabouts ships none. Without a key Esri is shown.",
   "st_record_persons": "Record the history of these persons",
   "si_record_persons": "Nothing is recorded until persons are listed here. The history stays on this Home Assistant (folder whereabouts in the configuration directory) and is part of every backup. Removing a person keeps their history. Tip: a person can have several trackers (Companion app and e.g. a router or ARP-scan tracker for the home network) – assign them under Settings → People. Only watch your own home network and only add devices that also run the Companion app.",
   "st_min_interval": "Positions at the same place at most every",
@@ -328,5 +328,12 @@
   "source_gps": "GPS",
   "source_router": "Wi-Fi/router",
   "source_bluetooth": "Bluetooth",
-  "source_bluetooth_le": "Bluetooth LE"
+  "source_bluetooth_le": "Bluetooth LE",
+  "tiles_fallback": "{from} delivers no map at the moment – showing {to}.",
+  "carto_get_key": "Request a free key from CARTO",
+  "tiles_note_esri": "No key, default",
+  "tiles_note_osm": "No key; darkened in dark mode",
+  "tiles_note_carto": "Needs a free key",
+  "tiles_no_key": "No key yet – the administrator enters it under Administration → Sidebar and cards. Until then Esri is shown.",
+  "tiles_fallback_carto": "CARTO delivers no map at the moment – showing {to}. Please check the CARTO key (Whereabouts → Settings → Sidebar and cards)."
 }

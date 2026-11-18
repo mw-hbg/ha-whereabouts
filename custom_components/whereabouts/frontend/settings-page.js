@@ -17,7 +17,7 @@ const PERSONAL = [
   { id: 'persons', icon: 'mdi:account-multiple', weight: 'main', custom: 'persons' },
   { id: 'map', icon: 'mdi:map', weight: 'main', fields: [
     { key: 'map_style', sel: (t) => sel(['auto', 'light', 'dark'].map((v) => ({ value: v, label: t(`ed_style_${v}`) }))) },
-    { key: 'tiles', sel: (t) => sel(['esri', 'osm', 'carto'].map((v) => ({ value: v, label: t(`ed_tiles_${v}`) }))) },
+    { key: 'tiles', preview: true },
     { key: 'map_link', sel: (t) => sel(['google', 'apple', 'osm', 'waze', 'here', 'none'].map((v) => ({ value: v, label: t(`ed_link_${v}`) }))) },
     { key: 'map_link_choice', sel: B },
   ] },
@@ -43,7 +43,7 @@ const ADMIN = [
     { key: 'panel_icon', sel: { icon: {} }, text: true },
     { key: 'live_card', sel: B }, { key: 'show_persons_live', sel: PERSONS },
     { key: 'history_card', sel: B }, { key: 'show_persons_history', sel: PERSONS },
-    { key: 'carto_api_key', sel: { text: {} }, text: true },
+    { key: 'carto_api_key', sel: { text: {} }, text: true, link: { href: 'https://carto.com/basemaps/apikey/', label: 'carto_get_key' } },
   ] },
   { id: 'recording', icon: 'mdi:record-rec', options: [
     { key: 'record_persons', sel: PERSONS }, { key: 'min_interval', sel: num(10, 3600, 10, 's') },
@@ -146,6 +146,24 @@ const CSS = `
   .wa-set .steuer > * { width: 100%; }
   .wa-set .steuer.schalter > * { width: auto; }
   .wa-set .gesperrt .steuer { opacity: .6; }
+  .wa-set .verweis { grid-column: 1 / -1; justify-self: end; display: inline-flex; align-items: center; gap: 4px; font-size: 13px;
+                     color: var(--primary-color); text-decoration: none; }
+  .wa-set .verweis:hover { text-decoration: underline; }
+  .wa-set .verweis ha-icon { --mdc-icon-size: 16px; }
+  .wa-set .vorschauen { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .wa-set .vorschau { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 12px; cursor: pointer;
+                      border: 2px solid var(--divider-color); background: none; font: inherit; color: inherit; text-align: left; }
+  .wa-set .vorschau:hover:not(:disabled) { border-color: var(--secondary-text-color); }
+  .wa-set .vorschau.gewaehlt { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }
+  .wa-set .vorschau:disabled { cursor: default; }
+  .wa-set .vorschau .minikarte { height: 130px; border-radius: 8px; overflow: hidden; pointer-events: none; }
+  .wa-set .vorschau .minikarte .leaflet-control-attribution { font-size: 8px; line-height: 1.2; }
+  .wa-set .vorschau .name { font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+  .wa-set .vorschau .name ha-icon { --mdc-icon-size: 18px; color: var(--primary-color); }
+  .wa-set .vorschau .klein { min-height: 2.6em; }
+  .wa-set .vorschau .fehlt { position: absolute; left: 6px; right: 6px; top: 6px; height: 130px; border-radius: 8px; display: flex;
+                             align-items: center; justify-content: center; text-align: center; padding: 8px; box-sizing: border-box;
+                             font-size: 13px; background: rgba(0,0,0,.6); color: #fff; }
   .wa-set .warnung { margin: 8px 16px; padding: 10px 12px; border-radius: 8px; font-size: 14px;
                      background: rgba(255,166,0,.14); color: var(--primary-text-color); border-left: 4px solid var(--warning-color, #ffa600); }
   .wa-set .fuss { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 16px 16px; flex-wrap: wrap; }
@@ -207,6 +225,10 @@ const CSS = `
     .wa-set .person .reihenfolge { grid-column: 1; grid-row: 2; flex-direction: row; }
     .wa-set .person .felder { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr); }
     .wa-set .kat-text { padding-left: 16px; }
+    .wa-set .vorschauen { grid-template-columns: minmax(0, 1fr); }
+    .wa-set .vorschau { flex-direction: row; align-items: center; }
+    .wa-set .vorschau .minikarte { flex: 0 0 120px; height: 80px; }
+    .wa-set .vorschau .fehlt { width: 120px; height: 80px; right: auto; }
   }
 `;
 
@@ -235,7 +257,9 @@ export function defineSettingsPage(S) {
     }
 
     connectedCallback() {
-      if (this._hass && !this._unsub && this._data) this._unsub = S.subscribeInfo(this._hass, () => this._refreshSoon());
+      if (this._hass && !this._unsub && this._data) {
+        this._unsub = S.subscribeInfo(this._hass, (info) => { this._info = info; this._refreshSoon(); });
+      }
     }
 
     async _start() {
@@ -243,7 +267,7 @@ export function defineSettingsPage(S) {
       this._t = S.translator(this._hass);
       this._haSelector = await ensureSelector();
       await this._load();
-      this._unsub = S.subscribeInfo(this._hass, () => this._refreshSoon());
+      this._unsub = S.subscribeInfo(this._hass, (info) => { this._info = info; this._refreshSoon(); });
     }
 
     async _load() {
@@ -296,7 +320,7 @@ export function defineSettingsPage(S) {
       ];
       const lockIcon = (id) => (PERSONAL.some((c) => c.id === id) && d.locked.includes(id) && this._scope === 'own'
         ? '<ha-icon class="schloss" icon="mdi:lock"></ha-icon>' : '');
-      this.innerHTML = `<style>${CSS}</style>
+      this.innerHTML = `${S.leafletCss()}<style>${CSS}</style>
         <div class="wa-set">
           <nav class="toc" aria-label="${esc(t('toc'))}">
             ${groups.filter((g) => g.items.length).map((g) => `<div class="gruppe">${esc(g.title)}</div>
@@ -390,8 +414,9 @@ export function defineSettingsPage(S) {
       PERSONAL.forEach((c) => {
         const box = this.querySelector(`.felder[data-kat="${c.id}"]`);
         if (c.custom === 'persons') this._persons(box, c.id);
-        else c.fields.forEach((f) => box.appendChild(this._row(f, this._values(c.id)[f.key], this._locked(c.id),
-          (value) => this._savePersonal(c.id, f.key, value))));
+        else c.fields.forEach((f) => box.appendChild(f.preview
+          ? this._tilesPreview(c.id, f)
+          : this._row(f, this._values(c.id)[f.key], this._locked(c.id), (value) => this._savePersonal(c.id, f.key, value))));
       });
       ADMIN.forEach((c) => {
         const box = this.querySelector(`.felder[data-kat="${c.id}"]`);
@@ -454,6 +479,15 @@ export function defineSettingsPage(S) {
         info.setAttribute('aria-expanded', text.hidden ? 'false' : 'true');
       });
       row.querySelector('.steuer').appendChild(this._control(selector, field, value, disabled, onChange));
+      if (field.link) {
+        const link = document.createElement('a');
+        link.className = 'verweis';
+        link.href = field.link.href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.innerHTML = `<ha-icon icon="mdi:open-in-new"></ha-icon>${S.escapeHtml(t(field.link.label))}`;
+        row.appendChild(link);
+      }
       return row;
     }
 
@@ -733,6 +767,59 @@ export function defineSettingsPage(S) {
         this._toast(this._t('upload_failed'), true);
         return null;
       }
+    }
+
+    // --- map style with small example maps (Stuttgart) ------------------------------------------------
+    _tilesPreview(category, field) {
+      const t = this._t;
+      const esc = S.escapeHtml;
+      const locked = this._locked(category);
+      const values = this._values(category);
+      const key = (this._info && this._info.settings && this._info.settings.carto_api_key)
+        || (this._data.admin && this._data.admin.options.carto_api_key) || '';
+      const row = document.createElement('div');
+      row.className = 'zeile breit';
+      row.innerHTML = `<div class="beschriftung"><span>${esc(t(`st_${field.key}`))}</span>
+          <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
+        <div class="infotext" hidden>${esc(t(`si_${field.key}`))}</div>
+        <div class="vorschauen" role="radiogroup" aria-label="${esc(t(`st_${field.key}`))}">
+          ${['esri', 'osm', 'carto'].map((v) => `<button class="vorschau${values.tiles === v ? ' gewaehlt' : ''}" type="button" role="radio"
+              aria-checked="${values.tiles === v}" data-wert="${v}"${locked ? ' disabled' : ''}>
+              <div class="minikarte"></div>
+              <div class="name">${values.tiles === v ? '<ha-icon icon="mdi:check-circle"></ha-icon>' : ''}${esc(t(`ed_tiles_${v}`))}</div>
+              <div class="klein">${esc(t(`tiles_note_${v}`))}</div>
+              ${v === 'carto' && !key ? `<div class="fehlt">${esc(t('tiles_no_key'))}</div>` : ''}
+            </button>`).join('')}
+        </div>`;
+      this._infoToggle(row);
+      row.querySelectorAll('.vorschau').forEach((button) => button.addEventListener('click', async () => {
+        if (button.classList.contains('gewaehlt')) return;
+        await this._savePersonal(category, 'tiles', button.dataset.wert);
+        row.querySelectorAll('.vorschau').forEach((b) => {
+          const on = b === button;
+          b.classList.toggle('gewaehlt', on);
+          b.setAttribute('aria-checked', on ? 'true' : 'false');
+          const name = b.querySelector('.name');
+          const icon = name.querySelector('ha-icon');
+          if (on && !icon) name.insertAdjacentHTML('afterbegin', '<ha-icon icon="mdi:check-circle"></ha-icon>');
+          if (!on && icon) icon.remove();
+        });
+      }));
+      // Small, fixed maps of Stuttgart in light or dark, as the cards will show them
+      S.loadLeaflet().then(() => {
+        const dark = S.isDark(this._hass, values.map_style);
+        row.querySelectorAll('.vorschau').forEach((button) => {
+          const box = button.querySelector('.minikarte');
+          const map = window.L.map(box, {
+            zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false,
+            keyboard: false, touchZoom: false, tap: false, attributionControl: true,
+          }).setView([48.7784, 9.1800], 13);
+          map.attributionControl.setPrefix(false);
+          S.setTiles(map, [], { tiles: button.dataset.wert, carto_api_key: key }, dark, box, null);
+          setTimeout(() => map.invalidateSize(), 50);
+        });
+      }).catch(() => {});
+      return row;
     }
 
     // --- rights ---------------------------------------------------------------------------------------

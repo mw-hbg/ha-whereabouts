@@ -104,40 +104,60 @@ export function isDark(hass, style) {
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
-// Replaces the tile layers of `map`. Returns the new layers.
-export function setTiles(map, oldLayers, config, dark, container) {
+// Replaces the tile layers of `map` (the array `layers` is changed in place
+// and returned). If the chosen provider delivers no tiles at all (e.g. the
+// CARTO key was blocked), the map falls back: CARTO -> Esri -> OpenStreetMap.
+// `notice(text)`: shows a hint (administrators only), or nothing.
+export const FALLBACK = { carto: 'esri', esri: 'osm' };
+
+export function setTiles(map, layers, config, dark, container, notice) {
   const L = window.L;
-  oldLayers.forEach((layer) => map.removeLayer(layer));
-  const layers = [];
-  const add = (url, options) => layers.push(L.tileLayer(url, options).addTo(map));
+  layers.splice(0).forEach((layer) => map.removeLayer(layer));
+  const oldHint = container.querySelector('.wa-ersatz');
+  if (oldHint) oldHint.remove();
+  const add = (url, options) => { const layer = L.tileLayer(url, options).addTo(map); layers.push(layer); return layer; };
   container.style.background = dark ? '#262626' : '#f2efe9';
   container.classList.toggle('wa-osm-dark', false);
   container.classList.toggle('wa-dark', dark);
-  const tiles = config.tiles || 'esri';
-  if (tiles === 'carto' && config.carto_api_key) {
+  let tiles = config.tiles || 'esri';
+  if (tiles === 'carto' && !config.carto_api_key) tiles = 'esri'; // no key: Esri needs none
+  let main;
+  if (tiles === 'carto') {
     // CARTO delivers tiles with a key only up to zoom 18 -> scale up above.
     const style = dark ? 'dark_all' : 'rastertiles/voyager';
-    add(`https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(config.carto_api_key)}`, {
+    main = add(`https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(config.carto_api_key)}`, {
       attribution: '&copy; OpenStreetMap &copy; CARTO', subdomains: 'abcd', maxNativeZoom: 18, maxZoom: 20,
     });
   } else if (tiles === 'osm') {
-    add('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    main = add('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxNativeZoom: 19, maxZoom: 20,
     });
     // OpenStreetMap has no dark style: darken the tiles with a filter.
     container.classList.toggle('wa-osm-dark', dark);
   } else if (dark) {
-    add('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    main = add('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap', maxNativeZoom: 16, maxZoom: 20,
     });
     add('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
       maxNativeZoom: 16, maxZoom: 20,
     });
   } else {
-    add('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+    main = add('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap', maxNativeZoom: 19, maxZoom: 20,
     });
   }
+  // Only a provider that delivers nothing at all is replaced - single missing
+  // tiles (bad network) are not enough.
+  let loaded = 0;
+  let failed = 0;
+  main.on('tileload', () => { loaded += 1; });
+  main.on('tileerror', () => {
+    failed += 1;
+    const next = FALLBACK[tiles];
+    if (loaded || failed < 6 || !next || !navigator.onLine || !layers.includes(main)) return;
+    setTiles(map, layers, { ...config, tiles: next }, dark, container, notice);
+    if (notice) notice(tiles, next);
+  });
   return layers;
 }
 
@@ -153,7 +173,24 @@ export const MAP_CSS = `
   .wa-dark .zonen-name { color: #ddd; text-shadow: 0 0 3px #000, 0 0 3px #000; }
   .zonen-name::before { display: none; }
   .zonen-aus .zonen-name { display: none; }
+  .wa-ersatz { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 900; max-width: calc(100% - 140px);
+               padding: 6px 12px; border-radius: 8px; font-size: 12px; line-height: 1.4; text-align: center;
+               background: rgba(0,0,0,.72); color: #fff; pointer-events: none; }
 `;
+
+// Hint on the map that the chosen map service failed (for administrators).
+export function fallbackNotice(container, t) {
+  return (from, to) => {
+    let hint = container.querySelector('.wa-ersatz');
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.className = 'wa-ersatz';
+      container.appendChild(hint);
+    }
+    const name = { esri: 'Esri', osm: 'OpenStreetMap', carto: 'CARTO' };
+    hint.textContent = t(from === 'carto' ? 'tiles_fallback_carto' : 'tiles_fallback', { from: name[from], to: name[to] });
+  };
+}
 
 // --- zones (both cards) -----------------------------------------------------------
 export function zoneStates(hass, config) {

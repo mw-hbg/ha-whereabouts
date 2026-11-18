@@ -477,7 +477,9 @@ export function defineHistoryCard(S) {
 
     _setTiles(dark) {
       this._dark = dark;
-      this._tiles = S.setTiles(this._map, this._tiles, this._config, dark, this.querySelector('.wa-map'));
+      const box = this.querySelector('.wa-map');
+      const notice = this._info && this._info.is_admin ? S.fallbackNotice(box, this._t) : null;
+      this._tiles = S.setTiles(this._map, this._tiles, this._config, dark, box, notice);
     }
 
     _drawZones() {

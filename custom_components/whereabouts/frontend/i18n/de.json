@@ -198,7 +198,7 @@
   "st_map_style": "Hell oder dunkel",
   "si_map_style": "„Wie Home Assistant“ folgt dem Hell/Dunkel-Modus deines Themes.",
   "st_tiles": "Kartenstil",
-  "si_tiles": "Esri braucht keinen Schlüssel. OpenStreetMap hat keinen dunklen Stil, die Karte wird dann abgedunkelt. CARTO braucht einen API-Schlüssel, den der Administrator unter „Seitenleiste und Karten“ einträgt; ohne Schlüssel wird Esri genommen. Die Kartenkacheln lädt dein Browser direkt beim gewählten Anbieter.",
+  "si_tiles": "Die Beispiele zeigen Stuttgart so, wie die Karten aussehen (hell oder dunkel nach deiner Einstellung). Esri und OpenStreetMap brauchen keinen Schlüssel. CARTO braucht einen kostenlosen Schlüssel, den der Administrator einmal für alle einträgt. Liefert ein Dienst gar keine Karte mehr (z. B. Schlüssel gesperrt), wechselt die Karte von selbst: CARTO → Esri → OpenStreetMap. Die Kacheln lädt dein Browser direkt beim Anbieter.",
   "st_map_link": "Koordinaten öffnen in",
   "si_map_link": "Ein Klick auf Koordinaten öffnet diesen Kartendienst. „Nichts“ zeigt die Koordinaten ohne Link.",
   "st_map_link_choice": "Auf Handy und Tablet nach der App fragen",
@@ -265,7 +265,7 @@
   "st_show_persons_history": "Personen im Verlauf (leer = alle)",
   "si_show_persons_history": "Wessen Verlauf überhaupt angezeigt werden kann. Ausblenden löscht keinen Verlauf.",
   "st_carto_api_key": "CARTO-API-Schlüssel",
-  "si_carto_api_key": "Nur nötig für den Kartenstil CARTO. Der Schlüssel wird an die Browser aller Benutzer geschickt (die laden damit die Kacheln) – also keinen geheimen Schlüssel verwenden.",
+  "si_carto_api_key": "Nur nötig für den Kartenstil CARTO. Kostenlos über den Link unten: E-Mail, die Domain deines Home Assistant und kurz den Zweck angeben – der Schlüssel kommt per E-Mail, ein CARTO-Konto braucht man nicht. Der Schlüssel geht an die Browser aller Benutzer (die laden damit die Kacheln), er ist also nicht geheim. Jeder nutzt seinen eigenen Schlüssel; Whereabouts bringt keinen mit. Ohne Schlüssel wird Esri gezeigt.",
   "st_record_persons": "Verlauf dieser Personen aufzeichnen",
   "si_record_persons": "Aufgezeichnet wird erst, wenn hier Personen stehen. Der Verlauf liegt nur auf diesem Home Assistant (Ordner whereabouts im Konfigurationsordner) und ist Teil jedes Backups. Herausnehmen behält den bisherigen Verlauf. Tipp: Eine Person kann mehrere Tracker haben (Companion App und z. B. ein Router- oder ARP-Scan-Tracker fürs Heimnetz) – zuordnen unter Einstellungen → Personen. Nur das eigene Heimnetz überwachen und nur Geräte eintragen, auf denen auch die Companion App läuft.",
   "st_min_interval": "Positionen am selben Ort höchstens alle",
@@ -328,5 +328,12 @@
   "source_gps": "GPS",
   "source_router": "WLAN/Router",
   "source_bluetooth": "Bluetooth",
-  "source_bluetooth_le": "Bluetooth LE"
+  "source_bluetooth_le": "Bluetooth LE",
+  "tiles_fallback": "{from} liefert gerade keine Karte – zeige {to}.",
+  "carto_get_key": "Schlüssel kostenlos bei CARTO beantragen",
+  "tiles_note_esri": "Ohne Schlüssel, Standard",
+  "tiles_note_osm": "Ohne Schlüssel; dunkel wird abgedunkelt",
+  "tiles_note_carto": "Braucht einen kostenlosen Schlüssel",
+  "tiles_no_key": "Noch kein Schlüssel – der Administrator trägt ihn unter Verwaltung → Seitenleiste und Karten ein. Bis dahin wird Esri gezeigt.",
+  "tiles_fallback_carto": "CARTO liefert gerade keine Karte – zeige {to}. Bitte den CARTO-Schlüssel prüfen (Standorte → Einstellungen → Seitenleiste und Karten)."
 }

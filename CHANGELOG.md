@@ -20,6 +20,10 @@
 - Import with preview and confirmation, export of a period, diagnostics per
   person (trackers, geocoded-location sensor, stored days).
 - Settings are stored in `.storage/whereabouts.settings` (part of every backup).
+- Map style chosen with small example maps (Stuttgart); link to request a free
+  CARTO key next to the key field. If a map service delivers no map at all (e.g.
+  the CARTO key was blocked), the maps switch by themselves: CARTO → Esri →
+  OpenStreetMap; administrators see a short hint on the map.
 
 ---
 
@@ -43,6 +47,11 @@
 - Import mit Vorschau und Bestätigung, Export eines Zeitraums, Diagnose pro Person
   (Tracker, Sensor „Geokodierter Standort“, gespeicherte Tage).
 - Die Einstellungen liegen in `.storage/whereabouts.settings` (Teil jedes Backups).
+- Kartenstil mit kleinen Beispielkarten (Stuttgart) wählen; neben dem
+  Schlüsselfeld ein Link, um einen kostenlosen CARTO-Schlüssel zu beantragen.
+  Liefert ein Kartendienst gar keine Karte mehr (z. B. CARTO-Schlüssel gesperrt),
+  wechseln die Karten von selbst: CARTO → Esri → OpenStreetMap; Administratoren
+  sehen einen kurzen Hinweis auf der Karte.
 
 ## 0.1.1
 

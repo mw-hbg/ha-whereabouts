@@ -129,12 +129,15 @@ class WhereaboutsOptionsFlow(OptionsFlow):
         values = self._values()
         if user_input is not None:
             return self._save(user_input)
-        schema = vol.Schema({
-            vol.Required(CONF_LIVE_CARD, default=values[CONF_LIVE_CARD]): selector.BooleanSelector(),
-            vol.Optional(CONF_SHOW_PERSONS_LIVE, default=values[CONF_SHOW_PERSONS_LIVE]): _PERSONS,
-        })
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_LIVE_CARD, default=values[CONF_LIVE_CARD]): selector.BooleanSelector(),
+                vol.Optional(CONF_SHOW_PERSONS_LIVE, default=values[CONF_SHOW_PERSONS_LIVE]): _PERSONS,
+            }
+        )
         return self.async_show_form(
-            step_id="card_live", data_schema=schema,
+            step_id="card_live",
+            data_schema=schema,
             description_placeholders={"other": self._names(values[CONF_SHOW_PERSONS_HISTORY])},
         )
 
@@ -143,12 +146,15 @@ class WhereaboutsOptionsFlow(OptionsFlow):
         values = self._values()
         if user_input is not None:
             return self._save(user_input)
-        schema = vol.Schema({
-            vol.Required(CONF_HISTORY_CARD, default=values[CONF_HISTORY_CARD]): selector.BooleanSelector(),
-            vol.Optional(CONF_SHOW_PERSONS_HISTORY, default=values[CONF_SHOW_PERSONS_HISTORY]): _PERSONS,
-        })
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_HISTORY_CARD, default=values[CONF_HISTORY_CARD]): selector.BooleanSelector(),
+                vol.Optional(CONF_SHOW_PERSONS_HISTORY, default=values[CONF_SHOW_PERSONS_HISTORY]): _PERSONS,
+            }
+        )
         return self.async_show_form(
-            step_id="card_history", data_schema=schema,
+            step_id="card_history",
+            data_schema=schema,
             description_placeholders={"other": self._names(values[CONF_SHOW_PERSONS_LIVE])},
         )
 
@@ -157,12 +163,16 @@ class WhereaboutsOptionsFlow(OptionsFlow):
         values = self._values()
         if user_input is not None:
             return self._save(user_input)
-        schema = vol.Schema({
-            vol.Optional(CONF_RECORD_PERSONS, default=values[CONF_RECORD_PERSONS]): _PERSONS,
-            vol.Required(CONF_MIN_INTERVAL, default=values[CONF_MIN_INTERVAL]): _number(10, 3600, "s"),
-            vol.Required(CONF_SAME_PLACE_DISTANCE, default=values[CONF_SAME_PLACE_DISTANCE]): _number(10, 1000, "m"),
-            vol.Required(CONF_RETENTION_DAYS, default=values[CONF_RETENTION_DAYS]): _number(0, 36500, "d"),
-        })
+        schema = vol.Schema(
+            {
+                vol.Optional(CONF_RECORD_PERSONS, default=values[CONF_RECORD_PERSONS]): _PERSONS,
+                vol.Required(CONF_MIN_INTERVAL, default=values[CONF_MIN_INTERVAL]): _number(10, 3600, "s"),
+                vol.Required(CONF_SAME_PLACE_DISTANCE, default=values[CONF_SAME_PLACE_DISTANCE]): _number(
+                    10, 1000, "m"
+                ),
+                vol.Required(CONF_RETENTION_DAYS, default=values[CONF_RETENTION_DAYS]): _number(0, 36500, "d"),
+            }
+        )
         return self.async_show_form(step_id="recording", data_schema=schema)
 
     async def async_step_addresses(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:

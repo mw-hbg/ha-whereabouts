@@ -8,28 +8,6 @@ const rgbToHex = (rgb) => (Array.isArray(rgb) && rgb.length === 3
   ? `#${rgb.map((v) => Math.max(0, Math.min(255, Number(v) || 0)).toString(16).padStart(2, '0')).join('')}`.toUpperCase()
   : undefined);
 
-// Perceived colour difference (CIE76 in Lab). Below ~25 two pins are hard to tell apart.
-const toLab = (hex) => {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return null;
-  const [r, g, b] = rgb.map((v) => { const c = v / 255; return c > 0.04045 ? ((c + 0.055) / 1.055) ** 2.4 : c / 12.92; });
-  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
-  const x = f((r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047);
-  const y = f(r * 0.2126 + g * 0.7152 + b * 0.0722);
-  const z = f((r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883);
-  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
-};
-const SIMILAR = 25;
-export function similarColors(entries) {
-  const pairs = [];
-  entries.forEach((a, i) => entries.slice(i + 1).forEach((b) => {
-    const la = toLab(a.color);
-    const lb = toLab(b.color);
-    if (la && lb && Math.hypot(la[0] - lb[0], la[1] - lb[1], la[2] - lb[2]) < SIMILAR) pairs.push([a.name, b.name]);
-  }));
-  return pairs;
-}
-
 const ZONE_COLORS = ['zone_color_home', 'zone_color'];
 const HELP = ['title', 'persons', 'picture', 'map_link_choice'];
 
@@ -156,7 +134,7 @@ export function defineEditor(S, defaults) {
       const entries = this._shownPersons().map((id) => ({
         name: S.personName(this._hass, this._config, id), color: S.personColor(this._hass, this._config, id),
       }));
-      const pairs = similarColors(entries);
+      const pairs = S.similarColors(entries);
       if (!this._alert) {
         this._alert = document.createElement('ha-alert');
         this._alert.setAttribute('alert-type', 'warning');

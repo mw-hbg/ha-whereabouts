@@ -1,5 +1,49 @@
 # Changelog
 
+## Unreleased
+
+- New page in the sidebar ("Whereabouts", German "Standorte") with the tabs
+  "Where is…?", "Location history" and "Settings". Tab names turn into symbols
+  when there is little room. The sidebar entry can be switched off; the cards
+  for dashboards stay.
+- New settings page instead of the options dialog: table of contents, an ⓘ with
+  an explanation next to every setting, confirmation before anything is deleted
+  or overwritten. Native Home Assistant controls, follows the theme.
+- Personal settings per user (views, persons with order, name, colour, picture
+  upload, map, zones, display). Administrators set the defaults and can lock each
+  category for all non-admins (with exceptions) or for selected users.
+- Rights per user: who sees whom live, whose history they may see and delete;
+  rules for everybody plus own rights per user. The former option "Who may see
+  and delete the history" is taken over.
+- Cards in dashboards use the viewer's personal settings; what is set in a card
+  still wins for that card. Their look is unchanged.
+- Import with preview and confirmation, export of a period, diagnostics per
+  person (trackers, geocoded-location sensor, stored days).
+- Settings are stored in `.storage/whereabouts.settings` (part of every backup).
+
+---
+
+- Neue Seite in der Seitenleiste („Standorte“, englisch „Whereabouts“) mit den
+  Reitern „Wo ist…?“, „Standortverlauf“ und „Einstellungen“. Bei wenig Platz
+  werden die Reiternamen zu Symbolen. Der Eintrag lässt sich abschalten; die
+  Karten für Dashboards bleiben.
+- Neue Einstellungsseite statt des Optionsdialogs: Inhaltsverzeichnis, neben jeder
+  Einstellung ein ⓘ mit Erklärung, Bestätigung vor allem, was etwas löscht oder
+  überschreibt. Bedienelemente von Home Assistant, folgt dem Theme.
+- Persönliche Einstellungen pro Benutzer (Ansichten, Personen mit Reihenfolge,
+  Name, Farbe, Bild-Upload, Karte, Zonen, Anzeige). Administratoren legen den
+  Standard fest und können jede Kategorie für alle Nicht-Admins (mit Ausnahmen)
+  oder für ausgewählte Benutzer sperren.
+- Rechte pro Benutzer: wer wen live sieht, wessen Verlauf sehen und löschen darf;
+  Regeln für alle plus eigene Rechte pro Benutzer. Die bisherige Option „Wer den
+  Verlauf sehen und löschen darf“ wird übernommen.
+- Karten in Dashboards nutzen die persönlichen Einstellungen des Betrachters; was
+  in einer Karte eingestellt ist, hat für diese Karte weiter Vorrang. Ihr
+  Aussehen bleibt gleich.
+- Import mit Vorschau und Bestätigung, Export eines Zeitraums, Diagnose pro Person
+  (Tracker, Sensor „Geokodierter Standort“, gespeicherte Tage).
+- Die Einstellungen liegen in `.storage/whereabouts.settings` (Teil jedes Backups).
+
 ## 0.1.1
 
 - Addresses: default is now "Companion app (geocoded location), otherwise

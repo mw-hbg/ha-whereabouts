@@ -12,6 +12,8 @@
     "file_upload",
     "frontend",
     "http",
+    "image_upload",
+    "panel_custom",
     "person",
     "websocket_api",
     "zone"

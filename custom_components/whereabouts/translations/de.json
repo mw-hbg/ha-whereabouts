@@ -26,12 +26,12 @@
     "step": {
       "init": {
         "title": "Whereabouts",
+        "description": "Personen, Farben, Bilder, Rechte und die Seitenleiste stellst du auf der Einstellungsseite ein: [Einstellungen öffnen](/whereabouts/settings). Dort findest du auch alles Folgende.",
         "menu_options": {
           "card_live": "Karte „Wo ist…?“",
           "card_history": "Karte „Standortverlauf“",
           "recording": "Aufzeichnung",
           "addresses": "Adressen",
-          "access": "Wer den Verlauf sehen und löschen darf",
           "import_file": "Verlauf importieren"
         }
       },
@@ -85,17 +85,6 @@
         "data_description": {
           "address_source": "Companion App (Geokodierter Standort): die Adresse, die die Home-Assistant-Companion-App auf dem Smartphone schon ermittelt hat – bleibt lokal. Dafür muss in der App auf dem Smartphone der Sensor „Geokodierter Standort“ eingeschaltet sein (Einstellungen der Companion App → Sensoren bzw. Sensoren verwalten → Geokodierter Standort). Hat sie keine passende Adresse, wird ersatzweise OpenStreetMap gefragt (Standard): Dabei werden die Koordinaten dieses Ortes an nominatim.openstreetmap.org geschickt. Du kannst auch nur die Companion App, nur OpenStreetMap oder keine Adressen wählen.",
           "address_max_distance": "Die Geokodierung der Companion App hinkt oft hinterher. Liegt ihre Position weiter vom gespeicherten Punkt entfernt, wird keine (falsche) Adresse übernommen."
-        }
-      },
-      "access": {
-        "title": "Wer den Verlauf sehen und löschen darf",
-        "description": "Gilt nur für den Verlauf. Die Live-Karte zeigt, was jeder Home-Assistant-Benutzer ohnehin sehen kann.",
-        "data": {
-          "history_access": "Verlauf sehen",
-          "delete_access": "Einträge löschen"
-        },
-        "data_description": {
-          "history_access": "„Eigene Person“ ist die Person, die mit dem Benutzerkonto verknüpft ist (Einstellungen → Personen)."
         }
       },
       "import_file": {

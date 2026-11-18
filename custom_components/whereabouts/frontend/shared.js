@@ -494,6 +494,7 @@ function inPanelView(el) {
 // Height: full screen height (panel view) or a fixed height.
 export function applyHeight(el, config) {
   const mode = config.height_mode || 'auto';
+  if (mode === 'fill') { el.style.height = '100%'; return; } // sidebar page
   const full = mode === 'full' || (mode === 'auto' && inPanelView(el));
   if (full) {
     el.style.height = CSS.supports('height', '100dvh') ? 'calc(100dvh - var(--header-height, 56px))' : 'calc(100vh - 56px)';
@@ -501,6 +502,46 @@ export function applyHeight(el, config) {
     el.style.height = `${Math.max(200, Number(config.height) || 450)}px`;
   }
 }
+
+// Configuration of a card: built-in defaults < the user's settings (settings
+// page) < what is set in this card. Person settings are merged per person.
+export function cardConfig(defaults, settings, raw, kind) {
+  const own = { ...(settings || {}) };
+  const interval = own[kind === 'live' ? 'live_refresh_interval' : 'history_refresh_interval'];
+  ['live_refresh_interval', 'history_refresh_interval', 'view_live', 'view_history', 'view_settings', 'start_view']
+    .forEach((key) => delete own[key]);
+  if (interval) own.refresh_interval = interval;
+  if (!own.carto_api_key) delete own.carto_api_key;
+  const persons = { ...(own.person_settings || {}) };
+  Object.entries((raw && raw.person_settings) || {}).forEach(([id, entry]) => { persons[id] = { ...(persons[id] || {}), ...entry }; });
+  const config = { ...DEFAULTS_MAP, ...defaults, ...own, ...(raw || {}), person_settings: persons };
+  config.persons = raw && raw.persons && raw.persons.length ? raw.persons : (own.persons || []);
+  return config;
+}
+
+// Perceived colour difference (CIE76 in Lab). Below ~25 two pins are hard to tell apart.
+const toLab = (hex) => {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex || '');
+  const rgb = m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : null;
+  if (!rgb) return null;
+  const [r, g, b] = rgb.map((v) => { const c = v / 255; return c > 0.04045 ? ((c + 0.055) / 1.055) ** 2.4 : c / 12.92; });
+  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const x = f((r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047);
+  const y = f(r * 0.2126 + g * 0.7152 + b * 0.0722);
+  const z = f((r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883);
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+};
+const SIMILAR = 25;
+export function similarColors(entries) {
+  const pairs = [];
+  entries.forEach((a, i) => entries.slice(i + 1).forEach((b) => {
+    const la = toLab(a.color);
+    const lb = toLab(b.color);
+    if (la && lb && Math.hypot(la[0] - lb[0], la[1] - lb[1], la[2] - lb[2]) < SIMILAR) pairs.push([a.name, b.name]);
+  }));
+  return pairs;
+}
+
 
 // --- integration ---------------------------------------------------------------
 // One subscription per page: the integration sends what the cards need

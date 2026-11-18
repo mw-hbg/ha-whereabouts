@@ -47,9 +47,14 @@ export function defineHistoryCard(S) {
     }
 
     setConfig(config) {
-      this._config = { ...S.DEFAULTS_MAP, ...HISTORY_DEFAULTS, ...(config || {}) };
-      this._tableView = this._config.default_view === 'table';
+      this._raw = { ...(config || {}) };
+      this._applyConfig();
       if (this._info) { this._infoSig = null; this._onInfo(this._info); }
+    }
+
+    _applyConfig() {
+      this._config = S.cardConfig(HISTORY_DEFAULTS, this._info && this._info.settings, this._raw, 'history');
+      this._tableView = this._config.default_view === 'table';
     }
 
     set hass(hass) {
@@ -90,10 +95,11 @@ export function defineHistoryCard(S) {
 
     // Called at the start and whenever the integration's options change.
     _onInfo(info) {
-      const sig = JSON.stringify([info.available, info.history_card, info.persons]);
+      const sig = JSON.stringify([info.available, info.history_card, info.persons, info.settings]);
       if (sig === this._infoSig) return;
       this._infoSig = sig;
       this._info = info;
+      this._applyConfig();
       this._teardown();
       if (!info.available) { this.innerHTML = S.messageHtml(this._t('not_set_up')); return; }
       if (!info.history_card) { this.innerHTML = S.messageHtml(this._t('card_off')); return; }

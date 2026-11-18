@@ -6,6 +6,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 
+from homeassistant.components import frontend, panel_custom
 from homeassistant.components.frontend import add_extra_js_url, remove_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
@@ -15,22 +16,27 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
-from . import api
+from . import api, settings_api
 from .const import (
     CARDS_FILE,
-    CONF_HISTORY_CARD,
-    CONF_LIVE_CARD,
+    CONF_PANEL,
+    CONF_PANEL_ICON,
+    CONF_PANEL_TITLE,
     CONF_SAME_PLACE_DISTANCE,
     DEFAULT_OPTIONS,
     DOMAIN,
     FRONTEND_URL_BASE,
     GEOCODE_CACHE_FILE,
     HISTORY_FOLDER,
+    PANEL_ELEMENT,
+    PANEL_FILE,
+    PANEL_URL,
     SIGNAL_INFO_CHANGED,
     STORAGE_FOLDER,
 )
 from .logger import LocationLogger
 from .nominatim import Nominatim
+from .settings import Settings
 from .storage import HistoryStorage
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,7 +64,10 @@ class Runtime:
     options: dict
     storage: HistoryStorage
     logger: LocationLogger
+    settings: Settings
+    nominatim: Nominatim | None = None
     js_url: str | None = None
+    panel: bool = False
     _known: set[str] = field(default_factory=set)
 
     def known_persons(self) -> set[str]:
@@ -74,6 +83,7 @@ class Runtime:
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register the API and the card files once."""
     api.async_register(hass)
+    settings_api.async_register(hass)
     return True
 
 
@@ -89,6 +99,28 @@ async def _register_frontend(hass: HomeAssistant, version: str) -> str:
     return url
 
 
+def panel_title(hass: HomeAssistant, options: dict) -> str:
+    """Own title, or "Standorte" / "Whereabouts" by the system language."""
+    if options.get(CONF_PANEL_TITLE):
+        return str(options[CONF_PANEL_TITLE])
+    return "Standorte" if (hass.config.language or "").startswith("de") else "Whereabouts"
+
+
+async def _register_panel(hass: HomeAssistant, options: dict, version: str) -> None:
+    """The sidebar page. Without the sidebar entry it stays reachable at /whereabouts."""
+    show = bool(options[CONF_PANEL])
+    await panel_custom.async_register_panel(
+        hass,
+        frontend_url_path=PANEL_URL,
+        webcomponent_name=PANEL_ELEMENT,
+        sidebar_title=panel_title(hass, options) if show else None,
+        sidebar_icon=(options[CONF_PANEL_ICON] or "mdi:map-marker-radius") if show else None,
+        module_url=f"{FRONTEND_URL_BASE}/{PANEL_FILE}?v={version}",
+        require_admin=False,
+        config={"version": version},
+    )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     integration = await async_get_integration(hass, DOMAIN)
     version = str(integration.version)
@@ -98,11 +130,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     storage = HistoryStorage(os.path.join(base, HISTORY_FOLDER), options[CONF_SAME_PLACE_DISTANCE])
     nominatim = Nominatim(hass, os.path.join(base, GEOCODE_CACHE_FILE), version)
     logger = LocationLogger(hass, storage, nominatim, options)
-    runtime = Runtime(version, options, storage, logger)
+    settings = Settings(hass)
+    await settings.async_load(dict(entry.options))
+    runtime = Runtime(version, options, storage, logger, settings, nominatim)
     await runtime.async_refresh_known(hass)
 
-    if options[CONF_LIVE_CARD] or options[CONF_HISTORY_CARD]:
-        runtime.js_url = await _register_frontend(hass, version)
+    # The card files are always loaded: the sidebar page uses them, too.
+    runtime.js_url = await _register_frontend(hass, version)
+    await _register_panel(hass, options, version)
+    runtime.panel = True
 
     hass.data[DOMAIN] = runtime
     entry.runtime_data = runtime
@@ -121,6 +157,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     runtime.logger.stop()
     if runtime.js_url:
         remove_extra_js_url(hass, runtime.js_url)
+    if runtime.panel:
+        frontend.async_remove_panel(hass, PANEL_URL)
     hass.data.pop(DOMAIN, None)
     async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
     return True

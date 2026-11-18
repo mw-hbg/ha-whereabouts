@@ -25,6 +25,10 @@ CONF_ADDRESS_MAX_DISTANCE = "address_max_distance"
 CONF_HISTORY_ACCESS = "history_access"
 CONF_DELETE_ACCESS = "delete_access"
 CONF_RETENTION_DAYS = "retention_days"
+CONF_PANEL = "panel"  # entry in the sidebar
+CONF_PANEL_TITLE = "panel_title"  # empty = "Standorte" / "Whereabouts" by system language
+CONF_PANEL_ICON = "panel_icon"
+CONF_CARTO_KEY = "carto_api_key"  # for everybody; a card may have its own
 
 ADDRESS_SOURCE_OFF = "off"
 ADDRESS_SOURCE_PHONE = "phone"
@@ -62,6 +66,10 @@ DEFAULT_OPTIONS: dict = {
     CONF_DELETE_ACCESS: ACCESS_ADMINS_AND_SELF,
     # 0 = keep forever. Nothing is ever deleted automatically by default.
     CONF_RETENTION_DAYS: 0,
+    CONF_PANEL: True,
+    CONF_PANEL_TITLE: "",
+    CONF_PANEL_ICON: "mdi:map-marker-radius",
+    CONF_CARTO_KEY: "",
 }
 
 # Waiting for a fresh phone geocoding after a position update
@@ -80,6 +88,9 @@ FRONTEND_URL_BASE = "/whereabouts_static"
 # Sent whenever what the cards show may have changed (options, imports)
 SIGNAL_INFO_CHANGED = f"{DOMAIN}_info_changed"
 CARDS_FILE = "whereabouts-cards.js"
+PANEL_FILE = "whereabouts-panel.js"
+PANEL_URL = "whereabouts"  # /whereabouts, /whereabouts/history, /whereabouts/settings
+PANEL_ELEMENT = "whereabouts-panel"
 
 STATE_HOME = "home"
 STATE_NOT_HOME = "not_home"

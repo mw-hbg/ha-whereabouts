@@ -12,7 +12,8 @@
 ## English
 
 Live map and long-term location history for the persons in Home Assistant –
-one integration, two cards, everything set up in the UI.
+one integration with its own page in the sidebar and two dashboard cards,
+everything set up in the UI.
 
 > **Status: in development (0.x)** – experimental until version 1.0.
 
@@ -20,13 +21,14 @@ one integration, two cards, everything set up in the UI.
 
 | | |
 |---|---|
+| **Sidebar page** | "Where is…?", "Location history" and a settings page in one place – like the Energy or Logbook page. Each user chooses which tabs they see. |
 | **"Where is…?" card** | All persons live on a full-screen map: place, "since", address when on the way, last fix. The map follows everyone until you move it yourself. |
 | **"Location history" card** | Where a person was on a chosen day – as a route on the map or as a table. Stays instead of a cloud of points ("Home 08:00 – 15:03"), addresses for places on the way, deleting single entries. |
 | **Recording** | Stores a stay whenever a recorded person moves; kept until *you* delete it – not only the 10 days of the Home Assistant recorder. |
 | **Import and export** | CSV and GPX. Your history is never locked in. |
 
-Both cards can be switched on or off individually; titles, persons and colours
-are set per card.
+Both maps also exist as cards for your own dashboards. You can use Whereabouts
+with or without the sidebar entry.
 
 ### Why Whereabouts?
 
@@ -42,8 +44,9 @@ server). Whereabouts puts the whole thing into **one integration**:
   one entry with a time span; inside a zone the exact position does not matter.
 - **Addresses that are right** – the geocoded location of the Companion app is only
   used when its position matches the point; OpenStreetMap fills the gaps.
-- **Permissions per user** – who may see and delete whose history (e.g. children
-  only their own person).
+- **Settings per user, rights per user** – everybody chooses their own colours,
+  names, pictures and views; the administrator sets defaults, locks categories
+  and decides who may see and delete whose history (e.g. children only their own person).
 - **Clean data** – plain CSV files in your configuration folder, part of every
   backup; import of CSV, GPX and old archives, export as CSV and GPX.
 - **Privacy first** – nothing is recorded until you choose persons; nothing
@@ -71,17 +74,36 @@ Companion app on every phone (app settings → Companion app → Sensors / Manag
 sensors → Geocoded location). Without it, addresses come only from OpenStreetMap.
 
 The first dialog asks for the cards, the persons whose history is recorded
-(none by default) and the address source. Everything else is under
-**Configure**:
+(none by default) and the address source. Then open **Whereabouts** in the
+sidebar (German: **Standorte**) → **Settings**. Next to every setting an ⓘ explains
+what it does; actions that delete or overwrite something ask first.
 
-| Menu | What you can set |
-|---|---|
-| "Where is…?" card | On/off, persons shown (default: all; changes open cards at once) |
-| "Location history" card | On/off, persons shown (default: all; changes open cards at once) |
-| Recording | Recorded persons, store interval at the same place (60 s), "same place" radius on the way (50 m), deleting old history (default: never) |
-| Addresses | Companion app (geocoded location), otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; per person the sensor "Geocoded location" (found automatically) |
-| Who may see and delete the history | Administrators and own person (default), administrators only, all users |
-| Import history | Upload a file (see below) |
+| Category | Who | What you can set |
+|---|---|---|
+| Views | every user | which tabs are shown, which one opens first |
+| Persons | every user | who appears, order, display name, colour, picture (address or upload); warning for similar colours |
+| Map | every user | light/dark, map style (Esri, OpenStreetMap, CARTO), where coordinates open (Google Maps, Apple Maps, OpenStreetMap, Waze, HERE; choice of apps on phones) |
+| Zones, "Where is…?" display, "Location history" display | every user (advanced) | zone colours, info bar, status bar, accuracy circle, following, start view, legend, reload |
+| Users and rights | administrators | rules for everybody (see live / see history / delete history: all, own person, nobody) and own rights per user |
+| Sidebar and cards | administrators | sidebar entry on/off, name, icon; cards on/off and their persons; CARTO key |
+| Recording | administrators | recorded persons, store interval (60 s), "same place" radius (50 m), deleting old history (default: never) |
+| Addresses | administrators | Companion app (geocoded location), otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; sensor per person |
+| Import and export | export: everybody (own rights), import: administrators | CSV / GPX download for a period; import with preview |
+| Diagnostics | administrators | trackers, geocoded-location sensor and stored days per person |
+
+Administrators switch between **My settings** and **Default for everyone**. Each
+personal category can be locked – for all non-admins (with exceptions) or for
+selected users; locked users see it greyed out with the defaults.
+
+**Note on "see live":** this limits what Whereabouts shows. Every logged-in user
+can in principle see the persons' positions elsewhere in Home Assistant too; the
+**history**, however, is only handed out to users who may see it.
+
+All settings are stored in `.storage/whereabouts.settings` and are part of every
+Home Assistant backup, like the history.
+
+The options under **Settings → Devices & services → Whereabouts → Configure**
+still work and link to the settings page.
 
 **Wi-Fi trackers (optional):** A person in Home Assistant can have several
 trackers, e.g. the Companion app (GPS) and a router or ARP-scan tracker for the
@@ -94,13 +116,14 @@ Companion app – otherwise a phone lying at home makes the person "home".
 ### The cards
 
 Add them like any other card: **Edit dashboard → + Add card → "Where is…?"** or
-**"Location history"**. Everything is set in the visual editor; for one card
+**"Location history"**. A card uses the viewer's settings from the settings page;
+what you set in the card's editor applies to this card only and wins. For one card
 filling the page use a view of type **Panel**.
 
 | Setting | "Where is…?" | "Location history" |
 |---|---|---|
 | Title | optional | optional |
-| Persons | as set in the integration (or fewer) | as set in the integration and you may see (or fewer) |
+| Persons | as allowed and chosen on the settings page (or fewer) | same, only persons with a history you may see |
 | Per person (this card only) | display name, colour, picture, address sensor | display name, colour, picture |
 | Map | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO (own key), coordinates open in Google Maps (default), Apple Maps, OpenStreetMap, Waze or HERE; on phones and tablets a choice of apps | light/dark/like Home Assistant, Esri / OpenStreetMap / CARTO |
 | Zones | on/off, colour of Home and of the other zones, names from zoom | same |
@@ -177,7 +200,8 @@ MIT – see [LICENSE](LICENSE). Third-party software and services: [THIRD_PARTY_
 ## Deutsch
 
 Live-Karte und dauerhafter Standortverlauf für die Personen in Home Assistant –
-eine Integration, zwei Karten, alles in der Oberfläche eingerichtet.
+eine Integration mit eigener Seite in der Seitenleiste und zwei Dashboard-Karten,
+alles in der Oberfläche eingerichtet.
 
 > **Stand: in Entwicklung (0.x)** – experimentell bis Version 1.0.
 
@@ -185,13 +209,14 @@ eine Integration, zwei Karten, alles in der Oberfläche eingerichtet.
 
 | | |
 |---|---|
+| **Seite in der Seitenleiste** | „Wo ist…?“, „Standortverlauf“ und eine Einstellungsseite an einem Ort – wie die Seiten Energie oder Logbuch. Jeder Benutzer wählt, welche Reiter er sieht. |
 | **Karte „Wo ist…?“** | Alle Personen live auf einer bildschirmfüllenden Karte: Ort, „seit“, Adresse unterwegs, letzte Ortung. Die Karte folgt allen, bis man sie selbst verschiebt. |
 | **Karte „Standortverlauf“** | Wo eine Person an einem gewählten Tag war – als Route auf der Karte oder als Tabelle. Aufenthalte statt Punktwolke („Zuhause 08:00 – 15:03“), Adressen für Orte unterwegs, einzelne Einträge löschen. |
 | **Aufzeichnung** | Speichert einen Aufenthalt, sobald sich eine aufgezeichnete Person bewegt; bleibt erhalten, bis *du* ihn löschst – nicht nur die 10 Tage des Home-Assistant-Recorders. |
 | **Import und Export** | CSV und GPX. Deine Daten sind nie eingesperrt. |
 
-Beide Karten lassen sich einzeln ein- und ausschalten; Titel, Personen und
-Farben stellt man pro Karte ein.
+Beide Karten gibt es auch für eigene Dashboards. Whereabouts lässt sich mit oder
+ohne Eintrag in der Seitenleiste nutzen.
 
 ### Warum Whereabouts?
 
@@ -207,7 +232,9 @@ Server). Whereabouts bringt das Ganze in **eine Integration**:
   werden ein Eintrag mit Zeitraum; in einer Zone zählt die genaue Position nicht.
 - **Adressen, die stimmen** – der geokodierte Standort der Companion App wird nur
   genommen, wenn seine Position zum Punkt passt; OpenStreetMap füllt die Lücken.
-- **Rechte pro Benutzer** – wer wessen Verlauf sehen und löschen darf (z. B.
+- **Einstellungen und Rechte pro Benutzer** – jeder wählt seine eigenen Farben,
+  Namen, Bilder und Ansichten; der Administrator legt Standards fest, sperrt
+  Kategorien und bestimmt, wer wessen Verlauf sehen und löschen darf (z. B.
   Kinder nur ihre eigene Person).
 - **Saubere Daten** – einfache CSV-Dateien im Konfigurationsordner, Teil jeder
   Sicherung; Import von CSV, GPX und alten Archiven, Export als CSV und GPX.
@@ -237,17 +264,39 @@ Sensor **Geokodierter Standort** einschalten (Einstellungen der App → Companio
 Adressen nur von OpenStreetMap.
 
 Der erste Dialog fragt nach den Karten, den Personen, deren Verlauf
-aufgezeichnet wird (standardmäßig keine), und der Adressquelle. Alles Weitere
-steht unter **Konfigurieren**:
+aufgezeichnet wird (standardmäßig keine), und der Adressquelle. Danach in der
+Seitenleiste **Standorte** (englisch: **Whereabouts**) → **Einstellungen** öffnen.
+Neben jeder Einstellung erklärt ein ⓘ, was sie bewirkt; alles, was etwas löscht
+oder überschreibt, fragt vorher nach.
 
-| Menü | Was man einstellt |
-|---|---|
-| Karte „Wo ist…?“ | An/aus, angezeigte Personen (Standard: alle; ändert offene Karten sofort) |
-| Karte „Standortverlauf“ | An/aus, angezeigte Personen (Standard: alle; ändert offene Karten sofort) |
-| Aufzeichnung | Aufgezeichnete Personen, Speicherabstand am selben Ort (60 s), Umkreis „derselbe Ort“ unterwegs (50 m), alten Verlauf löschen (Standard: nie) |
-| Adressen | Companion App (Geokodierter Standort), sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; pro Person der Sensor „Geokodierter Standort“ (wird automatisch gefunden) |
-| Wer den Verlauf sehen und löschen darf | Administratoren und eigene Person (Standard), nur Administratoren, alle Benutzer |
-| Verlauf importieren | Datei hochladen (siehe unten) |
+| Kategorie | Wer | Was man einstellt |
+|---|---|---|
+| Ansichten | jeder Benutzer | welche Reiter angezeigt werden, welcher zuerst erscheint |
+| Personen | jeder Benutzer | wer erscheint, Reihenfolge, Anzeigename, Farbe, Bild (Adresse oder hochladen); Warnung bei ähnlichen Farben |
+| Karte | jeder Benutzer | hell/dunkel, Kartenstil (Esri, OpenStreetMap, CARTO), wohin Koordinaten führen (Google Maps, Apple Karten, OpenStreetMap, Waze, HERE; am Handy mit App-Auswahl) |
+| Zonen, Anzeige „Wo ist…?“, Anzeige „Standortverlauf“ | jeder Benutzer (erweitert) | Zonenfarben, Infoleiste, Statusleiste, Genauigkeitskreis, Folgen, Startansicht, Legende, Neuladen |
+| Benutzer und Rechte | Administratoren | Regeln für alle (live sehen / Verlauf sehen / Verlauf löschen: alle, eigene Person, niemand) und eigene Rechte pro Benutzer |
+| Seitenleiste und Karten | Administratoren | Eintrag an/aus, Name, Symbol; Karten an/aus und ihre Personen; CARTO-Schlüssel |
+| Aufzeichnung | Administratoren | aufgezeichnete Personen, Speicherabstand (60 s), Umkreis „derselbe Ort“ (50 m), alten Verlauf löschen (Standard: nie) |
+| Adressen | Administratoren | Companion App (Geokodierter Standort), sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; Sensor pro Person |
+| Import und Export | Export: jeder (eigene Rechte), Import: Administratoren | CSV-/GPX-Download für einen Zeitraum; Import mit Vorschau |
+| Diagnose | Administratoren | Tracker, Sensor „Geokodierter Standort“ und gespeicherte Tage pro Person |
+
+Administratoren wechseln zwischen **Meine Einstellungen** und **Standard für
+alle**. Jede persönliche Kategorie lässt sich sperren – für alle Nicht-Admins
+(mit Ausnahmen) oder für ausgewählte Benutzer; gesperrte Benutzer sehen sie
+ausgegraut mit den Standardwerten.
+
+**Hinweis zu „live sehen“:** Das begrenzt, was Whereabouts anzeigt. Jeder
+angemeldete Benutzer kann die Positionen der Personen grundsätzlich auch anderswo
+in Home Assistant sehen; den **Verlauf** gibt Whereabouts dagegen nur an
+Berechtigte heraus.
+
+Alle Einstellungen liegen in `.storage/whereabouts.settings` und sind – wie der
+Verlauf – Teil jedes Home-Assistant-Backups.
+
+Die Optionen unter **Einstellungen → Geräte & Dienste → Whereabouts →
+Konfigurieren** funktionieren weiter und verweisen auf die Einstellungsseite.
 
 **WLAN-Tracker (optional):** Eine Person in Home Assistant kann mehrere Tracker
 haben, z. B. die Companion App (GPS) und einen Router- oder ARP-Scan-Tracker fürs
@@ -261,14 +310,15 @@ läuft – sonst gilt eine Person als „zu Hause“, nur weil ihr Handy dort li
 ### Die Karten
 
 Hinzufügen wie jede andere Karte: **Dashboard bearbeiten → + Karte hinzufügen →
-„Wo ist…?“** oder **„Standortverlauf“**. Alles wird im grafischen Editor
-eingestellt; für eine Karte, die die ganze Seite füllt, eine Ansicht vom Typ
-**Panel** verwenden.
+„Wo ist…?“** oder **„Standortverlauf“**. Eine Karte nutzt die Einstellungen
+des Betrachters von der Einstellungsseite; was man im Editor der Karte einstellt,
+gilt nur für diese Karte und hat Vorrang. Für eine Karte, die die ganze Seite
+füllt, eine Ansicht vom Typ **Panel** verwenden.
 
 | Einstellung | „Wo ist…?“ | „Standortverlauf“ |
 |---|---|---|
 | Titel | optional | optional |
-| Personen | wie in der Integration eingestellt (oder weniger) | wie in der Integration eingestellt und die man sehen darf (oder weniger) |
+| Personen | wie auf der Einstellungsseite erlaubt und gewählt (oder weniger) | ebenso, nur Personen mit Verlauf, den man sehen darf |
 | Pro Person (nur diese Karte) | Anzeigename, Farbe, Bild, Adress-Sensor | Anzeigename, Farbe, Bild |
 | Karte | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO (eigener Schlüssel), Koordinaten öffnen in Google Maps (Standard), Apple Karten, OpenStreetMap, Waze oder HERE; auf Handy und Tablet mit App-Auswahl | hell/dunkel/wie Home Assistant, Esri / OpenStreetMap / CARTO |
 | Zonen | an/aus, Farbe von Zuhause und der übrigen Zonen, Namen ab Zoom | ebenso |

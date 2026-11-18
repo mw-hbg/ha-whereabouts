@@ -45,10 +45,15 @@ export function defineLiveCard(S) {
     }
 
     setConfig(config) {
-      this._config = { ...S.DEFAULTS_MAP, ...LIVE_DEFAULTS, ...(config || {}) };
-      this._follow = this._config.follow !== false;
+      this._raw = { ...(config || {}) };
+      this._applyConfig();
       // Changed in the editor: draw again with the new settings
       if (this._info) { this._infoSig = null; this._onInfo(this._info); }
+    }
+
+    _applyConfig() {
+      this._config = S.cardConfig(LIVE_DEFAULTS, this._info && this._info.settings, this._raw, 'live');
+      this._follow = this._config.follow !== false;
     }
 
     set hass(hass) {
@@ -94,10 +99,11 @@ export function defineLiveCard(S) {
 
     // Called at the start and whenever the integration's options change.
     _onInfo(info) {
-      const sig = JSON.stringify([info.available, info.live_card, info.shown]);
+      const sig = JSON.stringify([info.available, info.live_card, info.shown, info.settings]);
       if (sig === this._infoSig) return;
       this._infoSig = sig;
       this._info = info;
+      this._applyConfig();
       this._teardown();
       if (!info.available) { this.innerHTML = S.messageHtml(this._t('not_set_up')); return; }
       if (!info.live_card) { this.innerHTML = S.messageHtml(this._t('card_off')); return; }

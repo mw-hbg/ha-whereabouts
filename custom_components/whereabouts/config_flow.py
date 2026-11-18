@@ -10,7 +10,6 @@ from homeassistant.components.file_upload import process_uploaded_file
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
-from homeassistant.util import dt as dt_util
 
 from . import merged_options
 from .const import (
@@ -18,8 +17,6 @@ from .const import (
     CONF_ADDRESS_MAX_DISTANCE,
     CONF_ADDRESS_SENSORS,
     CONF_ADDRESS_SOURCE,
-    CONF_DELETE_ACCESS,
-    CONF_HISTORY_ACCESS,
     CONF_HISTORY_CARD,
     CONF_LIVE_CARD,
     CONF_MIN_INTERVAL,
@@ -29,14 +26,12 @@ from .const import (
     CONF_SHOW_PERSONS_HISTORY,
     CONF_SHOW_PERSONS_LIVE,
     DEFAULT_OPTIONS,
-    DELETE_ACCESS_LEVELS,
     DOMAIN,
-    HISTORY_ACCESS_LEVELS,
     NAME,
 )
-from .geo import find_address_sensor, zone_in_snapshot, zone_snapshot
-from .importer import ImportError_, read_import, summarize
-from .logger import person_key
+from .geo import find_address_sensor
+from .importer import ImportError_
+from .importing import import_bytes
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -97,7 +92,9 @@ class WhereaboutsConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class WhereaboutsOptionsFlow(OptionsFlow):
-    """Options as a menu: one section per card, recording, addresses, access, import."""
+    """Options as a menu: one section per card, recording, addresses, import.
+
+    Everything else (persons, colours, rights, sidebar) is on the settings page."""
 
     def _values(self) -> dict:
         return merged_options(self.config_entry)
@@ -121,7 +118,7 @@ class WhereaboutsOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["card_live", "card_history", "recording", "addresses", "access", "import_file"],
+            menu_options=["card_live", "card_history", "recording", "addresses", "import_file"],
         )
 
     async def async_step_card_live(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
@@ -207,22 +204,6 @@ class WhereaboutsOptionsFlow(OptionsFlow):
             description_placeholders={"persons": ", ".join(persons) or "-"},
         )
 
-    async def async_step_access(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        values = self._values()
-        if user_input is not None:
-            return self._save(user_input)
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_HISTORY_ACCESS, default=values[CONF_HISTORY_ACCESS]): _select(
-                    HISTORY_ACCESS_LEVELS, CONF_HISTORY_ACCESS
-                ),
-                vol.Required(CONF_DELETE_ACCESS, default=values[CONF_DELETE_ACCESS]): _select(
-                    DELETE_ACCESS_LEVELS, CONF_DELETE_ACCESS
-                ),
-            }
-        )
-        return self.async_show_form(step_id="access", data_schema=schema)
-
     async def async_step_import_file(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Upload a history file (Whereabouts CSV, old daily files as ZIP, GPX)."""
         errors: dict[str, str] = {}
@@ -268,47 +249,5 @@ async def _run_import(
             return path.name, path.read_bytes()
 
     filename, data = await hass.async_add_executor_job(_read)
-    # Zones are read here (event loop); the importer runs in the executor.
-    zones = zone_snapshot(hass)
-    parsed = await hass.async_add_executor_job(
-        lambda: read_import(
-            filename,
-            data,
-            timezone=dt_util.get_default_time_zone(),
-            zone_for=lambda lat, lon: zone_in_snapshot(zones, lat, lon),
-            same_place_distance=same_place_distance,
-        )
-    )
-    if not any(parsed.values()):
-        raise ImportError_("no_points")
-
-    # Whose history is it?
-    by_person: dict[str, list] = {}
-    for key, points in parsed.items():
-        if target:
-            dest = person_key(target)
-        elif key:
-            dest = key
-        else:
-            raise ImportError_("person_required")
-        if hass.states.get(f"person.{dest}") is None:
-            raise ImportError_("unknown_person", dest)
-        by_person.setdefault(dest, []).extend(points)
-
-    runtime = hass.data.get(DOMAIN)
-    if runtime is None:
-        raise ImportError_("not_set_up")
-    added = skipped = days = 0
-    for dest, points in by_person.items():
-        outcome = await hass.async_add_executor_job(runtime.storage.import_points, dest, points, replace)
-        added += outcome["added"]
-        skipped += outcome["skipped"]
-        days += outcome["days"]
-    total, _ = summarize(p for points in by_person.values() for p in points)
-    return {
-        "persons": ", ".join(sorted(by_person)),
-        "added": str(added),
-        "skipped": str(skipped),
-        "days": str(days),
-        "total": str(total),
-    }
+    result = await import_bytes(hass, filename, data, target, replace, same_place_distance)
+    return {key: str(value) if not isinstance(value, list) else ", ".join(value) for key, value in result.items()}

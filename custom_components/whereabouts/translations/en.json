@@ -26,12 +26,12 @@
     "step": {
       "init": {
         "title": "Whereabouts",
+        "description": "Persons, colours, pictures, rights and the sidebar are set on the settings page: [Open settings](/whereabouts/settings). There you also find everything below.",
         "menu_options": {
           "card_live": "\"Where is...?\" card",
           "card_history": "\"Location history\" card",
           "recording": "Recording",
           "addresses": "Addresses",
-          "access": "Who may see and delete the history",
           "import_file": "Import history"
         }
       },
@@ -85,17 +85,6 @@
         "data_description": {
           "address_source": "Companion app (geocoded location): the address the Home Assistant Companion app on the phone already determined – stays local. The sensor \"Geocoded location\" must be switched on in the app on the phone (Companion app settings → Sensors / Manage sensors → Geocoded location). If it has no fitting address, OpenStreetMap is asked instead (default): the coordinates of that place are sent to nominatim.openstreetmap.org. You can also use only the Companion app, only OpenStreetMap or no addresses.",
           "address_max_distance": "The geocoding of the Companion app often lags behind. If its position is further away from the stored point, no (wrong) address is used."
-        }
-      },
-      "access": {
-        "title": "Who may see and delete the history",
-        "description": "Applies to the history only. The live map shows what every Home Assistant user can see anyway.",
-        "data": {
-          "history_access": "See the history",
-          "delete_access": "Delete entries"
-        },
-        "data_description": {
-          "history_access": "\"Own person\" means the person linked to the user account (Settings → People)."
         }
       },
       "import_file": {

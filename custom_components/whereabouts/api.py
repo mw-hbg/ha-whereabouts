@@ -1,13 +1,9 @@
 """WebSocket commands and the export download - the only way to the history.
 
-Every request is checked against the logged-in Home Assistant user:
-
-- history_access "admins": only administrators
-- "admins_and_self" (default): administrators, and every user for the
-  person linked to their own user account
-- "everyone": every logged-in user
-
-Deleting uses delete_access ("admins" or "admins_and_self") the same way.
+Every request is checked against the logged-in Home Assistant user and the
+rights set on the settings page (see settings.Settings.allowed):
+administrators may do everything; other users by default see the history of
+the person linked to their own user account and may delete it.
 """
 
 from __future__ import annotations
@@ -25,10 +21,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    ACCESS_ADMINS,
-    ACCESS_EVERYONE,
-    CONF_DELETE_ACCESS,
-    CONF_HISTORY_ACCESS,
+    CONF_CARTO_KEY,
     CONF_HISTORY_CARD,
     CONF_LIVE_CARD,
     CONF_RECORD_PERSONS,
@@ -38,6 +31,7 @@ from .const import (
     SIGNAL_INFO_CHANGED,
 )
 from .logger import person_key
+from .settings import card_settings
 from .storage import Stay, export_csv, is_valid_date, is_valid_key
 
 DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
@@ -53,31 +47,14 @@ def _runtime(hass: HomeAssistant):
     return hass.data.get(DOMAIN)
 
 
-def _linked_user(hass: HomeAssistant, person_entity: str) -> str | None:
-    state = hass.states.get(person_entity)
-    return state.attributes.get("user_id") if state else None
-
-
-def _allowed(hass: HomeAssistant, user: User | None, person_entity: str, level: str) -> bool:
-    if user is None:
-        return False
-    if user.is_admin:
-        return True
-    if level == ACCESS_ADMINS:
-        return False
-    if level == ACCESS_EVERYONE:
-        return True
-    return _linked_user(hass, person_entity) == user.id  # admins_and_self
-
-
 def can_view(hass: HomeAssistant, user: User | None, person_entity: str) -> bool:
     runtime = _runtime(hass)
-    return bool(runtime) and _allowed(hass, user, person_entity, runtime.options[CONF_HISTORY_ACCESS])
+    return bool(runtime) and person_entity in runtime.settings.allowed(user, "history")
 
 
 def can_delete(hass: HomeAssistant, user: User | None, person_entity: str) -> bool:
     runtime = _runtime(hass)
-    return bool(runtime) and _allowed(hass, user, person_entity, runtime.options[CONF_DELETE_ACCESS])
+    return bool(runtime) and person_entity in runtime.settings.allowed(user, "delete")
 
 
 def _stay_dict(stay: Stay) -> dict[str, Any]:
@@ -121,22 +98,28 @@ def build_info(hass: HomeAssistant, user: User | None) -> dict[str, Any]:
     runtime = _runtime(hass)
     if runtime is None:
         return {"available": False}
-    shown_live = shown_persons(hass, runtime.options, CONF_SHOW_PERSONS_LIVE)
+    settings = runtime.settings
+    live_allowed = set(settings.allowed(user, "live"))
+    shown_live = [p for p in shown_persons(hass, runtime.options, CONF_SHOW_PERSONS_LIVE) if p in live_allowed]
     shown = shown_persons(hass, runtime.options, CONF_SHOW_PERSONS_HISTORY)
+    history_allowed = set(settings.allowed(user, "history"))
+    delete_allowed = set(settings.allowed(user, "delete"))
     # History: only shown persons that have (or get) a history and that this
     # user may see - nothing about the others.
     persons = []
     for entity_id in sorted(set(runtime.options[CONF_RECORD_PERSONS]) | set(runtime.known_persons())):
-        if entity_id not in shown or not can_view(hass, user, entity_id):
+        if entity_id not in shown or entity_id not in history_allowed:
             continue
         persons.append(
             {
                 "entity_id": entity_id,
                 "recording": entity_id in runtime.options[CONF_RECORD_PERSONS],
                 "can_view": True,
-                "can_delete": can_delete(hass, user, entity_id),
+                "can_delete": entity_id in delete_allowed,
             }
         )
+    personal = card_settings(settings.effective(user))
+    personal[CONF_CARTO_KEY] = runtime.options.get(CONF_CARTO_KEY, "")
     return {
         "available": True,
         "version": runtime.version,
@@ -144,6 +127,8 @@ def build_info(hass: HomeAssistant, user: User | None) -> dict[str, Any]:
         "history_card": runtime.options[CONF_HISTORY_CARD],
         "shown": shown_live,
         "persons": persons,
+        "settings": personal,
+        "is_admin": bool(user and user.is_admin),
         "today": dt_util.now().strftime("%Y-%m-%d"),
     }
 

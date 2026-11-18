@@ -37,6 +37,7 @@
       },
       "card_live": {
         "title": "Karte „Wo ist…?“",
+        "description": "Zum Vergleich – die Karte „Standortverlauf“ zeigt gerade: {other}. Wählst du hier andere Personen, zeigen beide Karten unterschiedliche Personen.",
         "data": {
           "live_card": "Karte „Wo ist…?“ (Live-Karte)",
           "show_persons_live": "Diese Personen in „Wo ist…?“ anzeigen (leer = alle)"
@@ -48,6 +49,7 @@
       },
       "card_history": {
         "title": "Karte „Standortverlauf“",
+        "description": "Zum Vergleich – die Karte „Wo ist…?“ zeigt gerade: {other}. Wählst du hier andere Personen, zeigen beide Karten unterschiedliche Personen.",
         "data": {
           "history_card": "Karte „Standortverlauf“",
           "show_persons_history": "Diese Personen im „Standortverlauf“ anzeigen (leer = alle)"
@@ -59,6 +61,7 @@
       },
       "recording": {
         "title": "Aufzeichnung",
+        "description": "Tipp: Eine Person kann mehrere Tracker haben (Companion App und z. B. einen Router- oder ARP-Scan-Tracker fürs Heimnetz) – zuordnen unter Einstellungen → Personen, Home Assistant führt sie zusammen. Auf diese Weise nur das eigene Heimnetz überwachen und nur Geräte eintragen, auf denen auch die Companion App läuft.",
         "data": {
           "record_persons": "Verlauf dieser Personen aufzeichnen",
           "min_interval": "Positions-Updates am selben Ort höchstens speichern alle",

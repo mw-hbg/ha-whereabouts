@@ -108,6 +108,16 @@ class WhereaboutsOptionsFlow(OptionsFlow):
             options[CONF_RECORD_PERSONS] = []
         return self.async_create_entry(data=options)
 
+    def _names(self, entity_ids: list[str]) -> str:
+        """Persons of the other card, for comparison (empty = all)."""
+        if not entity_ids:
+            return "alle" if (self.hass.config.language or "").startswith("de") else "all"
+        names = []
+        for entity_id in entity_ids:
+            state = self.hass.states.get(entity_id)
+            names.append(state.name if state else entity_id)
+        return ", ".join(names)
+
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
@@ -123,7 +133,10 @@ class WhereaboutsOptionsFlow(OptionsFlow):
             vol.Required(CONF_LIVE_CARD, default=values[CONF_LIVE_CARD]): selector.BooleanSelector(),
             vol.Optional(CONF_SHOW_PERSONS_LIVE, default=values[CONF_SHOW_PERSONS_LIVE]): _PERSONS,
         })
-        return self.async_show_form(step_id="card_live", data_schema=schema)
+        return self.async_show_form(
+            step_id="card_live", data_schema=schema,
+            description_placeholders={"other": self._names(values[CONF_SHOW_PERSONS_HISTORY])},
+        )
 
     async def async_step_card_history(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """The history card: on/off and whom it shows."""
@@ -134,7 +147,10 @@ class WhereaboutsOptionsFlow(OptionsFlow):
             vol.Required(CONF_HISTORY_CARD, default=values[CONF_HISTORY_CARD]): selector.BooleanSelector(),
             vol.Optional(CONF_SHOW_PERSONS_HISTORY, default=values[CONF_SHOW_PERSONS_HISTORY]): _PERSONS,
         })
-        return self.async_show_form(step_id="card_history", data_schema=schema)
+        return self.async_show_form(
+            step_id="card_history", data_schema=schema,
+            description_placeholders={"other": self._names(values[CONF_SHOW_PERSONS_LIVE])},
+        )
 
     async def async_step_recording(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Whose history is recorded, how often, how long it is kept."""

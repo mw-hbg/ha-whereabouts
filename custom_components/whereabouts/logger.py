@@ -78,7 +78,8 @@ class LocationLogger:
         entity_id = new.entity_id
         now = time.monotonic()
         moved = old is None or old.state != new.state
-        if not moved and now - self._last_write.get(entity_id, 0.0) < self.options[CONF_MIN_INTERVAL]:
+        last = self._last_write.get(entity_id)
+        if not moved and last is not None and now - last < self.options[CONF_MIN_INTERVAL]:
             return
         self._last_write[entity_id] = now
         self.hass.async_create_task(self.async_record(new, dt_util.now()), f"whereabouts record {entity_id}")

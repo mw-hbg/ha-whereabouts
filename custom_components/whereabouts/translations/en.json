@@ -37,6 +37,7 @@
       },
       "card_live": {
         "title": "\"Where is...?\" card",
+        "description": "For comparison – the \"Location history\" card currently shows: {other}. If you choose other persons here, the two cards show different persons.",
         "data": {
           "live_card": "\"Where is...?\" card (live map)",
           "show_persons_live": "Show these persons in \"Where is...?\" (empty = all)"
@@ -48,6 +49,7 @@
       },
       "card_history": {
         "title": "\"Location history\" card",
+        "description": "For comparison – the \"Where is...?\" card currently shows: {other}. If you choose other persons here, the two cards show different persons.",
         "data": {
           "history_card": "\"Location history\" card",
           "show_persons_history": "Show these persons in \"Location history\" (empty = all)"
@@ -59,6 +61,7 @@
       },
       "recording": {
         "title": "Recording",
+        "description": "Tip: a person can have several trackers (Companion app and e.g. a router or ARP-scan tracker for the home network) – assign them under Settings → People, Home Assistant combines them. Only watch your own home network this way and only add devices that also run the Companion app.",
         "data": {
           "record_persons": "Record the history of these persons",
           "min_interval": "Store position updates at the same place at most every",

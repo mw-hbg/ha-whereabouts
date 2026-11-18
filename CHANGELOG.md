@@ -19,6 +19,10 @@
   (automatic reload for today), entry window in two rows with the delete button
   at the bottom right.
 - Only entries the user may delete can be selected in the table.
+- Options of each card show which persons the other card shows, for comparison.
+  The recording options explain Wi-Fi trackers (home network only).
+- Card editor warns when two persons have (nearly) the same colour.
+- Fix: the first position update of a person after start could be skipped.
 
 ---
 
@@ -41,6 +45,11 @@
   (automatisch neu laden für heute), Eintragsfenster zweizeilig mit dem
   Löschknopf unten rechts.
 - In der Tabelle lassen sich nur Einträge auswählen, die man löschen darf.
+- Die Optionen jeder Karte zeigen zum Vergleich, welche Personen die andere
+  Karte anzeigt. Die Aufzeichnungs-Optionen erklären WLAN-Tracker (nur Heimnetz).
+- Der Karten-Editor warnt, wenn zwei Personen (fast) dieselbe Farbe haben.
+- Fehler behoben: Die erste Positionsmeldung einer Person nach dem Start konnte
+  übersprungen werden.
 
 ## 0.1.0
 

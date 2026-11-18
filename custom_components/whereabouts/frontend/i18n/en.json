@@ -118,5 +118,6 @@
   "ed_link_geo": "Another app…",
   "ed_zones": "Zones",
   "ed_zone_color_home": "Colour of the zone Home",
-  "ed_zone_color": "Colour of the other zones"
+  "ed_zone_color": "Colour of the other zones",
+  "ed_similar_colors": "Hard to tell apart – similar colours: {pairs}. Choose a clearly different colour for one of them."
 }

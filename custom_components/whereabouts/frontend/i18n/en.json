@@ -380,7 +380,7 @@
   "sync_on": "Switch on",
   "sync_off": "Switch off",
   "settings_managed": "The settings are managed by the administrator.",
-  "lock_explain": "With the lock on a category you fix it for users: they see it greyed out with the default for all users and cannot change it. Their own values stay stored and apply again as soon as you release it. Fixing never applies to administrators. Single settings are fixed for one user under “Settings of” → user.",
+  "lock_explain": "With the lock on a category you fix it for users: they see it greyed out with the default for all users and cannot change it. Their own values stay stored and apply again as soon as you release it. Fixing never applies to administrators.",
   "locked_hint": "The administrator has fixed some settings (lock). They are greyed out and apply to you as shown.",
   "lock_state_none": "Everybody sets it themselves – click to fix",
   "lock_state_all": "Fixed for all users",
@@ -584,5 +584,6 @@
   "import_summary": "{n} new {n|entry|entries} on {days} {days|day|days} chosen · {none} {none|day|days} with nothing new",
   "overview": "Show everything",
   "import_mode_skip": "Skip (only take new days)",
-  "import_status_skip": "is skipped"
+  "import_status_skip": "is skipped",
+  "lock_explain_users": "Single settings are fixed for one user under “Settings of” → user."
 }

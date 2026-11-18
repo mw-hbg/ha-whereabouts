@@ -131,6 +131,10 @@ const CSS = `
   .wa-set main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
   .wa-set .sprung { display: none; }
   .wa-set .oben { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .wa-set ha-selector.farbfeld { display: block; width: 80px; }
+  .wa-set .steuer input[type="color"].ein { width: 80px; }
+  .wa-set .oben h1 + .kopfinfo { margin-left: -6px; }
+  .wa-set .kopfhinweise[hidden] { display: none; }
   .wa-set .oben h1 { margin: 0; font-size: 24px; font-weight: 400; flex: 1 1 auto; }
   .wa-set .umschalter { display: inline-flex; border: 1px solid var(--divider-color); border-radius: 20px; overflow: hidden; }
   .wa-set .umschalter button { font: inherit; font-size: 14px; padding: 7px 14px; border: none; background: none;
@@ -163,10 +167,10 @@ const CSS = `
                    padding: 10px 16px; border-top: 1px solid var(--divider-color); }
   .wa-set .zeile.breit { grid-template-columns: minmax(0, 1fr); }
   .wa-set .beschriftung { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 15px; }
-  .wa-set .info { flex: 0 0 auto; width: 30px; height: 30px; border: none; border-radius: 50%; background: none; cursor: pointer;
+  .wa-set .info, .wa-set .kopfinfo { flex: 0 0 auto; width: 30px; height: 30px; border: none; border-radius: 50%; background: none; cursor: pointer;
                   color: var(--secondary-text-color); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
-  .wa-set .info:hover, .wa-set .info[aria-expanded="true"] { color: var(--primary-color); background: rgba(var(--rgb-primary-color, 3,169,244), .1); }
-  .wa-set .info ha-icon { --mdc-icon-size: 18px; }
+  .wa-set .info:hover, .wa-set .info[aria-expanded="true"], .wa-set .kopfinfo:hover, .wa-set .kopfinfo[aria-expanded="true"] { color: var(--primary-color); background: rgba(var(--rgb-primary-color, 3,169,244), .1); }
+  .wa-set .info ha-icon, .wa-set .kopfinfo ha-icon { --mdc-icon-size: 18px; }
   .wa-set .infotext { grid-column: 1 / -1; font-size: 13px; line-height: 1.5; color: var(--secondary-text-color);
                       background: var(--secondary-background-color); border-radius: 8px; padding: 8px 12px; }
   .wa-set .infotext[hidden] { display: none; }
@@ -354,9 +358,18 @@ const CSS = `
     .wa-set .zeile { grid-template-columns: minmax(0, 1fr); }
     .wa-set .steuer { justify-content: flex-start; }
     .wa-set .zeile.schalter-zeile { grid-template-columns: minmax(0, 1fr) auto; }
-    .wa-set .person { grid-template-columns: auto 40px minmax(0, 1fr); }
-    .wa-set .person .reihenfolge { grid-column: 1; grid-row: 2; flex-direction: row; }
-    .wa-set .person .felder { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr); }
+    /* Person rows: picture with the order buttons below it on the left, everything else in full width */
+    .wa-set .person { grid-template-columns: 44px minmax(0, 1fr) auto; align-items: start; gap: 8px 10px; padding: 12px; }
+    .wa-set .person .bild { grid-column: 1; grid-row: 1; }
+    .wa-set .person .reihenfolge { grid-column: 1; grid-row: 2; flex-direction: column; align-items: center; }
+    .wa-set .person .mitte { grid-column: 2; grid-row: 1 / span 2; min-width: 0; }
+    .wa-set .person > .info { grid-column: 3; grid-row: 1; }
+    .wa-set .person .felder { grid-template-columns: minmax(0, 1fr); }
+    .wa-set .person .felder input.farbe { width: 72px; }
+    .wa-set .person .zweite { grid-template-columns: minmax(0, 1fr); }
+    .wa-set .person .zweite label { flex-wrap: wrap; }
+    .wa-set .person .zweite select { max-width: none; flex: 1 1 160px; }
+    .wa-set .kat { scroll-margin-top: 72px; }
     .wa-set .kat-text { padding-left: 16px; }
   }
 `;
@@ -674,6 +687,7 @@ export function defineSettingsPage(S, D) {
             </select></div>
             <div class="oben">
               <h1>${esc(t('settings_title'))}</h1>
+              <button class="kopfinfo" type="button" title="${esc(t('more_info'))}" aria-label="${esc(t('more_info'))}" aria-expanded="${this._headInfo ? 'true' : 'false'}"><ha-icon icon="mdi:information-outline"></ha-icon></button>
               <span class="rolle">${this._admin ? '<ha-icon icon="mdi:shield-account"></ha-icon>' : '<ha-icon icon="mdi:account"></ha-icon>'}${esc(this._admin ? t('role_admin', { name: d.user.name }) : d.user.name)}</span>
               <button class="knopf alle-klappen" type="button"><ha-icon icon="${allOpen ? 'mdi:unfold-less-horizontal' : 'mdi:unfold-more-horizontal'}"></ha-icon>${esc(t(allOpen ? 'collapse_all' : 'expand_all'))}</button>
             </div>
@@ -690,8 +704,10 @@ export function defineSettingsPage(S, D) {
             </div>` : ''}
             ${this._scope === 'defaults' ? `<div class="banner standard"><ha-icon icon="mdi:account-multiple"></ha-icon><span class="text">${esc(t('editing_defaults'))}</span></div>` : ''}
             ${this._scope === 'user' && this._user ? `<div class="banner standard"><ha-icon icon="mdi:account-edit"></ha-icon><span class="text">${esc(t('editing_user', { name: this._user.name }))}${this._flag(this._user.id, 'hide_settings') ? ` ${esc(t('editing_user_hidden', { name: this._user.name }))}` : ''}${this._user.synced ? ` ${esc(t('editing_user_synced', { name: this._user.name }))}` : ''}</span></div>` : ''}
-            <p class="hinweis">${esc(this._scope === 'defaults' ? t('scope_defaults_text') : this._scope === 'user' ? t('scope_user_text') : t('scope_own_text'))}</p>
-            ${this._admin && this._scope !== 'user' ? `<p class="hinweis">${esc(t('lock_explain'))}</p>` : ''}
+            <div class="kopfhinweise"${this._headInfo ? '' : ' hidden'}>
+              <p class="hinweis">${esc(this._scope === 'defaults' ? t('scope_defaults_text') : this._scope === 'user' ? t('scope_user_text') : t('scope_own_text'))}</p>
+              ${this._admin && this._scope !== 'user' ? `<p class="hinweis">${esc(t('lock_explain'))}${this._hasOtherUsers() ? ` ${esc(t('lock_explain_users'))}` : ''}</p>` : ''}
+            </div>
             ${!this._admin && (d.locked.length || Object.keys(d.field_locks || {}).length) ? `<div class="banner"><ha-icon icon="mdi:lock"></ha-icon><span class="text">${esc(t('locked_hint'))}</span></div>` : ''}
             ${PERSONAL.map((c) => this._categoryHtml(c, true)).join('')}
             ${ADMIN.filter((c) => this._admin || c.everyone || c.id === 'rights').map((c) => this._categoryHtml(c, false)).join('')}
@@ -879,6 +895,11 @@ export function defineSettingsPage(S, D) {
         };
         head.addEventListener('click', toggle);
         head.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e); } });
+      });
+      this.querySelector('.kopfinfo').addEventListener('click', (e) => {
+        this._headInfo = !this._headInfo;
+        this.querySelector('.kopfhinweise').hidden = !this._headInfo;
+        e.currentTarget.setAttribute('aria-expanded', this._headInfo ? 'true' : 'false');
       });
       this.querySelector('.alle-klappen').addEventListener('click', () => {
         const ids = [...this.querySelectorAll('.kat')].map((c) => c.dataset.kat);
@@ -1236,6 +1257,7 @@ export function defineSettingsPage(S, D) {
         // required: no "clear" cross in selections
         el.required = 'select' in selector;
         el.addEventListener('value-changed', (e) => { e.stopPropagation(); el.value = e.detail.value; out(e.detail.value); });
+        if (field.color) el.classList.add('farbfeld');
         return el;
       }
       return this._plainControl(selector, field, value, disabled, out);
@@ -1444,7 +1466,7 @@ export function defineSettingsPage(S, D) {
               <button class="knopf rund runter" title="${esc(t('move_down'))}" aria-label="${esc(t('move_down'))}" ${index === order.length - 1 || locked ? 'disabled' : ''}><ha-icon icon="mdi:chevron-down"></ha-icon></button>
             </div>
             <div class="bild"></div>
-            <div>
+            <div class="mitte">
               <label class="chip${shown.has(id) ? ' an' : ''}" style="margin-bottom:8px"><input type="checkbox" class="zeigen"${shown.has(id) ? ' checked' : ''}${locked ? ' disabled' : ''}>${esc(p.name)}</label>
               <div class="felder">
                 <input class="ein name" placeholder="${esc(t('ps_name_placeholder', { name: p.name }))}" aria-label="${esc(t('ed_name'))}" value="${esc(own.name || '')}" maxlength="60" ${locked ? 'disabled' : ''}>

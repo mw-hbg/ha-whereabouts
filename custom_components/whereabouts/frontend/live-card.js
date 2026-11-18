@@ -85,7 +85,7 @@ export function defineLiveCard(S) {
 
     disconnectedCallback() {
       this._stopBackground();
-      this._closePanel(false);
+      this._closePanel();
     }
 
     getCardSize() {
@@ -271,11 +271,8 @@ export function defineLiveCard(S) {
                                border-top: 10px solid var(--spitze); }
           .infofenster { position: absolute; z-index: 1100; left: 0; top: 0; width: min(320px, calc(100% - 16px)); box-sizing: border-box;
                          padding: 12px 14px 12px; border-radius: 14px; background: var(--wa-glas); color: var(--wa-text);
-                         backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 6px 22px rgba(0,0,0,.28);
-                         transform-origin: 0 0; will-change: transform, opacity; }
+                         backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 6px 22px rgba(0,0,0,.28); }
           .infofenster[hidden] { display: none; }
-          .infofenster.gleitet { transition: transform .45s cubic-bezier(.2,.85,.25,1), opacity .3s ease-out; }
-          .infofenster.weg { transition: transform .2s ease-in, opacity .2s ease-in; opacity: 0; }
           .infofenster .zipfel { position: absolute; bottom: -9px; width: 0; height: 0; margin-left: -9px;
                                  border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 9px solid var(--wa-glas); }
           .infofenster .zu { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border: none; border-radius: 50%;
@@ -326,6 +323,22 @@ export function defineLiveCard(S) {
             .name { font-size: 1.05em; }
             .adresse, .ortung { font-size: .86em; }
             .statusbar { padding-left: 8px; font-size: 12px; }
+            /* Narrow: only the coordinates and the reload symbol */
+            .statusbar .infos { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+            .statusbar .zuletzt, .statusbar .rest, .statusbar .vor-rest, .statusbar .trenner:has(+ .zuletzt) { display: none !important; }
+            .alle-ein { align-self: flex-end; padding: 8px; }
+            .alle-ein .txt { display: none; }
+            /* From four persons: two columns, without pictures */
+            .leiste.viele { display: grid; grid-template-columns: 1fr 1fr; }
+            .leiste.viele .alle-ein { grid-column: 1 / -1; justify-self: end; }
+            .leiste.viele .person { padding: 6px 8px; gap: 6px; border-left-width: 4px; }
+            .leiste.viele .bild { display: none; }
+            .leiste.viele .kopf { flex-wrap: nowrap; gap: 6px; min-width: 0; }
+            .leiste.viele .name { font-size: .98em; white-space: nowrap; }
+            .leiste.viele .status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9em; }
+            .leiste.viele .status .seit { display: none; }
+            .leiste.viele .adresse, .leiste.viele .ortung { font-size: .8em; }
+            .leiste.viele .haken input { width: 18px; height: 18px; }
           }
 `, '.wa-live')}</style>
         <div class="wa-live">
@@ -333,7 +346,7 @@ export function defineLiveCard(S) {
           <div class="bereich">
             <div class="wa-map"></div>
             <div class="infofenster" hidden role="dialog"></div>
-            ${c.show_info_bar ? `<div class="leiste">${this._persons.map((p) => `
+            ${c.show_info_bar ? `<div class="leiste${this._persons.length >= 4 ? ' viele' : ''}">${this._persons.map((p) => `
               <div class="person p-${p.key}${this._hidden.has(p.key) ? ' aus' : ''}" data-person="${p.key}" role="button" tabindex="0" title="${S.escapeHtml(t('jump_to', { name: p.name }))}">
                 <div class="bild"></div>
                 <div class="text">
@@ -343,13 +356,13 @@ export function defineLiveCard(S) {
                 </div>
                 <label class="haken" title="${S.escapeHtml(t('show_on_map'))}"><input type="checkbox" data-person="${p.key}"${this._hidden.has(p.key) ? '' : ' checked'} aria-label="${S.escapeHtml(t('show_on_map_name', { name: p.name }))}"></label>
               </div>`).join('')}
-              <button class="alle-ein" type="button"${this._hidden.size ? '' : ' hidden'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0 8a5 5 0 0 1-5-5 5 5 0 0 1 5-5 5 5 0 0 1 5 5 5 5 0 0 1-5 5m0-12.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Z"/></svg>${S.escapeHtml(t('show_all'))}</button>
+              <button class="alle-ein" type="button" title="${S.escapeHtml(t('show_all'))}" aria-label="${S.escapeHtml(t('show_all'))}"${this._hidden.size ? '' : ' hidden'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0 8a5 5 0 0 1-5-5 5 5 0 0 1 5-5 5 5 0 0 1 5 5 5 5 0 0 1-5 5m0-12.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Z"/></svg><span class="txt">${S.escapeHtml(t('show_all'))}</span></button>
             </div>` : ''}
           </div>
           ${c.show_status_bar ? `<div class="statusbar">
             <div class="infos">
               ${this._persons.map((p) => `<span class="eintrag p-${p.key}"><span class="wer">${S.escapeHtml(p.name)}:</span> <a class="koord" target="_blank" rel="noopener noreferrer" title="${S.escapeHtml(t('open_in_map'))}">–</a></span><span class="trenner">·</span>`).join('')}
-              <span class="eintrag zuletzt">–</span><span class="trenner">·</span>
+              <span class="eintrag zuletzt">–</span><span class="trenner vor-rest">·</span>
               <span class="eintrag rest"></span>
             </div>
             <button class="neuladen" type="button" title="${S.escapeHtml(t('reload_now'))}" aria-label="${S.escapeHtml(t('reload_now'))}">
@@ -399,13 +412,14 @@ export function defineLiveCard(S) {
           .setView([home.latitude || 0, home.longitude || 0], 12);
         L.control.zoom({ position: 'bottomright', zoomInTitle: this._t('zoom_in'), zoomOutTitle: this._t('zoom_out') }).addTo(this._map);
         S.overviewControl(this._map, this._t('overview'), () => { this._setFollow(true); this._fitAll(true); });
+        S.compactAttribution(this._map);
         this._setTiles(S.isDark(this._hass, this._config.map_style));
         ['dragstart', 'zoomstart'].forEach((ev) => this._map.on(ev, () => { if (!this._programmatic) this._setFollow(false); }));
         S.watchZoneNames(this._map, mapDiv, this._config);
         // Pins close together on screen become one pin: group again after zooming.
         this._map.on('zoomend', () => this._drawPersons());
         this._map.on('move zoom', () => this._placePanel(false));
-        this._map.on('click', () => this._closePanel(true));
+        this._map.on('click', () => this._closePanel());
         this._update();
         this._fitAll(false);
       } catch (err) {
@@ -500,7 +514,7 @@ export function defineLiveCard(S) {
     _reset() {
       if (!this._ready) return;
       [...this._hidden].forEach((key) => this._toggle(key, true, false));
-      this._closePanel(false);
+      this._closePanel();
       if (this._map) {
         this._setFollow(true);
         // A view shown again has no size for a moment: wait for it, then show everybody.
@@ -524,7 +538,7 @@ export function defineLiveCard(S) {
       if (showAll) showAll.hidden = !this._hidden.size;
       if (this._panel && !show) {
         const group = this._groupOf(this._panel.key);
-        if (group && group.items.some((x) => x.p.key === key)) this._closePanel(false);
+        if (group && group.items.some((x) => x.p.key === key)) this._closePanel();
       }
       this._renderStatus();
       if (!this._map) return;
@@ -740,59 +754,31 @@ export function defineLiveCard(S) {
       return this._groups.find((g) => g.items.some((x) => x.p.key === key));
     }
 
-    // Slides from the person's entry in the info bar (or from the top) to the pin.
+    // The window appears right at the pin (no animation), like the popup in the history.
     _openPanel(key) {
       const group = this._groupOf(key);
       const box = this.querySelector('.infofenster');
       if (!group || !box) return;
-      const same = this._panel && this._panel.key === key && !box.hidden;
       this._panel = { key };
       this._renderPanel();
       box.hidden = false;
-      box.classList.remove('gleitet', 'weg');
       this._makeRoom();
-      this._placePanel(false);
-      if (same) return;
-      const area = this.querySelector('.bereich').getBoundingClientRect();
-      const end = box.getBoundingClientRect();
-      const source = this.querySelector(`.leiste .p-${key}`);
-      let from;
-      if (source && source.offsetParent) {
-        const r = source.getBoundingClientRect();
-        from = { x: r.left - area.left, y: r.top - area.top, w: r.width, h: r.height };
-      } else {
-        from = { x: (area.width - end.width) / 2, y: -end.height, w: end.width, h: end.height };
-      }
-      const to = { x: end.left - area.left, y: end.top - area.top };
-      const sx = Math.max(0.3, from.w / end.width);
-      const sy = Math.max(0.2, from.h / end.height);
-      box.style.transform = `translate(${from.x}px, ${from.y}px) scale(${sx}, ${sy})`;
-      box.style.opacity = '0.4';
-      void box.offsetWidth;
-      box.classList.add('gleitet');
-      box.style.transform = `translate(${to.x}px, ${to.y}px)`;
-      box.style.opacity = '1';
-      clearTimeout(this._panelTimer);
-      this._panelTimer = setTimeout(() => box.classList.remove('gleitet'), 480);
+      this._placePanel();
+      requestAnimationFrame(() => this._placePanel()); // once the content has its final size
     }
 
-    _closePanel(animate) {
+    _closePanel() {
       const box = this.querySelector('.infofenster');
       if (!this._panel || !box) return;
       this._panel = null;
-      clearTimeout(this._panelTimer);
-      if (!animate) { box.hidden = true; return; }
-      box.classList.remove('gleitet');
-      box.classList.add('weg');
-      box.style.transform += ' translateY(-12px)';
-      this._panelTimer = setTimeout(() => { box.hidden = true; box.classList.remove('weg'); box.style.opacity = ''; }, 210);
+      box.hidden = true;
     }
 
     _renderPanel() {
       const box = this.querySelector('.infofenster');
       if (!this._panel || !box) return;
       const group = this._groupOf(this._panel.key);
-      if (!group) { this._closePanel(false); return; }
+      if (!group) { this._closePanel(); return; }
       const t = this._t;
       const esc = S.escapeHtml;
       box.innerHTML = `<button class="zu" type="button" title="${esc(t('close'))}" aria-label="${esc(t('close'))}">&times;</button>`
@@ -812,7 +798,7 @@ export function defineLiveCard(S) {
         S.bindMapLink(entry, this._config, t, d.pos.lat, d.pos.lon);
         this._setPicture(entry.closest('.eintrag').querySelector('.bild'), d.picture, p.name);
       });
-      box.querySelector('.zu').addEventListener('click', (e) => { e.stopPropagation(); this._closePanel(true); });
+      box.querySelector('.zu').addEventListener('click', (e) => { e.stopPropagation(); this._closePanel(); });
       ['click', 'dblclick', 'mousedown', 'touchstart', 'wheel'].forEach((ev) => box.addEventListener(ev, (e) => e.stopPropagation()));
       this._placePanel(false);
     }
@@ -855,7 +841,7 @@ export function defineLiveCard(S) {
     _placePanel() {
       const box = this.querySelector('.infofenster');
       const at = this._panelPosition();
-      if (!at || box.hidden || box.classList.contains('gleitet') || box.classList.contains('weg')) return;
+      if (!at || box.hidden) return;
       box.style.transform = `translate(${at.x}px, ${at.y}px)`;
       ['unten', 'rechts', 'links'].forEach((side) => box.classList.toggle(side, at.side === side));
       const tip = box.querySelector('.zipfel');

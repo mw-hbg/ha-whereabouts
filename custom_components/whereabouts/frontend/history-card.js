@@ -18,6 +18,7 @@ const CLOSE = '<svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 
 const EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0 8a5 5 0 0 1-5-5 5 5 0 0 1 5-5 5 5 0 0 1 5 5 5 5 0 0 1-5 5m0-12.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Z"/></svg>';
 const EYE_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.83,9L15,12.16C15,12.11 15,12.05 15,12A3,3 0 0,0 12,9C11.94,9 11.89,9 11.83,9M7.53,9.8L9.08,11.35C9.03,11.56 9,11.77 9,12A3,3 0 0,0 12,15C12.22,15 12.44,14.97 12.65,14.92L14.2,16.47C13.53,16.8 12.79,17 12,17A5,5 0 0,1 7,12C7,11.21 7.2,10.47 7.53,9.8M2,4.27L4.28,6.55L4.73,7C3.08,8.3 1.78,10 1,12C2.73,16.39 7,19.5 12,19.5C13.55,19.5 15.03,19.2 16.38,18.66L16.81,19.08L19.73,22L21,20.73L3.27,3M12,7A5,5 0 0,1 17,12C17,12.64 16.87,13.26 16.64,13.82L19.57,16.75C21.07,15.5 22.27,13.86 23,12C21.27,7.61 17,4.5 12,4.5C10.6,4.5 9.26,4.75 8,5.2L10.17,7.35C10.74,7.13 11.35,7 12,7Z"/></svg>';
 const CALENDAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 19H5V8h14m-3-7v2H8V1H6v2H5c-1.11 0-2 .89-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-1V1m-1 11h-5v5h5v-5Z"/></svg>';
+const NARROW = 640; // narrower than this: compact controls and status bar (phone, small window)
 const LINK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7Z"/></svg>';
 
 export function defineHistoryCard(S, D) {
@@ -330,7 +331,7 @@ export function defineHistoryCard(S, D) {
       if (!this.querySelector('.nextDay')) return;
       const today = this._todayStr();
       const label = this.querySelector('.datum .text');
-      if (label) label.textContent = P.rangeText(S.language(this._hass), this._date, this._to);
+      if (label) label.textContent = P.rangeText(S.language(this._hass), this._date, this._to, Boolean(this._narrow));
       const isToday = this._to >= today;
       this.querySelector('.nextDay').disabled = isToday;
       this.querySelector('.prevDay').disabled = Boolean(this._first && this._date <= this._first);
@@ -525,12 +526,37 @@ export function defineHistoryCard(S, D) {
             .statusbar .infos { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
             .statusbar .rest { font-variant-numeric: tabular-nums; }
             .statusbar.fehler .status { color: var(--error-color, #db4437); }
-            .statusbar .wer { font-weight: 500; }
+            .statusbar .wer { font-weight: 600; }
             .statusbar .export { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 500;
                                  padding: 5px 10px; border: none; border-radius: 16px; background: none; color: var(--primary-color); cursor: pointer; }
             .statusbar .export:hover { background: rgba(127,127,127,.12); }
             .statusbar .export svg { width: 18px; height: 18px; fill: currentColor; }
             .statusbar.eng .export .text { display: none; }
+            /* Narrow: one line, only symbols left and right */
+            .statusbar.schmal .rest, .statusbar.schmal .zeit, .statusbar.schmal .export .text { display: none; }
+            .statusbar.schmal .infos { flex-wrap: nowrap; }
+            .statusbar.schmal .status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .controls .ic { display: none; --mdc-icon-size: 20px; }
+            .controls.schmal { display: grid; grid-template-columns: auto auto; justify-content: center; gap: 8px; padding: 8px 10px; }
+            .controls.schmal .zone { min-width: 0; flex: none; }
+            .controls.schmal .zone.links { grid-column: 1 / -1; justify-content: center; }
+            .controls.schmal .ic { display: inline-flex; }
+            .controls.schmal .txt { display: none; }
+            .controls.schmal button { padding: 7px 9px; font-size: 14px; }
+            .controls.schmal .segmented .segment { padding: 7px 9px; }
+            .controls.schmal .zone.mitte { gap: 0; }
+            .controls.schmal .zone.mitte button { border-radius: 0; margin-left: -1px; }
+            .controls.schmal .zone.mitte button:first-child { border-radius: 8px 0 0 8px; margin-left: 0; }
+            .controls.schmal .zone.mitte button:last-child { border-radius: 0 8px 8px 0; }
+            .controls.schmal .datum { gap: 5px; }
+            .controls.schmal .datum svg { width: 17px; height: 17px; }
+            .controls.schmal .personWahl { justify-content: center; }
+            .controls.schmal .personWahl .pname { display: none; }
+            .controls.schmal .personWahl .person { padding: 3px 8px 3px 3px; gap: 6px; }
+            .controls.schmal .personWahl .alle-ein { padding: 6px; }
+            .controls.schmal.ohne-auge .personWahl .auge { display: none; }
+            .controls.schmal.ohne-auge .personWahl .person { padding: 3px; }
+            .controls.schmal.ohne-auge .personWahl .person.aus { border-style: dashed; }
             ${personCss}
 `, '.wa-history')}</style>
           ${c.title ? `<div class="wa-titel">${esc(c.title)}</div>` : ''}
@@ -539,22 +565,22 @@ export function defineHistoryCard(S, D) {
               <div class="personWahl">
                 ${this._persons.map((p) => `<button class="person p-${p.key}" data-wert="${esc(p.id)}" type="button">
                   <span class="bild"></span><span class="pname">${esc(p.name)}</span><span class="auge"></span></button>`).join('')}
-                <button class="alle-ein" type="button" hidden>${EYE}${esc(t('show_all'))}</button>
+                <button class="alle-ein" type="button" title="${esc(t('show_all'))}" aria-label="${esc(t('show_all'))}" hidden>${EYE}<span class="txt">${esc(t('show_all'))}</span></button>
               </div>
             </div>
             <div class="zone mitte">
               <button class="prevDay" aria-label="${esc(t('prev_range'))}">&larr;</button>
               <button class="datum" type="button" aria-label="${esc(t('pick_period'))}">${CALENDAR}<span class="text"></span></button>
               <button class="nextDay" aria-label="${esc(t('next_range'))}">&rarr;</button>
-              <button class="today">${esc(t('today'))}</button>
+              <button class="today" title="${esc(t('today'))}" aria-label="${esc(t('today'))}"><ha-icon class="ic" icon="mdi:calendar-today"></ha-icon><span class="txt">${esc(t('today'))}</span></button>
             </div>
             <div class="zone rechts">
               <div class="aktionen">
                 <div class="segmented modus" hidden>
-                  <button class="segment" data-modus="route">${esc(t('view_route'))}</button>
-                  <button class="segment" data-modus="heat">${esc(t('view_heat'))}</button>
+                  <button class="segment" data-modus="route" title="${esc(t('view_route'))}" aria-label="${esc(t('view_route'))}"><ha-icon class="ic" icon="mdi:map-marker-path"></ha-icon><span class="txt">${esc(t('view_route'))}</span></button>
+                  <button class="segment" data-modus="heat" title="${esc(t('view_heat'))}" aria-label="${esc(t('view_heat'))}"><ha-icon class="ic" icon="mdi:fire"></ha-icon><span class="txt">${esc(t('view_heat'))}</span></button>
                 </div>
-                <button class="auswahlBtn" style="display:none;">${esc(t('select_entries'))}</button>
+                <button class="auswahlBtn" style="display:none;" title="${esc(t('select_entries'))}" aria-label="${esc(t('select_entries'))}"><ha-icon class="ic" icon="mdi:checkbox-multiple-marked-outline"></ha-icon><span class="txt">${esc(t('select_entries'))}</span></button>
                 <button class="ansicht"></button>
               </div>
             </div>
@@ -639,6 +665,7 @@ export function defineHistoryCard(S, D) {
         this._map = window.L.map(mapDiv, { zoomControl: false }).setView([home.latitude || 0, home.longitude || 0], 14);
         window.L.control.zoom({ position: 'bottomright', zoomInTitle: this._t('zoom_in'), zoomOutTitle: this._t('zoom_out') }).addTo(this._map);
         this._overviewButton = S.overviewControl(this._map, this._t('overview'), () => this._fit());
+        S.compactAttribution(this._map);
         this._setTiles(S.isDark(this._hass, this._config.map_style));
         S.watchZoneNames(this._map, mapDiv, this._config);
         this._map.on('zoomend', () => this._simplify());
@@ -785,10 +812,10 @@ export function defineHistoryCard(S, D) {
       } else parts.push(esc(this._countText(points.length)));
       let text = parts.join('');
       if (this._multiDay()) {
-        text += `${text ? ' — ' : ''}${esc(P.rangeText(S.language(this._hass), this._date, this._to))}`;
+        text += `<span class="zeit">${text ? ' — ' : ''}${esc(P.rangeText(S.language(this._hass), this._date, this._to))}</span>`;
       } else if (points.length) {
         const end = points.reduce((max, p) => ((p.end || p.time) > max ? (p.end || p.time) : max), '');
-        text += ` — ${esc(t('time', { time: t('range', { from: points[0].time.slice(0, 5), to: end.slice(0, 5) }) }))}`;
+        text += `<span class="zeit"> — ${esc(t('time', { time: t('range', { from: points[0].time.slice(0, 5), to: end.slice(0, 5) }) }))}</span>`;
       }
       if (failed.length) text += (text ? ' · ' : '') + esc(t('error_for', { names: failed.join(', ') }));
       if (this._mapError) text += (text ? ' · ' : '') + esc(t('map_unavailable'));
@@ -1352,17 +1379,43 @@ export function defineHistoryCard(S, D) {
         const visible = [...children].filter((el) => el.offsetParent !== null);
         return visible.reduce((sum, el) => sum + el.getBoundingClientRect().width, 0) + Math.max(0, visible.length - 1) * 8;
       };
+      // Narrow (phone, small window): symbols instead of words, two rows.
+      const narrow = bar.clientWidth < NARROW;
+      bar.classList.toggle('schmal', narrow);
+      const status = this.querySelector('.statusbar');
+      if (status) {
+        status.classList.toggle('eng', status.clientWidth < 520);
+        status.classList.toggle('schmal', narrow);
+      }
+      if (narrow !== this._narrow) {
+        this._narrow = narrow;
+        this._updateDateControls();
+        this._renderStatusText();
+      }
+      if (narrow) {
+        bar.classList.remove('zeilen-3');
+        // Still too wide: pictures only, without the eye.
+        bar.classList.remove('ohne-auge');
+        const names = this.querySelector('.personWahl');
+        if (names.scrollWidth > bar.clientWidth - 20) bar.classList.add('ohne-auge');
+        return;
+      }
+      bar.classList.remove('ohne-auge');
       const style = getComputedStyle(bar);
       const space = bar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
       const names = this.querySelector('.personWahl').getBoundingClientRect().width;
       const date = width(this.querySelector('.zone.mitte').children);
       const actions = width(this.querySelector('.aktionen').children);
       bar.classList.toggle('zeilen-3', names + date + actions + 16 + 24 > space);
-      const status = this.querySelector('.statusbar');
-      if (status) status.classList.toggle('eng', status.clientWidth < 520);
     }
 
     // --- map / table --------------------------------------------------------------------------
+    _viewButton(button, icon, text) {
+      button.innerHTML = `<ha-icon class="ic" icon="${icon}"></ha-icon><span class="txt">${esc(text)}</span>`;
+      button.title = text;
+      button.setAttribute('aria-label', text);
+    }
+
     _updateView() {
       const t = this._t;
       const map = this.querySelector('.wa-map');
@@ -1379,14 +1432,14 @@ export function defineHistoryCard(S, D) {
         map.style.display = 'none';
         table.style.display = 'flex';
         table.style.flexDirection = 'column';
-        button.textContent = t('show_map');
+        this._viewButton(button, 'mdi:map', t('show_map'));
         button.classList.add('aktiv');
         selectButton.style.display = '';
         this._renderTable();
       } else {
         map.style.display = none ? 'none' : 'block'; // nobody shown: empty map with a hint
         table.style.display = 'none';
-        button.textContent = t('show_table');
+        this._viewButton(button, 'mdi:table', t('show_table'));
         button.classList.remove('aktiv');
         selectButton.style.display = 'none';
         if (this._map && !none && !nobody) {

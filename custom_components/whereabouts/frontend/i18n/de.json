@@ -380,7 +380,7 @@
   "sync_on": "Einschalten",
   "sync_off": "Ausschalten",
   "settings_managed": "Die Einstellungen werden vom Administrator verwaltet.",
-  "lock_explain": "Mit dem Schloss an einer Kategorie legst du sie für Benutzer fest: Sie sehen sie ausgegraut mit dem Standard für alle Benutzer und können sie nicht ändern. Ihre eigenen Werte bleiben gespeichert und gelten wieder, sobald du die Festlegung aufhebst. Für Administratoren gilt eine Festlegung nie. Einzelne Einstellungen legst du für einen Benutzer über „Einstellungen von“ → Benutzer fest.",
+  "lock_explain": "Mit dem Schloss an einer Kategorie legst du sie für Benutzer fest: Sie sehen sie ausgegraut mit dem Standard für alle Benutzer und können sie nicht ändern. Ihre eigenen Werte bleiben gespeichert und gelten wieder, sobald du die Festlegung aufhebst. Für Administratoren gilt eine Festlegung nie.",
   "locked_hint": "Einige Einstellungen hat der Administrator festgelegt (Schloss). Sie sind ausgegraut und gelten so für dich.",
   "lock_state_none": "Jeder stellt selbst ein – klicken zum Festlegen",
   "lock_state_all": "Festgelegt für alle Benutzer",
@@ -584,5 +584,6 @@
   "import_summary": "{n} neue {n|Eintrag|Einträge} an {days} {days|Tag|Tagen} ausgewählt · {none} {none|Tag|Tage} ohne Neues",
   "overview": "Gesamtübersicht",
   "import_mode_skip": "Überspringen (nur neue Tage übernehmen)",
-  "import_status_skip": "wird übersprungen"
+  "import_status_skip": "wird übersprungen",
+  "lock_explain_users": "Einzelne Einstellungen legst du für einen Benutzer über „Einstellungen von“ → Benutzer fest."
 }

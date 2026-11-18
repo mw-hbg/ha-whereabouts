@@ -82,8 +82,13 @@ const PRESETS = [
 ];
 
 // "18. Nov." / "12.–18. Nov." / "28. Okt. – 3. Nov." (year only when not this year)
-export function rangeText(lang, from, to) {
+export function rangeText(lang, from, to, short = false) {
   const year = String(new Date().getFullYear());
+  if (short) {
+    // Narrow screens: "18.11." / "11.11.–18.11." (with the year only if it is not this year)
+    const numeric = (s) => parseDate(s).toLocaleDateString(lang, { day: 'numeric', month: 'numeric', ...(s.slice(0, 4) !== year ? { year: '2-digit' } : {}) });
+    return from === to ? numeric(from) : `${numeric(from)}–${numeric(to)}`;
+  }
   const opts = (s, withYear) => ({ day: 'numeric', month: 'short', ...(withYear || s.slice(0, 4) !== year ? { year: 'numeric' } : {}) });
   const fmt = (s, o) => parseDate(s).toLocaleDateString(lang, o);
   if (from === to) return fmt(from, opts(from));

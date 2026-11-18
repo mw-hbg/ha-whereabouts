@@ -11,8 +11,8 @@ const VIEWS = [
 ];
 
 const CSS = `
-  whereabouts-panel { display: block; height: 100%; }
-  .wa-panel { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--primary-background-color);
+  whereabouts-panel { display: block; height: 100%; overflow: hidden; }
+  .wa-panel { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; background: var(--primary-background-color);
               color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, inherit); }
   .wa-panel .wap-kopf { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; height: var(--header-height, 56px);
                     padding: 0 4px 0 12px; box-sizing: border-box;
@@ -39,7 +39,7 @@ const CSS = `
   .wa-panel .wap-seite { position: absolute; inset: 0; display: none; }
   .wa-panel .wap-seite.wap-aktiv { display: block; }
   .wa-panel .wap-seite.wap-karte { padding: 0; }
-  .wa-panel .wap-seite.wap-einstellungen { overflow: auto; }
+  .wa-panel .wap-seite.wap-einstellungen { overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
   .wa-panel .wap-leer { padding: 32px 16px; text-align: center; color: var(--secondary-text-color); }
 `;
 
@@ -87,12 +87,32 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
     set panel(panel) { this._panel = panel; }
 
     connectedCallback() {
+      window.addEventListener('resize', this._fitHeight);
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', this._fitHeight);
+      requestAnimationFrame(() => this._fitHeight());
       if (this._ready && this._view) this._show(this._view);
     }
 
     disconnectedCallback() {
       if (this._tabObserver) { this._tabObserver.disconnect(); this._tabObserver = null; }
+      window.removeEventListener('resize', this._fitHeight);
+      if (window.visualViewport) window.visualViewport.removeEventListener('resize', this._fitHeight);
     }
+
+    // Exactly as high as the visible area below Home Assistant's own top margin
+    // (iPhone: status bar / safe area, browser bars). 100dvh alone is too high there,
+    // and then the whole page scrolls instead of only the content.
+    _fitHeight = () => {
+      if (!this._root || !this.isConnected) return;
+      const scroller = document.scrollingElement;
+      if (scroller && scroller.scrollTop) scroller.scrollTop = 0;
+      const top = Math.max(0, this.getBoundingClientRect().top);
+      const viewport = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      const parent = this.parentElement ? this.parentElement.clientHeight : 0;
+      let height = viewport - top;
+      if (parent > 200 && parent < height) height = parent;
+      this._root.style.height = `${Math.max(200, Math.floor(height))}px`;
+    };
 
     async _start() {
       await S.loadTranslations(S.language(this._hass));
@@ -168,6 +188,14 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
         this._root.querySelectorAll('.wap-reiter button').forEach((b) => b.addEventListener('click', () => this._navigate(b.dataset.view)));
       }
       this.appendChild(this._root);
+      window.removeEventListener('resize', this._fitHeight);
+      window.addEventListener('resize', this._fitHeight);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', this._fitHeight);
+        window.visualViewport.addEventListener('resize', this._fitHeight);
+      }
+      this._fitHeight();
+      requestAnimationFrame(() => this._fitHeight());
       this._root.querySelector('.wap-menue').addEventListener('click', () => {
         this.dispatchEvent(new Event('hass-toggle-menu', { bubbles: true, composed: true }));
       });

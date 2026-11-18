@@ -2,6 +2,44 @@
 
 ## 0.4.1
 
+- Phone and narrow windows: the sidebar page fits the visible area exactly
+  (no more scrolling of the whole page; the tab bar stays, the status bars are
+  visible again); status bars in one line with symbols only (no countdown, no
+  times); "Location history" with two compact rows: person buttons with picture
+  and eye (when even tighter only the picture), date, arrows and "Today" as one
+  group, symbols for route, heatmap, table and map; "Show everyone" as an eye
+  symbol in the same row; licence line without "Leaflet", legend and overview
+  button above it.
+- "Where is…?": the detail window appears right at the pin without animation,
+  its tip always points to the pin; from four persons the tiles are shown in two
+  columns without pictures on narrow screens.
+- Settings page: person rows on narrow screens with picture and order on the
+  left and all fields in full width; colour fields small instead of across the
+  whole width; jumping to an area keeps its heading visible; the explanations at
+  the top are behind an ⓘ.
+- Status bar of the history: names as bold as in "Where is…?".
+
+---
+
+- Handy und schmale Fenster: Die Seite in der Seitenleiste passt genau in den
+  sichtbaren Bereich (kein Verschieben der ganzen Seite mehr, die Reiterleiste
+  bleibt stehen, die Statusleisten sind wieder sichtbar); Statusleisten einzeilig
+  nur mit Symbolen (ohne Countdown und Uhrzeiten); „Standortverlauf“ mit zwei
+  kompakten Zeilen: Personenknöpfe mit Bild und Auge (wird es noch enger, nur das
+  Bild), Datum, Pfeile und „Heute“ als eine Gruppe, Symbole für Route, Heatmap,
+  Tabelle und Karte; „Alle einblenden“ als Augen-Symbol in derselben Zeile;
+  Lizenzzeile ohne „Leaflet“, Legende und Gesamtübersicht-Knopf darüber.
+- „Wo ist…?“: Das Detailfenster erscheint ohne Animation direkt an der
+  Stecknadel, sein Pfeil zeigt immer auf die Stecknadel; ab vier Personen stehen
+  die Kacheln auf schmalen Bildschirmen in zwei Spalten ohne Bild.
+- Einstellungsseite: Personenzeilen auf schmalen Bildschirmen mit Bild und
+  Reihenfolge links und allen Feldern in voller Breite; Farbfelder klein statt
+  über die ganze Breite; beim Springen zu einem Bereich bleibt seine Überschrift
+  sichtbar; die Erklärungen oben liegen hinter einem ⓘ.
+- Statusleiste des Verlaufs: Namen so fett wie bei „Wo ist…?“.
+
+## Unreleased
+
 - Both maps: new button "Show everything" bottom left (back to everybody, or to
   all points of the period). Coming back to a map – tab on the sidebar page or
   dashboard view – now really resets zoom and position (the history did not do

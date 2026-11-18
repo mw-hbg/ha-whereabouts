@@ -216,6 +216,10 @@ export const MAP_CSS = `
   .wa-ersatz { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 900; max-width: calc(100% - 140px);
                padding: 6px 12px; border-radius: 8px; font-size: 12px; line-height: 1.4; text-align: center;
                background: rgba(0,0,0,.72); color: #fff; pointer-events: none; }
+  @media (max-width: 640px) {
+    /* Narrow: controls bottom left stay above the licence line */
+    .leaflet-bottom.leaflet-left { bottom: 16px; }
+  }
   .leaflet-bar a.wa-uebersicht { display: flex; align-items: center; justify-content: center; }
   .leaflet-bar a.wa-uebersicht svg { width: 20px; height: 20px; fill: currentColor; }
 `;
@@ -238,6 +242,18 @@ export function overviewControl(map, title, onClick) {
     return bar;
   };
   return control.addTo(map);
+}
+
+// Narrow screens: licence line without "Leaflet", so it fits next to the legend.
+// (The map services' attribution itself always stays.)
+export function compactAttribution(map) {
+  const control = map && map.attributionControl;
+  if (!control || !window.matchMedia) return;
+  const full = control.options.prefix;
+  const narrow = window.matchMedia('(max-width: 640px)');
+  const apply = () => control.setPrefix(narrow.matches ? false : full);
+  apply();
+  if (narrow.addEventListener) narrow.addEventListener('change', apply);
 }
 
 // Run fn once the element really has a size (a view that is just being shown

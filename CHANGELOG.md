@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 - Set-up in two steps: first the persons Whereabouts works with (all ticked) and
   whether you want a sidebar entry (with a hint where the settings are), then

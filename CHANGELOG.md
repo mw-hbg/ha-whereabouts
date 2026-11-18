@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1
 
 - Fix: the settings page (and sometimes the whole sidebar page) stayed empty
   when Home Assistant created the page before its code was ready.

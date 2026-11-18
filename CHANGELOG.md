@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.3
 
 - Phone: the page around the sidebar page no longer moves (also not when jumping
   to a settings area); after turning the phone the height is measured again until

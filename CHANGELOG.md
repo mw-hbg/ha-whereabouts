@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
 - Phone: the dashboard no longer shifts at the home bar; the status bars keep clear
   of rounded screen corners and the home bar; date picker and export window fit a

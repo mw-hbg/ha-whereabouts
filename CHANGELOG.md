@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.4
 
 - Sidebar page: the height follows the visible area only (zooming the browser no
   longer needs a reload); maps without rounded corners, border and shadow, flush

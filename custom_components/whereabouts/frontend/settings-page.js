@@ -553,6 +553,19 @@ export function defineSettingsPage(S, D) {
       return document.scrollingElement;
     }
 
+    // Scroll only our own area (scrollIntoView would also move Home Assistant's page around it).
+    _scrollTo(el, block) {
+      const scroller = this._scroller();
+      if (!el || !scroller) return;
+      const own = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
+      const top = el.getBoundingClientRect().top - own;
+      const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+      const target = block === 'center'
+        ? scroller.scrollTop + top - (scroller.clientHeight - el.offsetHeight) / 2
+        : scroller.scrollTop + top - margin - 8;
+      scroller.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    }
+
     _anchor() {
       const cards = [...this.querySelectorAll('.kat')];
       const top = Math.max(0, this._scroller() === document.scrollingElement ? 0 : this._scroller().getBoundingClientRect().top);
@@ -976,7 +989,7 @@ export function defineSettingsPage(S, D) {
       const card = this.querySelector(`#kat-${id}`);
       if (!card) return;
       this._setOpen(id, true);
-      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      this._scrollTo(card, 'start');
     }
 
     // Highlights the category that is in view.
@@ -1236,7 +1249,7 @@ export function defineSettingsPage(S, D) {
       const card = entry.row.closest('.kat');
       if (card) this._setOpen(card.dataset.kat, true);
       if (value !== undefined) { entry.api.reset(value); entry.api.set(value); }
-      entry.row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      this._scrollTo(entry.row, 'center');
       entry.row.classList.remove('blitz');
       void entry.row.offsetWidth;
       entry.row.classList.add('blitz');

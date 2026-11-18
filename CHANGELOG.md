@@ -1,6 +1,20 @@
 # Changelog
 
-## 0.4.1
+## Unreleased
+
+- Phone: the page around the sidebar page no longer moves (also not when jumping
+  to a settings area); after turning the phone the height is measured again until
+  it fits; date row in the history without "Today" and with buttons of equal
+  height; person buttons show the name as long as there is room.
+
+---
+
+- Handy: Die Seite um die Seitenleisten-Ansicht verschiebt sich nicht mehr (auch
+  nicht beim Sprung zu einem Einstellungsbereich); nach dem Drehen wird die Höhe
+  so lange nachgemessen, bis sie passt; Datumszeile im Verlauf ohne „Heute“ und
+  mit gleich hohen Knöpfen; Personenknöpfe zeigen den Namen, solange Platz ist.
+
+## 0.4.2
 
 - Phone and narrow windows: the sidebar page fits the visible area exactly
   (no more scrolling of the whole page; the tab bar stays, the status bars are
@@ -38,7 +52,7 @@
   sichtbar; die Erklärungen oben liegen hinter einem ⓘ.
 - Statusleiste des Verlaufs: Namen so fett wie bei „Wo ist…?“.
 
-## 0.4.2
+## 0.4.1
 
 - Both maps: new button "Show everything" bottom left (back to everybody, or to
   all points of the period). Coming back to a map – tab on the sidebar page or

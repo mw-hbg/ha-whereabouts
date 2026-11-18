@@ -542,17 +542,21 @@ export function defineHistoryCard(S, D) {
             .controls.schmal .zone.links { grid-column: 1 / -1; justify-content: center; }
             .controls.schmal .ic { display: inline-flex; }
             .controls.schmal .txt { display: none; }
-            .controls.schmal button { padding: 7px 9px; font-size: 14px; }
-            .controls.schmal .segmented .segment { padding: 7px 9px; }
+            .controls.schmal button { height: 38px; box-sizing: border-box; padding: 0 10px; font-size: 14px; line-height: 1;
+                                      display: inline-flex; align-items: center; justify-content: center; }
+            .controls.schmal .segmented .segment { height: 36px; padding: 0 10px; }
+            .controls.schmal .today { display: none; }
+            .controls.schmal .zone.mitte .nextDay { border-radius: 0 8px 8px 0; }
             .controls.schmal .zone.mitte { gap: 0; }
             .controls.schmal .zone.mitte button { border-radius: 0; margin-left: -1px; }
             .controls.schmal .zone.mitte button:first-child { border-radius: 8px 0 0 8px; margin-left: 0; }
             .controls.schmal .zone.mitte button:last-child { border-radius: 0 8px 8px 0; }
             .controls.schmal .datum { gap: 5px; }
             .controls.schmal .datum svg { width: 17px; height: 17px; }
-            .controls.schmal .personWahl { justify-content: center; }
-            .controls.schmal .personWahl .pname { display: none; }
-            .controls.schmal .personWahl .person { padding: 3px 8px 3px 3px; gap: 6px; }
+            .controls.schmal .personWahl { justify-content: center; flex-wrap: nowrap; }
+            .controls.schmal.umbruch .personWahl { flex-wrap: wrap; }
+            .controls.schmal .personWahl .person { height: auto; padding: 3px 8px 3px 3px; gap: 6px; }
+            .controls.schmal.ohne-namen .personWahl .pname { display: none; }
             .controls.schmal .personWahl .alle-ein { padding: 6px; }
             .controls.schmal.ohne-auge .personWahl .auge { display: none; }
             .controls.schmal.ohne-auge .personWahl .person { padding: 3px; }
@@ -1392,15 +1396,21 @@ export function defineHistoryCard(S, D) {
         this._updateDateControls();
         this._renderStatusText();
       }
+      const stages = ['ohne-namen', 'ohne-auge', 'umbruch'];
       if (narrow) {
         bar.classList.remove('zeilen-3');
-        // Still too wide: pictures only, without the eye.
-        bar.classList.remove('ohne-auge');
+        // Persons as far as there is room: picture, name and eye - then without the
+        // name - then picture only - then in several rows.
         const names = this.querySelector('.personWahl');
-        if (names.scrollWidth > bar.clientWidth - 20) bar.classList.add('ohne-auge');
+        const room = bar.clientWidth - 20;
+        bar.classList.remove(...stages);
+        for (const stage of stages) {
+          if (names.scrollWidth <= room) break;
+          bar.classList.add(stage);
+        }
         return;
       }
-      bar.classList.remove('ohne-auge');
+      bar.classList.remove(...stages);
       const style = getComputedStyle(bar);
       const space = bar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
       const names = this.querySelector('.personWahl').getBoundingClientRect().width;

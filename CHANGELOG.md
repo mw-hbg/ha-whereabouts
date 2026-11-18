@@ -38,7 +38,7 @@
   sichtbar; die Erklärungen oben liegen hinter einem ⓘ.
 - Statusleiste des Verlaufs: Namen so fett wie bei „Wo ist…?“.
 
-## Unreleased
+## 0.4.2
 
 - Both maps: new button "Show everything" bottom left (back to everybody, or to
   all points of the period). Coming back to a map – tab on the sidebar page or

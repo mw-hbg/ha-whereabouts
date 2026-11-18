@@ -8,6 +8,7 @@
 [![Release](https://img.shields.io/github/v/release/mw-hbg/ha-whereabouts?label=release)](https://github.com/mw-hbg/ha-whereabouts/releases)
 ![Marketplace: add from link](https://img.shields.io/badge/Marketplace-add%20from%20link-41BDF5)
 ![Stage: experimental](https://img.shields.io/badge/stage-experimental-orange)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/mwhbg)
 
 ## English
 
@@ -192,6 +193,12 @@ there again.
 ### Languages
 
 English and German. New languages: see [TRANSLATING.md](TRANSLATING.md).
+
+### Support
+
+Everything I build is free and stays free. If this project is useful to you, you're welcome to buy me a coffee – entirely voluntary, nothing in return, just a thank-you that keeps me motivated. ☕ Note: payments to a private person are not tax-deductible donations.
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy_me_a_coffee-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/mwhbg)
 
 ### License
 
@@ -388,6 +395,12 @@ wieder hinzu, ist der Verlauf wieder da.
 ### Sprachen
 
 Englisch und Deutsch. Neue Sprachen: siehe [TRANSLATING.md](TRANSLATING.md).
+
+### Unterstützen
+
+Alles, was ich baue, ist kostenlos und bleibt es auch. Wenn dir dieses Projekt nützt, kannst du mir gern einen Kaffee ausgeben – völlig freiwillig und ohne Gegenleistung, einfach als Dankeschön, das motiviert. ☕ Hinweis: Zahlungen an eine Privatperson sind keine steuerlich absetzbaren Spenden.
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Kaffee_ausgeben-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/mwhbg)
 
 ### Lizenz
 

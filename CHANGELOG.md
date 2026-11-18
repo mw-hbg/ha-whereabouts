@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 - Settings page: "fix" instead of "lock" throughout; the page keeps its position
   after every change (also when Home Assistant rebuilds it); text and number

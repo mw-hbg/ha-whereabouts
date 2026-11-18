@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- Sidebar page: the height follows the visible area only (zooming the browser no
+  longer needs a reload); maps without rounded corners, border and shadow, flush
+  to the edges; the page is no longer pulled back while scrolling (no more
+  jerking on the iPhone).
+- "Location history": controls with words in one row if they fit, otherwise
+  compact with symbols in one row (phone in landscape) or two – never three; the
+  status bar shows words only if they fit in one row; on low screens the map
+  takes exactly what is left and the legend is smaller.
+- "Where is…?" on low screens (phone in landscape): flat tiles side by side.
+
+---
+
+- Seite in der Seitenleiste: Die Höhe richtet sich nur noch nach dem sichtbaren
+  Bereich (nach dem Zoomen im Browser kein Neuladen mehr nötig); Karten ohne
+  runde Ecken, Rand und Schatten, bündig bis an den Rand; beim Scrollen wird die
+  Seite nicht mehr zurückgezogen (kein Ruckeln mehr am iPhone).
+- „Standortverlauf“: Bedienelemente mit Texten in einer Zeile, wenn sie passen,
+  sonst kompakt mit Symbolen in einer Zeile (Handy quer) oder zwei – nie drei;
+  die Statusleiste zeigt Texte nur, wenn sie in eine Zeile passen; bei wenig Höhe
+  nimmt die Karte genau den restlichen Platz und die Legende ist kleiner.
+- „Wo ist…?“ bei wenig Höhe (Handy quer): flache Kacheln nebeneinander.
+
 ## 0.4.3
 
 - Phone: the page around the sidebar page no longer moves (also not when jumping

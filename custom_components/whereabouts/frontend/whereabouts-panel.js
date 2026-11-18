@@ -101,14 +101,9 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
       this._unwatch();
       window.addEventListener('resize', this._refit);
       window.addEventListener('orientationchange', this._refit);
-      window.addEventListener('scroll', this._unshift, { passive: true });
-      if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', this._refit);
-        window.visualViewport.addEventListener('scroll', this._unshift);
-      }
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', this._refit);
       if (window.ResizeObserver) {
         this._sizeObserver = new ResizeObserver(() => this._fitHeight());
-        if (this.parentElement) this._sizeObserver.observe(this.parentElement);
         this._sizeObserver.observe(document.documentElement);
       }
       this._refit();
@@ -117,23 +112,21 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
     _unwatch() {
       window.removeEventListener('resize', this._refit);
       window.removeEventListener('orientationchange', this._refit);
-      window.removeEventListener('scroll', this._unshift);
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', this._refit);
-        window.visualViewport.removeEventListener('scroll', this._unshift);
-      }
+      if (window.visualViewport) window.visualViewport.removeEventListener('resize', this._refit);
       if (this._sizeObserver) { this._sizeObserver.disconnect(); this._sizeObserver = null; }
     }
 
     // After turning the phone the new size arrives in steps: measure again a few times.
     _refit = () => {
+      this._unshift();
       this._fitHeight();
       requestAnimationFrame(() => this._fitHeight());
       [150, 400, 800].forEach((ms) => setTimeout(() => this._fitHeight(), ms));
     };
 
-    // Home Assistant's page around the panel must never stay moved (iPhone: bouncing,
-    // jumping to an element): put every scrolled container above us back to the top.
+    // After turning the phone or a size change Home Assistant's page around the panel may
+    // have moved: put every scrolled container above us back to the top - once, not while
+    // scrolling (that would fight the iPhone's scrolling and make it jerk).
     _unshift = () => {
       let el = this;
       while (el) {
@@ -149,13 +142,11 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
     // and then the whole page scrolls instead of only the content.
     _fitHeight = () => {
       if (!this._root || !this.isConnected) return;
-      this._unshift();
       const top = Math.max(0, this.getBoundingClientRect().top);
       const viewport = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-      const parent = this.parentElement ? this.parentElement.clientHeight : 0;
-      let height = viewport - top;
-      if (parent > 200 && parent < height) height = parent;
-      this._root.style.height = `${Math.max(200, Math.floor(height))}px`;
+      // Only the visible area counts: Home Assistant's container grows with us and
+      // would keep an old height after zooming.
+      this._root.style.height = `${Math.max(200, Math.floor(viewport - top))}px`;
     };
 
     async _start() {
@@ -232,7 +223,6 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
         this._root.querySelectorAll('.wap-reiter button').forEach((b) => b.addEventListener('click', () => this._navigate(b.dataset.view)));
       }
       this.appendChild(this._root);
-      this._root.addEventListener('touchend', () => setTimeout(this._unshift, 50), { passive: true });
       this._watch();
       this._root.querySelector('.wap-menue').addEventListener('click', () => {
         this.dispatchEvent(new Event('hass-toggle-menu', { bubbles: true, composed: true }));

@@ -18,7 +18,6 @@ const CLOSE = '<svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 
 const EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0 8a5 5 0 0 1-5-5 5 5 0 0 1 5-5 5 5 0 0 1 5 5 5 5 0 0 1-5 5m0-12.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Z"/></svg>';
 const EYE_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.83,9L15,12.16C15,12.11 15,12.05 15,12A3,3 0 0,0 12,9C11.94,9 11.89,9 11.83,9M7.53,9.8L9.08,11.35C9.03,11.56 9,11.77 9,12A3,3 0 0,0 12,15C12.22,15 12.44,14.97 12.65,14.92L14.2,16.47C13.53,16.8 12.79,17 12,17A5,5 0 0,1 7,12C7,11.21 7.2,10.47 7.53,9.8M2,4.27L4.28,6.55L4.73,7C3.08,8.3 1.78,10 1,12C2.73,16.39 7,19.5 12,19.5C13.55,19.5 15.03,19.2 16.38,18.66L16.81,19.08L19.73,22L21,20.73L3.27,3M12,7A5,5 0 0,1 17,12C17,12.64 16.87,13.26 16.64,13.82L19.57,16.75C21.07,15.5 22.27,13.86 23,12C21.27,7.61 17,4.5 12,4.5C10.6,4.5 9.26,4.75 8,5.2L10.17,7.35C10.74,7.13 11.35,7 12,7Z"/></svg>';
 const CALENDAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 19H5V8h14m-3-7v2H8V1H6v2H5c-1.11 0-2 .89-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-1V1m-1 11h-5v5h5v-5Z"/></svg>';
-const NARROW = 640; // narrower than this: compact controls and status bar (phone, small window)
 const LINK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7Z"/></svg>';
 
 export function defineHistoryCard(S, D) {
@@ -212,6 +211,8 @@ export function defineHistoryCard(S, D) {
         this._resizeObserver.observe(map);
         this._barObserver = new ResizeObserver(() => this._layout());
         this._barObserver.observe(this.querySelector('.controls'));
+        const card = this.querySelector('.wa-history');
+        if (card) this._barObserver.observe(card);
       }
       this._auto = this._config.auto_refresh !== false;
       this._interval = Math.max(10, Number(this._config.refresh_interval) || 30);
@@ -328,6 +329,7 @@ export function defineHistoryCard(S, D) {
 
     async _updateDateControls() {
       const P = await pickerModule;
+      this._P = P;
       if (!this.querySelector('.nextDay')) return;
       const today = this._todayStr();
       const label = this.querySelector('.datum .text');
@@ -402,7 +404,7 @@ export function defineHistoryCard(S, D) {
           .statusbar .wer.p-${p.key} { color: ${p.color}; }`).join('');
       this.innerHTML = `
         ${S.leafletCss()}
-        <ha-card class="wa-history" style="height: 100%; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+        <ha-card class="wa-history${c.height_mode === 'fill' ? ' flach' : ''}" style="height: 100%; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;${c.height_mode === 'fill' ? ' border-radius: 0; border: none; box-shadow: none;' : ''}">
           <style>${S.scopeCss(`
             ${S.MAP_CSS}
             .wa-titel { padding: 12px 14px 0; font-size: 1.1em; font-weight: 600; }
@@ -497,6 +499,12 @@ export function defineHistoryCard(S, D) {
             .routenSymbol { background: none; border: none; }
             .routenSymbol svg { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45)); cursor: pointer; }
             .wa-map { flex: 1 1 auto; min-height: 300px; width: 100%; position: relative; overflow: hidden; }
+            /* Sidebar page: the map takes exactly what is left (landscape phone, low windows) */
+            .wa-history.flach .wa-map { min-height: 0; }
+            .wa-history.niedrig .legende { padding: 4px 8px; font-size: 12px; line-height: 1.4; }
+            .wa-history.niedrig .legende .hinweis { display: none; }
+            .wa-history.niedrig .statusbar { padding: 2px 8px; line-height: 1.3; }
+            .wa-history.niedrig .controls { padding-top: 6px; padding-bottom: 6px; }
             .wa-map .niemand-hinweis { position: absolute; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; pointer-events: none; }
             .wa-map .niemand-hinweis span { background: var(--card-background-color, #fff); color: var(--primary-text-color); padding: 10px 16px;
                                             border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.25); font-size: 15px; }
@@ -540,6 +548,8 @@ export function defineHistoryCard(S, D) {
             .controls.schmal { display: grid; grid-template-columns: auto auto; justify-content: center; gap: 8px; padding: 8px 10px; }
             .controls.schmal .zone { min-width: 0; flex: none; }
             .controls.schmal .zone.links { grid-column: 1 / -1; justify-content: center; }
+            .controls.schmal.einzeilig { display: flex; flex-wrap: nowrap; justify-content: center; }
+            .controls.schmal.einzeilig .zone { flex: 0 0 auto; }
             .controls.schmal .ic { display: inline-flex; }
             .controls.schmal .txt { display: none; }
             .controls.schmal button { height: 38px; box-sizing: border-box; padding: 0 10px; font-size: 14px; line-height: 1;
@@ -1376,47 +1386,58 @@ export function defineHistoryCard(S, D) {
     }
 
     // --- layout of the control bar: one line or three centred lines ---------------------------
+    // Controls: with words in one row if that fits (computer), otherwise compact with
+    // symbols - in one row if that fits (phone in landscape), otherwise two. Never three.
     _layout() {
       const bar = this.querySelector('.controls');
       if (!bar || !bar.clientWidth) return;
+      const card = this.querySelector('.wa-history');
+      if (card) card.classList.toggle('niedrig', card.clientHeight > 0 && card.clientHeight < 500);
       const width = (children) => {
         const visible = [...children].filter((el) => el.offsetParent !== null);
         return visible.reduce((sum, el) => sum + el.getBoundingClientRect().width, 0) + Math.max(0, visible.length - 1) * 8;
       };
-      // Narrow (phone, small window): symbols instead of words, two rows.
-      const narrow = bar.clientWidth < NARROW;
+      const stages = ['ohne-namen', 'ohne-auge', 'umbruch'];
+      bar.classList.remove('schmal', 'einzeilig', 'zeilen-3', ...stages);
+      // Measure the wide row with the long date, whatever is shown right now.
+      const label = this.querySelector('.datum .text');
+      const shown = label ? label.textContent : '';
+      if (label && this._P) label.textContent = this._P.rangeText(S.language(this._hass), this._date, this._to, false);
+      const style = getComputedStyle(bar);
+      const space = bar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      const names = this.querySelector('.personWahl').getBoundingClientRect().width;
+      const date = width(this.querySelector('.zone.mitte').children);
+      const actions = width(this.querySelector('.aktionen').children);
+      if (label) label.textContent = shown;
+      const narrow = names + date + actions + 16 + 24 > space;
       bar.classList.toggle('schmal', narrow);
+      if (narrow) {
+        bar.classList.add('einzeilig');
+        if (bar.scrollWidth > bar.clientWidth + 1) {
+          bar.classList.remove('einzeilig');
+          // Two rows - persons as far as there is room: picture, name and eye, then
+          // without the name, then picture only, then in several rows.
+          const persons = this.querySelector('.personWahl');
+          const room = bar.clientWidth - 20;
+          for (const stage of stages) {
+            if (persons.scrollWidth <= room) break;
+            bar.classList.add(stage);
+          }
+        }
+      }
+      // Status bar: words only if they fit in one row.
       const status = this.querySelector('.statusbar');
       if (status) {
         status.classList.toggle('eng', status.clientWidth < 520);
-        status.classList.toggle('schmal', narrow);
+        status.classList.remove('schmal');
+        const infos = status.querySelector('.infos');
+        if (narrow || (infos && infos.offsetHeight > 34)) status.classList.add('schmal');
       }
       if (narrow !== this._narrow) {
         this._narrow = narrow;
         this._updateDateControls();
         this._renderStatusText();
       }
-      const stages = ['ohne-namen', 'ohne-auge', 'umbruch'];
-      if (narrow) {
-        bar.classList.remove('zeilen-3');
-        // Persons as far as there is room: picture, name and eye - then without the
-        // name - then picture only - then in several rows.
-        const names = this.querySelector('.personWahl');
-        const room = bar.clientWidth - 20;
-        bar.classList.remove(...stages);
-        for (const stage of stages) {
-          if (names.scrollWidth <= room) break;
-          bar.classList.add(stage);
-        }
-        return;
-      }
-      bar.classList.remove(...stages);
-      const style = getComputedStyle(bar);
-      const space = bar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      const names = this.querySelector('.personWahl').getBoundingClientRect().width;
-      const date = width(this.querySelector('.zone.mitte').children);
-      const actions = width(this.querySelector('.aktionen').children);
-      bar.classList.toggle('zeilen-3', names + date + actions + 16 + 24 > space);
     }
 
     // --- map / table --------------------------------------------------------------------------

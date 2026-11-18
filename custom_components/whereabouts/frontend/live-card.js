@@ -220,6 +220,7 @@ export function defineLiveCard(S) {
           .wa-live { height: 100%; width: 100%; display: flex; flex-direction: column; overflow: hidden;
                      font-family: var(--paper-font-body1_-_font-family, inherit); border-radius: var(--ha-card-border-radius, 12px);
                      --wa-glas: rgba(255,255,255,.86); --wa-text: #1d1d1f; --wa-leise: #5f6368; color: var(--wa-text); }
+          .wa-live.flach { border-radius: 0; }
           .wa-live.dark { --wa-glas: rgba(32,33,36,.84); --wa-text: #f1f3f4; --wa-leise: #b0b4b9; }
           ${personCss}
           .wa-titel { padding: 10px 14px; font-size: 1.1em; font-weight: 600; color: var(--primary-text-color);
@@ -340,8 +341,23 @@ export function defineLiveCard(S) {
             .leiste.viele .adresse, .leiste.viele .ortung { font-size: .8em; }
             .leiste.viele .haken input { width: 18px; height: 18px; }
           }
+          /* Low (phone in landscape): flat tiles side by side, small status bar */
+          @media (max-height: 500px) {
+            .leiste { flex-direction: row; flex-wrap: wrap; top: 6px; left: 6px; right: 6px; gap: 6px; }
+            .person { flex: 1 1 180px; padding: 5px 10px; gap: 8px; border-radius: 10px; }
+            .bild { width: 30px; height: 30px; font-size: 13px; border-width: 2px; }
+            .name { font-size: 1em; }
+            .adresse { display: none; }
+            .ortung { font-size: .8em; }
+            .person .text { min-width: 0; }
+            .kopf { flex-wrap: nowrap; min-width: 0; gap: 6px; }
+            .name { white-space: nowrap; }
+            .status { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .92em; }
+            .statusbar { padding-top: 1px; padding-bottom: 1px; font-size: 12px; }
+            .statusbar .infos { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          }
 `, '.wa-live')}</style>
-        <div class="wa-live">
+        <div class="wa-live${c.height_mode === 'fill' ? ' flach' : ''}">
           ${title ? `<div class="wa-titel">${S.escapeHtml(title)}</div>` : ''}
           <div class="bereich">
             <div class="wa-map"></div>

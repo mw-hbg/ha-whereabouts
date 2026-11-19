@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.2
 
 - Light or dark: the choice is gone – the dashboard and the maps always follow Home
   Assistant. Under CARTO only the styles per map for light and dark mode remain

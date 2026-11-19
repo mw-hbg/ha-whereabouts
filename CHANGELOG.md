@@ -5,12 +5,36 @@
 - Phone: the height of the dashboard is measured as in 0.4.4 again (0.5.0 left a gap
   at the bottom and still shifted); the status bars no longer add room for the
   home bar.
+- Light or dark: one choice under Views for the whole view of the dashboard (light,
+  dark, like the system, or custom per view); under each map service (Esri,
+  OpenStreetMap, CARTO) the map follows the view or is always light or dark. The
+  former "light or dark" of the map is taken over.
+- Settings: the CARTO key is a sub-area under CARTO (closed while the key works);
+  all controls sit centred in their row and all fields look like Home Assistant's;
+  ⓘ texts with one paragraph per choice; "Import into person" no longer shows an
+  empty field; address sensor per person shows the sensor in use, with a switch
+  "Use own sensor".
+- Profile picture: the crop circle fills the crop area.
+- Maps: with only one map app left, the app opens (not the browser); start and end
+  of a route look alike.
 
 ---
 
 - Handy: Die Höhe des Dashboards wird wieder wie in 0.4.4 gemessen (0.5.0 ließ unten
   eine Lücke und verschob sich trotzdem); die Statusleisten lassen keinen Platz mehr
   für den Home-Balken.
+- Hell oder dunkel: eine Auswahl unter Ansichten für die ganze Ansicht des Dashboards
+  (hell, dunkel, wie System oder benutzerdefiniert je Ansicht); unter jedem
+  Kartendienst (Esri, OpenStreetMap, CARTO) folgt die Karte der Ansicht oder ist immer
+  hell bzw. dunkel. Das bisherige „Hell oder dunkel“ der Karte wird übernommen.
+- Einstellungen: Der CARTO-Schlüssel ist ein Unterbereich unter CARTO (zugeklappt,
+  solange der Schlüssel funktioniert); alle Bedienelemente sitzen mittig in ihrer
+  Zeile und alle Felder sehen aus wie in Home Assistant; ⓘ-Texte mit einem Absatz je
+  Möglichkeit; „Import gehört zu“ zeigt kein leeres Feld mehr; der Adress-Sensor je
+  Person zeigt den genutzten Sensor, mit Schalter „Eigenen Sensor nutzen“.
+- Profilbild: Der Zuschneide-Kreis füllt das Zuschneidefenster.
+- Karten: Ist nur eine Karten-App übrig, öffnet sich die App (nicht der Browser);
+  Start und Ende einer Route sehen gleich aus.
 
 ## 0.5.0
 

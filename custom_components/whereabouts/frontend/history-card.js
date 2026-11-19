@@ -113,7 +113,7 @@ export function defineHistoryCard(S, D) {
         this._start();
         return;
       }
-      const dark = S.isDark(hass, this._config.map_style);
+      const dark = S.mapDark(hass, this._config, 'history');
       if (this._map && dark !== this._dark) this._setTiles(dark);
       if (this._map) this._drawZones();
     }
@@ -448,7 +448,7 @@ export function defineHistoryCard(S, D) {
       S.applyHeight(this, c);
       const personCss = this._persons.map((p) => `
           .personWahl .person.p-${p.key} { --farbe: ${p.color}; }
-          .statusbar .wer.p-${p.key} { color: ${S.readableColor(p.color, S.cardBackground(this._hass))}; }`).join('');
+          .statusbar .wer.p-${p.key} { color: ${S.readableColor(p.color, S.cardBackground(this._hass, this._config.height_mode === 'fill' ? S.viewDark(this._hass, this._config, 'history') : null))}; }`).join('');
       this.innerHTML = `
         ${S.leafletCss()}
         <ha-card class="wa-history${c.height_mode === 'fill' ? ' flach' : ''}" style="height: 100%; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;${c.height_mode === 'fill' ? ' border-radius: 0; border: none; box-shadow: none;' : ''}">
@@ -749,7 +749,7 @@ export function defineHistoryCard(S, D) {
         this._gear = {};
         S.updateGear(this._map, this._gear, this._info, this._t('open_settings'));
         S.compactAttribution(this._map);
-        this._setTiles(S.isDark(this._hass, this._config.map_style));
+        this._setTiles(S.mapDark(this._hass, this._config, 'history'));
         S.watchZoneNames(this._map, mapDiv, this._config);
         this._map.on('zoomend', () => this._simplify());
         this._drawZones();
@@ -1049,23 +1049,15 @@ export function defineHistoryCard(S, D) {
       }
     }
 
-    // Start: white circle with ▶ in the person's colour (dark map: dark circle); end: coloured circle with a flag.
-    // legend = true on a dark map: both dark with light grey outline and sign.
+    // Start (▶) and end (flag) look alike: a circle in the map's background colour (white / dark)
+    // with ring and sign in the person's colour. legend = true: grey instead of the colour.
     _symbol(kind, color, size, legend = false) {
-      const dark = Boolean(this._dark);
-      const inside = dark ? '#2b2d30' : '#fff';
-      const light = '#d0d0d0';
-      let circle;
-      let sign;
-      if (kind === 'end') {
-        const fill = legend && dark ? inside : color;
-        const mark = legend && dark ? light : '#fff';
-        circle = `<circle cx="12" cy="12" r="10.5" fill="${fill}" stroke="${legend && dark ? light : '#fff'}" stroke-width="2"/>`;
-        sign = `<path d="M8.5 6.5v11" stroke="${mark}" stroke-width="1.8" stroke-linecap="round"/><path d="M9.3 6.8h7.2l-1.9 2.6 1.9 2.6H9.3z" fill="${mark}"/>`;
-      } else {
-        circle = `<circle cx="12" cy="12" r="10" fill="${inside}" stroke="${color}" stroke-width="3"/>`;
-        sign = `<path d="M10 7.6v8.8l7-4.4z" fill="${color}"/>`;
-      }
+      const inside = this._dark ? '#2b2d30' : '#fff';
+      const ink = legend && this._dark ? '#d0d0d0' : color;
+      const circle = `<circle cx="12" cy="12" r="10" fill="${inside}" stroke="${ink}" stroke-width="3"/>`;
+      const sign = kind === 'end'
+        ? `<path d="M8.6 6.6v10.8" stroke="${ink}" stroke-width="1.9" stroke-linecap="round"/><path d="M9.4 6.9h7.1l-1.9 2.6 1.9 2.6H9.4z" fill="${ink}"/>`
+        : `<path d="M10 7.6v8.8l7-4.4z" fill="${ink}"/>`;
       return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true">${circle}${sign}</svg>`;
     }
 

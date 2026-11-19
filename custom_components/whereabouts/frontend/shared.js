@@ -14,7 +14,6 @@ export const PALETTE = [
 ];
 
 export const DEFAULTS_MAP = {
-  map_style: 'auto', // auto | light | dark
   tiles: 'esri', // esri | osm | carto
   carto_api_key: '',
   carto_light: 'voyager', // CARTO style in light mode (see CARTO_STYLES)
@@ -125,6 +124,21 @@ export function isDark(hass, style) {
   const themes = hass && hass.themes;
   if (themes && typeof themes.darkMode === 'boolean') return themes.darkMode;
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+// Light or dark of a view of the Whereabouts dashboard: "Light or dark" under Views
+// (auto = like Home Assistant; custom = per view).
+export function viewDark(hass, config, kind) {
+  const mode = (config && config.theme === 'custom' ? config[`theme_${kind}`] : config && config.theme) || 'auto';
+  return mode === 'auto' ? isDark(hass, 'auto') : mode === 'dark';
+}
+
+// Light or dark of the map: per map service like the view, always light or always dark.
+// A card's own "map_style" (card editor) wins.
+export function mapDark(hass, config, kind) {
+  if (config.map_style) return isDark(hass, config.map_style);
+  const mode = config[`map_dark_${config.tiles || 'esri'}`] || 'view';
+  return mode === 'view' ? viewDark(hass, config, kind) : mode === 'dark';
 }
 
 // Replaces the tile layers of `map` (the array `layers` is changed in place
@@ -620,14 +634,16 @@ export function chooserApps(preferred, chosen, os = platform()) {
 // left, that one opens directly.
 export function bindMapLink(a, config, t, lat, lon) {
   const kind = config.map_link || 'google';
-  const href = mapLink(kind, lat, lon);
+  let href = mapLink(kind, lat, lon);
+  const asking = Boolean(href) && config.map_link_choice !== false && touchDevice();
+  const apps = asking ? chooserApps(kind, config.map_link_apps) : [];
+  // Only one app left: a normal link to it (a real tap on a link opens the app on
+  // iPhone; opening it from script would only open the browser).
+  if (apps.length === 1) href = mapLink(apps[0], lat, lon);
   if (href) { a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; } else a.removeAttribute('href');
   a.onclick = (e) => {
-    if (!href || config.map_link_choice === false || !touchDevice()) return;
-    const apps = chooserApps(kind, config.map_link_apps);
-    if (!apps.length) return;
+    if (apps.length < 2) return;
     e.preventDefault();
-    if (apps.length === 1) { window.open(mapLink(apps[0], lat, lon), '_blank', 'noopener'); return; }
     showMapChooser(t, lat, lon, kind, apps);
   };
 }
@@ -777,8 +793,9 @@ export function readableColor(color, background) {
   return lighter ? '#FFFFFF' : '#000000';
 }
 // Background of cards: dark or light theme.
-export function cardBackground(hass) {
-  return hass && hass.themes && hass.themes.darkMode ? '#1C1C1C' : '#FFFFFF';
+export function cardBackground(hass, dark = null) {
+  const isDarkTheme = dark === null ? Boolean(hass && hass.themes && hass.themes.darkMode) : dark;
+  return isDarkTheme ? '#1C1C1C' : '#FFFFFF';
 }
 
 // Below this contrast a pin, route or zone is hard to see on the map. Deliberately lower than

@@ -49,6 +49,8 @@ _PERSON_SETTING = vol.Schema(
     }
 )
 
+THEME_MODES = ["auto", "light", "dark"]
+MAP_DARK_MODES = ["view", "light", "dark"]
 MAP_APPS = ["google", "apple", "osm", "waze", "here"]
 CARTO_STYLES = ["voyager", "voyager_nolabels", "positron", "positron_nolabels", "dark_matter", "dark_matter_nolabels"]
 
@@ -59,14 +61,22 @@ CATEGORIES: dict[str, dict[str, tuple[Any, Any]]] = {
         "view_history": (True, bool),
         "view_settings": (True, bool),
         "start_view": ("live", vol.In(["live", "history", "settings"])),
+        # light or dark for the whole view of the Whereabouts dashboard ("custom": per view)
+        "theme": ("auto", vol.In(["auto", "light", "dark", "custom"])),
+        "theme_live": ("auto", vol.In(THEME_MODES)),
+        "theme_history": ("auto", vol.In(THEME_MODES)),
+        "theme_settings": ("auto", vol.In(THEME_MODES)),
     },
     "persons": {
         "persons": ([], vol.All([_PERSON], vol.Length(max=100))),
         "person_settings": ({}, vol.Schema({_PERSON: _PERSON_SETTING})),
     },
     "map": {
-        "map_style": ("auto", vol.In(["auto", "light", "dark"])),
         "tiles": ("esri", vol.In(["esri", "osm", "carto"])),
+        # per map service: light/dark like the view, or always light / always dark
+        "map_dark_esri": ("view", vol.In(MAP_DARK_MODES)),
+        "map_dark_osm": ("view", vol.In(MAP_DARK_MODES)),
+        "map_dark_carto": ("view", vol.In(MAP_DARK_MODES)),
         "map_link": ("google", vol.In(["google", "apple", "osm", "waze", "here", "none"])),
         "map_link_choice": (True, bool),
         # which map apps are offered when choosing is on
@@ -178,6 +188,13 @@ class Settings:
             zones = values.get("zones")
             if isinstance(zones, dict) and "show_zones" in zones:
                 zones["zones_in"] = "both" if zones.pop("show_zones") else "none"
+            # 0.5.1: "light or dark" of the map -> per map service ("auto" = like the view)
+            maps = values.get("map")
+            if isinstance(maps, dict) and "map_style" in maps:
+                style = maps.pop("map_style")
+                if style in ("light", "dark"):
+                    for service in ("esri", "osm", "carto"):
+                        maps[f"map_dark_{service}"] = style
         self.data = data
         self._prune()
 

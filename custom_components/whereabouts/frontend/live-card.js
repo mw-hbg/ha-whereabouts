@@ -65,7 +65,7 @@ export function defineLiveCard(S) {
         return;
       }
       if (!this._ready) return;
-      const dark = S.isDark(hass, this._config.map_style);
+      const dark = S.mapDark(hass, this._config, 'live');
       if (this._map && dark !== this._dark) this._setTiles(dark);
       if (this._changed()) this._update();
     }
@@ -212,7 +212,7 @@ export function defineLiveCard(S) {
       this.style.display = 'block';
       S.applyHeight(this, c);
       // Colour as text: adjusted where it would not read on its background (the setting stays).
-      const cardBg = S.cardBackground(this._hass);
+      const cardBg = S.cardBackground(this._hass, this._config.height_mode === 'fill' ? S.viewDark(this._hass, this._config, 'live') : null);
       const personCss = this._persons.map((p) => `.wa-live .p-${p.key} { --farbe: ${p.color}; --schrift: ${S.readableColor(p.color, '#F4F4F4')};
           --schrift-leiste: ${S.readableColor(p.color, cardBg)}; }
         .wa-live.dark .p-${p.key} { --schrift: ${S.readableColor(p.color, '#26282B')}; }`).join('\n');
@@ -444,7 +444,7 @@ export function defineLiveCard(S) {
         this._gear = {};
         S.updateGear(this._map, this._gear, this._info, this._t('open_settings'));
         S.compactAttribution(this._map);
-        this._setTiles(S.isDark(this._hass, this._config.map_style));
+        this._setTiles(S.mapDark(this._hass, this._config, 'live'));
         ['dragstart', 'zoomstart'].forEach((ev) => this._map.on(ev, () => { if (!this._programmatic) this._setFollow(false); }));
         S.watchZoneNames(this._map, mapDiv, this._config);
         // Pins close together on screen become one pin: group again after zooming.

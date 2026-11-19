@@ -493,3 +493,15 @@ async def test_image_fetch_refuses_local_addresses(hass: HomeAssistant, hass_cli
     for url in ("http://127.0.0.1/x.png", "http://192.168.0.1/x.png", "file:///etc/passwd", "ftp://example.com/a"):
         response = await client.get("/api/whereabouts/image", params={"url": url})
         assert response.status == 400, url
+
+
+async def test_map_style_becomes_per_service(hass: HomeAssistant, hass_storage, hass_admin_user):
+    hass_storage["whereabouts.settings"] = {
+        "version": 1,
+        "key": "whereabouts.settings",
+        "data": {"defaults": {}, "users": {OTHER: {"map": {"map_style": "dark", "tiles": "osm"}}}},
+    }
+    entry = await _setup(hass, hass_admin_user.id)
+    own = entry.runtime_data.settings.own(OTHER)["map"]
+    assert "map_style" not in own
+    assert own["map_dark_osm"] == "dark" and own["map_dark_esri"] == "dark" and own["map_dark_carto"] == "dark"

@@ -16,10 +16,11 @@ const PERSONAL = [
   { id: 'views', icon: 'mdi:tab', weight: 'main', fields: [
     { key: 'view_live', sel: B }, { key: 'view_history', sel: B }, { key: 'view_settings', sel: B },
     { key: 'start_view', sel: (t) => sel(['live', 'history', 'settings'].map((v) => ({ value: v, label: t(`opt_view_${v}`) }))) },
+    { key: 'theme', sel: (t) => sel(['auto', 'light', 'dark', 'custom'].map((v) => ({ value: v, label: t(`theme_${v}`) }))), redraw: true },
+    { key: 'theme_views', custom: 'themes' },
   ] },
   { id: 'persons', icon: 'mdi:account-multiple', weight: 'main', custom: 'persons' },
   { id: 'map', icon: 'mdi:map', weight: 'main', fields: [
-    { key: 'map_style', sel: (t) => sel(['auto', 'light', 'dark'].map((v) => ({ value: v, label: t(`ed_style_${v}`) }))) },
     { key: 'tiles', custom: 'tiles' },
     { key: 'map_link', sel: (t) => sel(['google', 'apple', 'osm', 'waze', 'here', 'none'].map((v) => ({ value: v, label: t(`ed_link_${v}`) }))) },
     { key: 'map_link_choice', sel: B },
@@ -277,11 +278,12 @@ const CSS = `
                     display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
   .wa-set .stil a:hover { text-decoration: underline; }
   .wa-set .stil a ha-icon { --mdc-icon-size: 16px; }
-  .wa-set .schluessel { margin: -2px 0 4px 30px; padding: 10px 12px; border-radius: 10px; background: var(--secondary-background-color);
-                        display: flex; flex-direction: column; gap: 8px; }
-  .wa-set .schluessel .reihe { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .wa-set .schluessel .reihe input { flex: 1 1 220px; }
-  .wa-set .schluessel .kopfzeile { display: flex; align-items: center; gap: 4px; font-size: 14px; font-weight: 500; }
+  .wa-set .unterpunkte { margin: 0 0 4px 30px; }
+  .wa-set .unterpunkte:empty { display: none; }
+  .wa-set .unterpunkte details.unter { border-top: none; }
+  .wa-set .unterpunkte details.unter > summary { padding: 6px 12px; }
+  .wa-set .schluesselreihe { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .wa-set .schluesselreihe .augen { flex: 1 1 220px; }
   .wa-set .zonen { grid-column: 1 / -1; display: flex; flex-direction: column; }
   .wa-set .zonenzeile { display: flex; align-items: center; gap: 10px; padding: 6px 0; flex-wrap: wrap; border-top: 1px solid var(--divider-color); }
   .wa-set .zonenzeile:first-child { border-top: none; }
@@ -331,6 +333,7 @@ const CSS = `
                             background: var(--secondary-background-color); }
   .wa-set .benutzer .kopf b { flex: 1 1 auto; font-weight: 500; }
   .wa-set .benutzer select { width: auto; }
+  .wa-set .benutzer select.ein { height: 40px; }
   .wa-set .benutzer table { width: 100%; border-collapse: collapse; font-size: 14px; }
   .wa-set .benutzer th, .wa-set .benutzer td { text-align: left; padding: 8px 10px; border-top: 1px solid var(--divider-color); vertical-align: middle; }
   .wa-set .benutzer th { font-weight: 500; color: var(--secondary-text-color); font-size: 13px; }
@@ -358,6 +361,19 @@ const CSS = `
   .wa-set .verwaltet { padding: 40px 16px; text-align: center; color: var(--secondary-text-color); font-size: 15px; }
   .wa-set .verwaltet ha-icon { --mdc-icon-size: 40px; display: block; margin: 0 auto 12px; }
   .wa-set .dialog ul { margin: 8px 0; padding-left: 20px; font-size: 14px; color: var(--primary-text-color); }
+  /* Every control sits centred next to its label; fields look like Home Assistant's (filled, line below, same height) */
+  .wa-set .zeile { align-items: center; }
+  .wa-set .steuer { align-items: center; align-self: center; }
+  .wa-set .steuer.schalter { justify-content: flex-end; }
+  .wa-set .steuer ha-switch { margin: 0 4px; }
+  .wa-set input.ein, .wa-set select.ein, .wa-set .mehrfach > button {
+    height: 56px; box-sizing: border-box; padding: 0 12px; font-size: 16px; border: none; border-radius: 4px 4px 0 0;
+    border-bottom: 1px solid var(--mdc-text-field-idle-line-color, rgba(127,127,127,.6));
+    background: var(--mdc-text-field-fill-color, var(--input-fill-color, rgba(127,127,127,.08))); color: var(--primary-text-color); }
+  .wa-set input.ein:focus, .wa-set select.ein:focus, .wa-set .mehrfach > button:focus { outline: none; border-bottom: 2px solid var(--primary-color); }
+  .wa-set input[type="color"].ein { height: 56px; padding: 8px; }
+  .wa-set .bildwahl .ablage-klein { min-height: 56px; box-sizing: border-box; }
+  .wa-set .person .zweite select.ein { height: 56px; }
   /* Empty placeholders (drafts, success, hints) take no room */
   .wa-set main > div:empty { display: none; }
   /* Own value: blue dot before the name, arrow back to the standard; afterwards "Restore" with a running ring */
@@ -430,7 +446,7 @@ const CSS = `
                        background: #222; touch-action: none; cursor: grab; user-select: none; }
   .wa-set .zuschnitt canvas { display: block; width: 100%; height: 100%; }
   .wa-set .zuschnitt .maske { position: absolute; inset: 0; pointer-events: none;
-                              background: radial-gradient(circle at center, transparent 0 44%, rgba(0,0,0,.55) 44.4%); }
+                              background: radial-gradient(circle closest-side at center, transparent 99.5%, rgba(0,0,0,.55) 100%); }
   .wa-set .zoomzeile { display: flex; align-items: center; gap: 10px; margin: 12px auto 0; max-width: 280px; }
   .wa-set .zoomzeile input { flex: 1 1 auto; accent-color: var(--primary-color); }
   /* Users: one table */
@@ -1092,7 +1108,7 @@ export function defineSettingsPage(S, D) {
           const weak = ids.filter((x) => this._contrastHint(colorOf(x))).length;
           return `${t('sum_persons', { n: ids.length, of: all.length })}${weak ? ` · ${t('sum_contrast', { n: weak })}` : ''}`;
         }
-        case 'map': return `${t(`ed_tiles_${v.tiles}`)} · ${t(`ed_style_${v.map_style}`)}`;
+        case 'map': return `${t(`ed_tiles_${v.tiles}`)} · ${t(`map_dark_${v[`map_dark_${v.tiles}`] || 'view'}`)}`;
         case 'zones': {
           const zones = this._zoneList();
           const hidden = zones.filter((z) => (v.hidden_zones || []).includes(z.entity_id)).length;
@@ -1360,16 +1376,22 @@ export function defineSettingsPage(S, D) {
         if (f.custom === 'tiles') row = this._tiles(c.id);
         else if (f.custom === 'zones') row = this._zones(c.id);
         else if (f.custom === 'apps') row = this._apps(c.id);
+        else if (f.custom === 'themes') {
+          row = this._themes(c.id);
+          if (!row) return;
+        }
         else {
           const fixed = locked || this._fixedKey(c.id, f.key);
-          row = this._row(f, values[f.key], fixed, (value) => this._savePersonalChecked(c.id, f.key, value),
+          row = this._row(f, values[f.key], fixed, (value) => this._savePersonalChecked(c.id, f.key, value)
+            .then((ok) => { if (ok && f.redraw) this._rerenderCategory(c.id); return ok; }),
             { kind: 'personal', scope: this._scope, user: this._user && this._user.id, category: c.id, key: f.key, label: t(`st_${f.key}`) });
           if (fixed && !locked) row.classList.add('fest');
         }
         row.dataset.key = f.key;
         if (f.needs) row.dataset.needs = f.needs;
         if (f.hideOff) row.dataset.verstecken = '1';
-        this._fieldLockButton(row, c.id, f.custom === 'tiles' ? ['tiles'] : f.custom === 'zones' ? ['hidden_zones', 'zone_colors'] : f.custom === 'apps' ? ['map_link_apps'] : [f.key]);
+        this._fieldLockButton(row, c.id, f.custom === 'tiles' ? ['tiles'] : f.custom === 'zones' ? ['hidden_zones', 'zone_colors']
+          : f.custom === 'apps' ? ['map_link_apps'] : f.custom === 'themes' ? ['theme_live', 'theme_history', 'theme_settings'] : [f.key]);
         box.appendChild(row);
       });
       this._applyNeeds(c.id);
@@ -1627,6 +1649,14 @@ export function defineSettingsPage(S, D) {
     _control(selector, field, value, disabled, emit) {
       const shown = field.color ? hexToRgb(value) : value;
       const out = (v) => emit(field.color ? rgbToHex(v) : v);
+      // Switches: Home Assistant's switch itself (sits centred in the row, no extra space)
+      if ('boolean' in selector && customElements.get('ha-switch')) {
+        const el = document.createElement('ha-switch');
+        el.checked = Boolean(value);
+        el.disabled = disabled;
+        el.addEventListener('change', (e) => { e.stopPropagation(); out(el.checked); });
+        return el;
+      }
       if (this._haSelector) {
         const el = document.createElement('ha-selector');
         el.hass = this._hass;
@@ -1707,7 +1737,7 @@ export function defineSettingsPage(S, D) {
         if (info.dataset.verbunden) return;
         info.dataset.verbunden = '1';
         info.addEventListener('click', () => {
-          const text = info.closest('.zeile, .person, .schluessel').querySelector('.infotext');
+          const text = info.closest('.zeile, .person').querySelector('.infotext');
           text.hidden = !text.hidden;
           info.setAttribute('aria-expanded', text.hidden ? 'false' : 'true');
         });
@@ -1769,7 +1799,7 @@ export function defineSettingsPage(S, D) {
       this._applyNeeds(category);
       this._updateSummary(category);
       this._colorWarnings(category);
-      if (category === 'map' && key === 'map_style') { this._rerenderCategory('persons'); this._rerenderCategory('zones'); }
+      if (category === 'map' && key.startsWith('map_dark_')) { this._rerenderCategory('persons'); this._rerenderCategory('zones'); }
       return true;
     }
 
@@ -2155,16 +2185,16 @@ export function defineSettingsPage(S, D) {
             ctx.fillRect(0, 0, SIZE, SIZE);
             ctx.drawImage(img, view.x, view.y, img.width * view.scale, img.height * view.scale);
           };
-          // keep the circle covered
+          // keep the circle (the whole crop area) covered
           const clamp = () => {
             const w = img.width * view.scale;
             const h = img.height * view.scale;
-            const r = SIZE * 0.44;
+            const r = SIZE / 2;
             view.x = Math.min(SIZE / 2 - r, Math.max(SIZE / 2 + r - w, view.x));
             view.y = Math.min(SIZE / 2 - r, Math.max(SIZE / 2 + r - h, view.y));
           };
           const zoomTo = (scale, cx = SIZE / 2, cy = SIZE / 2) => {
-            const min = (SIZE * 0.88) / Math.min(img.width, img.height);
+            const min = SIZE / Math.min(img.width, img.height);
             const next = Math.max(min, Math.min(min * 8, scale));
             view.x = cx - ((cx - view.x) * next) / view.scale;
             view.y = cy - ((cy - view.y) * next) / view.scale;
@@ -2172,7 +2202,7 @@ export function defineSettingsPage(S, D) {
             clamp();
             draw();
           };
-          const minScale = (SIZE * 0.88) / Math.min(img.width, img.height);
+          const minScale = SIZE / Math.min(img.width, img.height);
           const result = this._dialog(`<h3>${esc(t('picture_crop'))}</h3><div class="text">${esc(t('picture_crop_text'))}</div>
             <div class="zuschnitt" style="margin-top:12px"><canvas width="${SIZE}" height="${SIZE}"></canvas><div class="maske"></div></div>
             <div class="zoomzeile"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon><input type="range" class="zoom" min="0" max="100" value="${Math.round(((fit / minScale - 1) / 7) * 100)}" aria-label="${esc(t('picture_zoom'))}"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></div>`,
@@ -2181,7 +2211,7 @@ export function defineSettingsPage(S, D) {
             out.width = 256;
             out.height = 256;
             const ctx = out.getContext('2d');
-            const r = SIZE * 0.44;
+            const r = SIZE / 2;
             const factor = 256 / (2 * r);
             ctx.fillStyle = '#fff';
             ctx.fillRect(0, 0, 256, 256);
@@ -2226,7 +2256,7 @@ export function defineSettingsPage(S, D) {
       });
     }
 
-    // --- map style, CARTO styles and the CARTO key --------------------------------------------------
+    // --- map service; under each one: light/dark (CARTO: styles and key) as sub-areas ------------------
     _tiles(category) {
       const t = this._t;
       const locked = this._locked(category) || this._fixedKey(category, 'tiles');
@@ -2242,7 +2272,7 @@ export function defineSettingsPage(S, D) {
               <span class="name">${esc(t(`ed_tiles_${v}`))}${v === 'carto' ? '<span class="api-status"></span>' : ''}</span>
               <span class="klein">${esc(t(`tiles_note_${v}`))}</span>
               <a href="${TILE_LINKS[v]}" target="_blank" rel="noopener noreferrer"><ha-icon icon="mdi:open-in-new"></ha-icon>${esc(t('tiles_examples'))}</a>
-            </label>${v === 'carto' ? '<div class="schluessel"></div>' : ''}`).join('')}
+            </label><div class="unterpunkte" data-src="${v}"></div>`).join('')}
         </div>`;
       this._infoToggle(row);
       row.querySelectorAll('.stil a').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
@@ -2251,18 +2281,29 @@ export function defineSettingsPage(S, D) {
         const ok = await this._savePersonal(category, 'tiles', input.value);
         if (!ok) { this._fillPersonal(PERSONAL.find((c) => c.id === category)); return; }
         row.querySelectorAll('.stil').forEach((l) => l.classList.toggle('gewaehlt', l.querySelector('input').checked));
-        stylesHolder.hidden = input.value !== 'carto';
-        keyBox.hidden = input.value !== 'carto' && this._keyState !== 'bad' && this._keyState !== 'none';
       }));
-      const keyBox = row.querySelector('.schluessel');
-      this._cartoKey(keyBox, row.querySelector('.api-status'));
-      keyBox.hidden = values.tiles !== 'carto' && this._keyState !== 'bad' && this._keyState !== 'none';
-      // Which CARTO style in which map, light and dark: a sub-area, closed at the start
-      const stylesHolder = document.createElement('div');
-      stylesHolder.hidden = values.tiles !== 'carto';
+      const modeField = (src) => ({ key: `map_dark_${src}`, sel: (tt) => sel(['view', 'light', 'dark'].map((v) => ({ value: v, label: tt(`map_dark_${v}`) }))) });
+      const modeRow = (src) => {
+        const f = modeField(src);
+        const r = this._row(f, values[f.key], locked || this._fixedKey(category, f.key),
+          (value) => this._savePersonal(category, f.key, value).then((ok) => { this._redrawCategory(category); return ok; }),
+          { kind: 'personal', scope: this._scope, user: this._user && this._user.id, category, key: f.key, label: t(`st_${f.key}`) });
+        r.dataset.key = f.key;
+        r.classList.add('innen-zeile');
+        this._fieldLockButton(r, category, [f.key]);
+        return r;
+      };
+      ['esri', 'osm'].forEach((src) => {
+        const sub = this._subsection(`sub_dark_${src}`, t('sub_dark'), t(`map_dark_${values[`map_dark_${src}`] || 'view'}`));
+        sub.inner.appendChild(modeRow(src));
+        row.querySelector(`.unterpunkte[data-src="${src}"]`).appendChild(sub.el);
+      });
+      // CARTO: light/dark and the styles per map, then the key
       const label = (v) => t(`ed_carto_${v}`);
+      const holder = row.querySelector('.unterpunkte[data-src="carto"]');
       const sub = this._subsection('sub_carto', t('sub_carto'),
-        t('sum_carto', { live: label(values.carto_live_light), history: label(values.carto_history_light) }));
+        `${t(`map_dark_${values.map_dark_carto || 'view'}`)} · ${t('sum_carto', { live: label(values.carto_live_light), history: label(values.carto_history_light) })}`);
+      sub.inner.appendChild(modeRow('carto'));
       const grid = document.createElement('div');
       grid.className = 'stilraster';
       grid.innerHTML = `<span class="kopf leer"></span><span class="kopf spalte">${esc(t('carto_light'))}</span><span class="kopf spalte">${esc(t('carto_dark'))}</span>`;
@@ -2287,14 +2328,14 @@ export function defineSettingsPage(S, D) {
         });
       });
       sub.inner.appendChild(grid);
-      stylesHolder.appendChild(sub.el);
-      row.appendChild(stylesHolder);
+      holder.appendChild(sub.el);
+      this._cartoKey(holder, row.querySelector('.api-status'));
       return row;
     }
 
-    // Administrators: the CARTO key. Open field only without a key; a valid key: "API ✓" next to CARTO
-    // and "Change key"; a refused key: "API ✗" and the field opens.
-    _cartoKey(box, badge) {
+    // The CARTO key as a sub-area under CARTO (like the styles). Closed while the key works;
+    // open without a key or when CARTO refuses it. "API ✓/✗" next to the name CARTO.
+    _cartoKey(holder, badge) {
       const t = this._t;
       const d = this._data;
       const setBadge = () => {
@@ -2303,8 +2344,14 @@ export function defineSettingsPage(S, D) {
         badge.innerHTML = state === 'ok' ? `<span class="api ok" title="${esc(t('carto_key_ok'))}">API ✓</span>`
           : state === 'bad' ? `<span class="api schlecht" title="${esc(t('carto_key_rejected'))}">API ✗</span>` : '';
       };
+      const stateText = () => ({
+        ok: t('carto_key_ok'), bad: t('carto_key_rejected'), checking: t('carto_key_checking'),
+        none: this._admin ? t('carto_key_none') : t('carto_key_missing'), unchecked: t('carto_key_unchecked'),
+      }[this._keyState] || (d.carto_key_set ? t('carto_key_set') : t('carto_key_missing')));
       if (!this._admin) {
-        box.innerHTML = `<span class="klein">${esc(d.carto_key_set ? t('carto_key_set') : t('carto_key_missing'))}</span>`;
+        const sub = this._subsection('sub_key', t('st_carto_api_key'), d.carto_key_set ? t('carto_key_set') : t('carto_key_missing'));
+        sub.inner.innerHTML = `<div class="zeile breit innen-zeile" style="border-top:none"><span class="klein">${esc(d.carto_key_set ? t('carto_key_set') : t('carto_key_missing'))}</span></div>`;
+        holder.appendChild(sub.el);
         return;
       }
       const current = d.admin.options.carto_api_key || '';
@@ -2314,23 +2361,24 @@ export function defineSettingsPage(S, D) {
         this._checkKey(null).then(() => { setBadge(); this._redrawCategory('map'); });
       }
       setBadge();
-      const open = !current || this._keyState === 'bad' || this._keyOpen;
-      box.innerHTML = `<div class="kopfzeile">${esc(t('st_carto_api_key'))}<span class="marker" data-opt-key="1"></span>
-          <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button>
-          ${open ? '' : `<button class="knopf aendern" type="button" style="margin-left:auto"><ha-icon icon="mdi:key-change"></ha-icon>${esc(t('carto_change_key'))}</button>`}</div>
+      const sub = this._subsection('sub_key', t('st_carto_api_key'), stateText(), this._keyState === 'bad');
+      if (!current || this._keyState === 'bad') sub.el.open = true;
+      holder.appendChild(sub.el);
+      const box = document.createElement('div');
+      box.className = 'zeile breit innen-zeile';
+      box.style.borderTop = 'none';
+      box.innerHTML = `<div class="beschriftung"><span>${esc(t('st_carto_api_key'))}</span><span class="marker" data-opt-key="1"></span>
+          <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
         <div class="infotext" hidden>${rich(t('si_carto_api_key'))}</div>
-        <div class="feldbereich"${open ? '' : ' hidden'}>
-        <div class="reihe">
+        <div class="schluesselreihe">
           <span class="augen"><input class="ein schluesselfeld" type="password" autocomplete="off" spellcheck="false" placeholder="cb1_…" value="${esc(current)}" aria-label="${esc(t('st_carto_api_key'))}">
             <button class="knopf rund auge" type="button" data-immer="1" title="${esc(t('show_key'))}" aria-label="${esc(t('show_key'))}"><ha-icon icon="mdi:eye"></ha-icon></button></span>
           <button class="knopf gefahr entfernen" type="button"${current ? '' : ' hidden'}><ha-icon icon="mdi:delete-outline"></ha-icon>${esc(t('carto_remove'))}</button>
         </div>
-        <div class="reihe"><span class="klein status ${this._keyState === 'bad' ? 'schlecht' : this._keyState === 'ok' ? 'ok' : ''}">${esc(this._keyState === 'bad' ? t('carto_key_rejected') : this._keyState === 'checking' ? t('carto_key_checking') : this._keyState === 'ok' ? t('carto_key_ok') : '')}</span>
-          <a class="verweis" style="margin-left:auto" href="https://carto.com/basemaps/apikey/" target="_blank" rel="noopener noreferrer"><ha-icon icon="mdi:open-in-new"></ha-icon>${esc(t('carto_get_key'))}</a></div>
-        </div>`;
+        <div class="schluesselreihe"><span class="klein status ${this._keyState === 'bad' ? 'schlecht' : this._keyState === 'ok' ? 'ok' : ''}">${esc(current ? stateText() : '')}</span>
+          <a class="verweis" style="margin-left:auto" href="https://carto.com/basemaps/apikey/" target="_blank" rel="noopener noreferrer"><ha-icon icon="mdi:open-in-new"></ha-icon>${esc(t('carto_get_key'))}</a></div>`;
+      sub.inner.appendChild(box);
       this._infoToggle(box);
-      const change = box.querySelector('.aendern');
-      if (change) change.addEventListener('click', () => { this._keyOpen = true; this._cartoKey(box, badge); box.querySelector('.schluesselfeld').focus(); });
       const input = box.querySelector('.schluesselfeld');
       const eye = box.querySelector('.auge');
       const status = box.querySelector('.status');
@@ -2343,13 +2391,13 @@ export function defineSettingsPage(S, D) {
         if (on) this._eyeTimer = setTimeout(() => show(false), 10000);
       };
       eye.addEventListener('click', () => show(input.type === 'password'));
-      const holder = document.createElement('div');
-      box.querySelector('.feldbereich').appendChild(holder);
+      const saver = document.createElement('div');
+      saver.style.gridColumn = '1 / -1';
+      box.appendChild(saver);
       const store = async (key) => {
         const ok = await this._saveOption({ key: 'carto_api_key', text: true }, key);
         if (!ok) return false;
         d.carto_key_set = Boolean(key);
-        this._keyOpen = false;
         this._keyState = key ? 'checking' : 'none';
         input.value = key;
         remove.hidden = !key;
@@ -2359,7 +2407,7 @@ export function defineSettingsPage(S, D) {
         if (key) this._checkKey(status).then(() => { setBadge(); setTimeout(() => this._redrawCategory('map'), 1500); });
         return true;
       };
-      const savable = this._savable(holder, {
+      const savable = this._savable(saver, {
         id: 'option::::carto_api_key',
         label: t('st_carto_api_key'),
         initial: current,
@@ -2371,7 +2419,7 @@ export function defineSettingsPage(S, D) {
         },
       });
       savable.reset = (v) => { input.value = v; };
-      savable.focus = () => input.focus();
+      savable.focus = () => { sub.el.open = true; input.focus(); };
       input.addEventListener('input', () => { show(true); savable.set(input.value.trim()); });
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); savable.save(); } });
       remove.addEventListener('click', async () => {
@@ -2408,6 +2456,31 @@ export function defineSettingsPage(S, D) {
       if (this._keyState === 'ok') { status.className = 'klein status ok'; status.textContent = t('carto_key_ok'); return; }
       status.className = 'klein status schlecht';
       status.textContent = this._keyState === 'bad' ? t('carto_key_rejected') : t('carto_key_unchecked');
+    }
+
+    // "Custom" light/dark: one choice per view, in a sub-area (only shown with "custom").
+    _themes(category) {
+      const t = this._t;
+      const values = this._values(category);
+      if (values.theme !== 'custom') return null;
+      const locked = this._locked(category);
+      const row = document.createElement('div');
+      row.className = 'zeile breit';
+      row.style.padding = '0';
+      const names = ['live', 'history', 'settings'].map((v) => `${t(`opt_view_${v}`)}: ${t(`theme_${values[`theme_${v}`] || 'auto'}`)}`);
+      const sub = this._subsection('sub_themes', t('sub_themes'), names.join(' · '));
+      sub.el.open = true;
+      ['live', 'history', 'settings'].forEach((view) => {
+        const key = `theme_${view}`;
+        const f = { key, sel: (tt) => sel(['auto', 'light', 'dark'].map((v) => ({ value: v, label: tt(`theme_${v}`) }))) };
+        const r = this._row(f, values[key], locked || this._fixedKey(category, key), (value) => this._savePersonal(category, key, value),
+          { kind: 'personal', scope: this._scope, user: this._user && this._user.id, category, key, label: t(`st_${key}`) });
+        r.dataset.key = key;
+        r.classList.add('innen-zeile');
+        sub.inner.appendChild(r);
+      });
+      row.appendChild(sub.el);
+      return row;
     }
 
     // Map apps offered on phones and tablets: a field with ticks (at least one).
@@ -2458,7 +2531,10 @@ export function defineSettingsPage(S, D) {
     // Too little contrast against the map backgrounds in use (light and/or dark)? Text of the hint, or ''.
     _contrastHint(color) {
       const t = this._t;
-      const style = (this._values('map') || {}).map_style || 'auto';
+      const maps = this._values('map') || {};
+      const views = this._values('views') || {};
+      let style = maps[`map_dark_${maps.tiles || 'esri'}`] || 'view';
+      if (style === 'view') style = views.theme === 'light' || views.theme === 'dark' ? views.theme : 'auto';
       const modes = style === 'auto' ? ['light', 'dark'] : [style];
       const bad = modes.filter((m) => S.contrastRatio(color, S.MAP_BACKGROUNDS[m]) < S.MIN_MAP_CONTRAST);
       if (!bad.length) return '';
@@ -2871,49 +2947,68 @@ export function defineSettingsPage(S, D) {
       this._infoToggle(intro);
       sub.inner.appendChild(intro);
       if (!persons.length) return;
+      const all = address.sensors.map((x) => ({ value: x.entity_id, label: `${x.name} (${x.entity_id})` }));
+      const nameOf = (id) => (address.sensors.find((x) => x.entity_id === id) || {}).name || id;
+      const saveSensors = async () => this._saveOption({ key: 'address_sensors' }, sensors);
       persons.forEach((p) => {
         const auto = address.auto[p.entity_id] || {};
-        // the person's own phone first, then all other sensors that deliver addresses
-        const known = address.sensors.filter((x) => x.entity_id !== auto.sensor).map((x) => ({ value: x.entity_id, label: `${x.name} (${x.entity_id})` }));
         const current = sensors[p.entity_id] || '';
-        if (current && current !== auto.sensor && !known.some((o) => o.value === current)) known.unshift({ value: current, label: current });
-        const autoLabel = auto.sensor ? t('address_auto_named', { name: auto.name || auto.sensor }) : t('address_auto');
-        const choices = [{ value: '', label: autoLabel }];
-        if (auto.sensor) choices.push({ value: auto.sensor, label: `${auto.name || auto.sensor} (${auto.sensor})` });
-        choices.push(...known);
-        const field = { key: 'address_sensor', sel: sel(choices), label: p.name, info: t('si_address_sensor_for', { name: p.name }) };
-        const row = this._row(field, current, false, async (value) => {
-          const before = sensors[p.entity_id] || null;
-          sensors[p.entity_id] = value || null;
-          const ok = await this._saveOption({ key: 'address_sensors' }, sensors);
-          if (!ok) sensors[p.entity_id] = before;
+        const own = Boolean(current);
+        // which sensor is used now, or: none -> OpenStreetMap
+        const used = own ? t('sensor_used_own', { name: nameOf(current) })
+          : auto.sensor ? t('sensor_used_auto', { name: auto.name || auto.sensor }) : '';
+        const row = document.createElement('div');
+        row.className = 'zeile schalter-zeile innen-zeile';
+        row.innerHTML = `<div class="beschriftung" style="flex-wrap:wrap"><span>${esc(p.name)}</span><span class="smarke"></span>
+            <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button>
+            <span class="klein" style="flex:1 1 100%">${esc(used)}</span></div>
+          <div class="steuer schalter"><span class="klein" style="margin-right:8px">${esc(t('sensor_own_switch'))}</span></div>
+          <div class="infotext" hidden>${rich(t('si_sensors'))}</div>`;
+        this._infoToggle(row);
+        const toggle = this._control(B, { key: 'own_sensor' }, own, false, async (on) => {
+          sensors[p.entity_id] = on ? (auto.sensor || (all[0] && all[0].value) || null) : null;
+          if (on && !sensors[p.entity_id]) { this._toast(t('sensor_none_available'), true); this._redrawAdmin('addresses'); return false; }
+          const ok = await saveSensors();
+          if (!ok) sensors[p.entity_id] = current || null;
           return ok;
         });
-        row.classList.add('innen-zeile');
-        const holder = document.createElement('span');
-        const label = row.querySelector('.beschriftung');
-        label.insertBefore(holder, label.querySelector('.info'));
-        this._fillMarker(holder, {
-          undoKey: `sensor:${p.entity_id}`,
-          own: Boolean(current),
-          standardText: autoLabel,
-          back: async () => { sensors[p.entity_id] = null; return this._saveOption({ key: 'address_sensors' }, sensors); },
-          restore: async () => { sensors[p.entity_id] = current; return this._saveOption({ key: 'address_sensors' }, sensors); },
-          redraw: () => this._redrawAdmin('addresses'),
-        });
-        if (!current && !auto.sensor) {
+        row.querySelector('.steuer').appendChild(toggle);
+        if (!own && !auto.sensor) {
           const note = document.createElement('div');
           note.className = 'kontrast';
           note.textContent = t('address_auto_missing');
           row.appendChild(note);
-        } else if (!current && !auto.ok) {
+        } else if (!own && !auto.ok) {
           const note = document.createElement('div');
           note.className = 'klein schlecht';
           note.style.gridColumn = '1 / -1';
           note.textContent = t('address_auto_off');
           row.appendChild(note);
         }
+        this._fillMarker(row.querySelector('.smarke'), {
+          undoKey: `sensor:${p.entity_id}`,
+          own,
+          standardText: auto.sensor ? t('sensor_used_auto', { name: auto.name || auto.sensor }) : t('address_auto'),
+          back: async () => { sensors[p.entity_id] = null; return saveSensors(); },
+          restore: async () => { sensors[p.entity_id] = current; return saveSensors(); },
+          redraw: () => this._redrawAdmin('addresses'),
+        });
         sub.inner.appendChild(row);
+        if (own) {
+          const choices = [...all];
+          if (!choices.some((o) => o.value === current)) choices.unshift({ value: current, label: current });
+          const pick = this._row({ key: 'address_sensor', sel: sel(choices), label: t('sensor_choose'), info: t('si_address_sensor_for', { name: p.name }) },
+            current, false, async (value) => {
+              const before = sensors[p.entity_id];
+              sensors[p.entity_id] = value || null;
+              const ok = await saveSensors();
+              if (!ok) sensors[p.entity_id] = before;
+              return ok;
+            });
+          pick.classList.add('innen-zeile');
+          pick.style.borderTop = 'none';
+          sub.inner.appendChild(pick);
+        }
       });
     }
 
@@ -2964,8 +3059,8 @@ export function defineSettingsPage(S, D) {
       this._infoToggle(importHead);
       box.appendChild(importHead);
       box.appendChild(this._row({ key: 'import_person', label: t('import_person'), info: t('si_import_person'),
-        sel: sel([{ value: '', label: t('import_person_file') }, ...d.persons.map((p) => ({ value: p.entity_id, label: p.name }))]) },
-      this._import.person, false, (value) => { this._import.person = value || ''; return true; }));
+        sel: sel([{ value: 'file', label: t('import_person_file') }, ...d.persons.map((p) => ({ value: p.entity_id, label: p.name }))]) },
+      this._import.person || 'file', false, (value) => { this._import.person = value && value !== 'file' ? value : ''; return true; }));
       box.appendChild(this._row({ key: 'import_mode', label: t('import_mode'), info: t('si_import_mode'),
         sel: sel(['merge', 'skip', 'replace'].map((v) => ({ value: v, label: t(`import_mode_${v}`) }))) },
       this._import.mode, false, (value) => { this._import.mode = value || 'merge'; return true; }));

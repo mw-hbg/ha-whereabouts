@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Phone: the height of the dashboard is measured as in 0.4.4 again (0.5.0 left a gap
+  at the bottom and still shifted); the status bars no longer add room for the
+  home bar.
+
+---
+
+- Handy: Die Höhe des Dashboards wird wieder wie in 0.4.4 gemessen (0.5.0 ließ unten
+  eine Lücke und verschob sich trotzdem); die Statusleisten lassen keinen Platz mehr
+  für den Home-Balken.
+
 ## 0.5.0
 
 - Phone: the dashboard no longer shifts at the home bar; the status bars keep clear

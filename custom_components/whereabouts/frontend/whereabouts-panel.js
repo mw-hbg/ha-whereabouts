@@ -118,7 +118,6 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
 
     // After turning the phone the new size arrives in steps: measure again a few times.
     _refit = () => {
-      this._trim = 0;
       this._unshift();
       this._fitHeight();
       requestAnimationFrame(() => this._fitHeight());
@@ -147,32 +146,8 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
       const viewport = window.visualViewport ? window.visualViewport.height : window.innerHeight;
       // Only the visible area counts: Home Assistant's container grows with us and
       // would keep an old height after zooming.
-      const base = Math.floor(viewport - top);
-      this._root.style.height = `${Math.max(200, base - (this._trim || 0))}px`;
-      // iPhone: Home Assistant's page may still scroll by a few pixels (safe area at the home bar)
-      // and then moves the whole page. Shorten the panel by exactly that much.
-      const over = this._overflow();
-      if (over > 0 && (this._trim || 0) + over <= 120) {
-        this._trim = (this._trim || 0) + over;
-        this._root.style.height = `${Math.max(200, base - this._trim)}px`;
-      }
+      this._root.style.height = `${Math.max(200, Math.floor(viewport - top))}px`;
     };
-
-    // How far a container around the panel (or the page) could still scroll down.
-    _overflow() {
-      let most = 0;
-      let el = this.parentElement || (this.getRootNode && this.getRootNode().host) || null;
-      while (el) {
-        if (el.scrollHeight - el.clientHeight > 1) {
-          const style = getComputedStyle(el);
-          if (/(auto|scroll)/.test(style.overflowY)) most = Math.max(most, el.scrollHeight - el.clientHeight);
-        }
-        el = el.parentElement || (el.getRootNode && el.getRootNode().host) || null;
-      }
-      const page = document.scrollingElement;
-      if (page) most = Math.max(most, page.scrollHeight - page.clientHeight);
-      return most;
-    }
 
     async _start() {
       await S.loadTranslations(S.language(this._hass));

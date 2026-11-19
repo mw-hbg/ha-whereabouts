@@ -316,8 +316,7 @@ export function defineLiveCard(S) {
           .statusbar .rest { flex: 0 0 auto; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
           .statusbar .rest[hidden] { display: none; }
           /* Full height (dashboard): keep clear of rounded screen corners and the home bar */
-          .wa-live.flach .statusbar { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right));
-                                      padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
+          .wa-live.flach .statusbar { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
           .neuladen { flex: 0 0 auto; position: relative; width: 34px; height: 34px; border: none; border-radius: 50%;
                       background: transparent; color: var(--primary-text-color, var(--wa-text)); cursor: pointer;
                       display: flex; align-items: center; justify-content: center; padding: 0; }

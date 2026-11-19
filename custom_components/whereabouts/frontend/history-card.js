@@ -595,8 +595,7 @@ export function defineHistoryCard(S, D) {
             .statusbar .rest { flex: 0 0 auto; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
             .statusbar .trenner { margin: 0 6px; opacity: .6; }
             /* Full height (dashboard): keep clear of rounded screen corners and the home bar */
-            .wa-history.flach .statusbar { padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right));
-                                           padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
+            .wa-history.flach .statusbar { padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
             .statusbar.fehler .status { color: var(--error-color, #db4437); }
             .statusbar .wer { font-weight: 600; }
             .statusbar .export { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 500;

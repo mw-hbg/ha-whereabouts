@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1
 
 - Phone: the height of the dashboard is measured as in 0.4.4 again (0.5.0 left a gap
   at the bottom and still shifted); the status bars no longer add room for the

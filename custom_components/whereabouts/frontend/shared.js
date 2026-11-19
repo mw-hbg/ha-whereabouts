@@ -126,19 +126,10 @@ export function isDark(hass, style) {
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
-// Light or dark of a view of the Whereabouts dashboard: "Light or dark" under Views
-// (auto = like Home Assistant; custom = per view).
-export function viewDark(hass, config, kind) {
-  const mode = (config && config.theme === 'custom' ? config[`theme_${kind}`] : config && config.theme) || 'auto';
-  return mode === 'auto' ? isDark(hass, 'auto') : mode === 'dark';
-}
-
-// Light or dark of the map: per map service like the view, always light or always dark.
-// A card's own "map_style" (card editor) wins.
-export function mapDark(hass, config, kind) {
-  if (config.map_style) return isDark(hass, config.map_style);
-  const mode = config[`map_dark_${config.tiles || 'esri'}`] || 'view';
-  return mode === 'view' ? viewDark(hass, config, kind) : mode === 'dark';
+// Light or dark of the map: always like Home Assistant. A card's own
+// "map_style" (card editor) wins.
+export function mapDark(hass, config) {
+  return isDark(hass, (config && config.map_style) || 'auto');
 }
 
 // Replaces the tile layers of `map` (the array `layers` is changed in place
@@ -792,10 +783,9 @@ export function readableColor(color, background) {
   }
   return lighter ? '#FFFFFF' : '#000000';
 }
-// Background of cards: dark or light theme.
-export function cardBackground(hass, dark = null) {
-  const isDarkTheme = dark === null ? Boolean(hass && hass.themes && hass.themes.darkMode) : dark;
-  return isDarkTheme ? '#1C1C1C' : '#FFFFFF';
+// Background of cards: dark or light theme of Home Assistant.
+export function cardBackground(hass) {
+  return hass && hass.themes && hass.themes.darkMode ? '#1C1C1C' : '#FFFFFF';
 }
 
 // Below this contrast a pin, route or zone is hard to see on the map. Deliberately lower than

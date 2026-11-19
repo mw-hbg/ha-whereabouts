@@ -16,8 +16,6 @@ const PERSONAL = [
   { id: 'views', icon: 'mdi:tab', weight: 'main', fields: [
     { key: 'view_live', sel: B }, { key: 'view_history', sel: B }, { key: 'view_settings', sel: B },
     { key: 'start_view', sel: (t) => sel(['live', 'history', 'settings'].map((v) => ({ value: v, label: t(`opt_view_${v}`) }))) },
-    { key: 'theme', sel: (t) => sel(['auto', 'light', 'dark', 'custom'].map((v) => ({ value: v, label: t(`theme_${v}`) }))), redraw: true },
-    { key: 'theme_views', custom: 'themes' },
   ] },
   { id: 'persons', icon: 'mdi:account-multiple', weight: 'main', custom: 'persons' },
   { id: 'map', icon: 'mdi:map', weight: 'main', fields: [
@@ -87,6 +85,10 @@ const rgbToHex = (rgb) => (Array.isArray(rgb) && rgb.length === 3
   ? `#${rgb.map((v) => Math.max(0, Math.min(255, Number(v) || 0)).toString(16).padStart(2, '0')).join('')}`.toUpperCase()
   : undefined);
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+// "Restore own values" after resetting an administration category: category id -> { restore(), until }.
+// Kept outside the page, because Home Assistant may rebuild the page (sidebar entry).
+const OPTION_UNDO = new Map();
+const PAGES = new Set(); // settings pages on screen
 const CARTO_STYLES = ['voyager', 'voyager_nolabels', 'positron', 'positron_nolabels', 'dark_matter', 'dark_matter_nolabels'];
 const CARTO_FIELDS = ['carto_live_light', 'carto_live_dark', 'carto_history_light', 'carto_history_dark'];
 
@@ -532,6 +534,7 @@ export function defineSettingsPage(S, D) {
     }
 
     disconnectedCallback() {
+      PAGES.delete(this);
       if (this._unsub) { this._unsub(); this._unsub = null; }
       if (this._observer) { this._observer.disconnect(); this._observer = null; }
       window.removeEventListener('beforeunload', this._beforeUnload);
@@ -542,6 +545,7 @@ export function defineSettingsPage(S, D) {
     }
 
     connectedCallback() {
+      PAGES.add(this);
       window.addEventListener('beforeunload', this._beforeUnload);
       document.addEventListener('scroll', this._onScroll, { capture: true, passive: true });
       if (this._hass && !this._unsub && this._data) {
@@ -1017,9 +1021,42 @@ export function defineSettingsPage(S, D) {
       </div>`;
     }
 
+    // Administration: "Reset to standard" greyed out when every option has its built-in value;
+    // afterwards 30 s "Restore own values" (like the personal categories).
     _adminFootHtml(c) {
       if (!this._admin || !c.reset) return '';
-      return `<div class="fuss"><button class="knopf gefahr optionen-zurueck" data-kat="${c.id}"><ha-icon icon="mdi:restore"></ha-icon>${esc(this._t('reset_category'))}</button></div>`;
+      const t = this._t;
+      const undo = OPTION_UNDO.get(c.id);
+      if (undo && undo.until > Date.now()) {
+        const left = Math.max(0, 30 - (undo.until - Date.now()) / 1000);
+        return `<div class="fuss"><button class="knopf wiederherstellen opt-wieder" data-kat="${c.id}" data-left="${left}">${this._ringHtml()}<ha-icon icon="mdi:undo"></ha-icon>${esc(t('restore_own_values'))}</button></div>`;
+      }
+      const plain = this._optionsPlain(c);
+      return `<div class="fuss"><button class="knopf gefahr optionen-zurueck" data-kat="${c.id}"${plain ? ` disabled title="${esc(t('all_standard'))}"` : ''}><ha-icon icon="mdi:restore"></ha-icon>${esc(t('reset_category'))}</button></div>`;
+    }
+
+    // All options of an administration category have their built-in value?
+    _optionsPlain(c) {
+      const options = this._data.admin.options || {};
+      const defaults = this._data.admin.option_defaults || {};
+      return c.reset.filter((key) => key in defaults).every((key) => {
+        const f = (c.options || []).find((x) => x.key === key) || {};
+        const norm = (v) => (f.emptyIs && !v ? f.emptyIs : v);
+        return same(norm(options[key]), norm(defaults[key]));
+      });
+    }
+
+    _refreshAdminFoot(id) {
+      const c = ADMIN.find((x) => x.id === id);
+      const card = this.querySelector(`#kat-${id}`);
+      if (!c || !c.reset || !card || !this._data || !this._data.admin) return;
+      const old = card.querySelector('.fuss');
+      const holder = document.createElement('div');
+      holder.innerHTML = this._adminFootHtml(c);
+      const foot = holder.firstElementChild;
+      if (!foot) return;
+      if (old) old.replaceWith(foot); else card.querySelector('.kat-inhalt').appendChild(foot);
+      this._wireFoot(foot);
     }
 
     _refreshFoot(category) {
@@ -1062,11 +1099,34 @@ export function defineSettingsPage(S, D) {
         this._discardIn(c.id);
         this._noteAnchor();
         this._storeView();
+        const options = this._data.admin.options || {};
+        const before = JSON.parse(JSON.stringify(Object.fromEntries(c.reset.filter((k) => k in options).map((k) => [k, options[k]]))));
         if (await this._ws({ type: 'whereabouts/settings/options_reset', keys: c.reset }, true) !== null) {
+          OPTION_UNDO.set(c.id, { restore: () => this._ws({ type: 'whereabouts/settings/options', values: before }, true), until: Date.now() + 30000 });
+          setTimeout(() => {
+            const entry = OPTION_UNDO.get(c.id);
+            if (entry && entry.until <= Date.now()) {
+              OPTION_UNDO.delete(c.id);
+              // the page may have been rebuilt meanwhile: every page on screen
+              PAGES.forEach((page) => page._refreshAdminFoot(c.id));
+            }
+          }, 30100);
           this._setSuccess(t('success_reset', { name }), c.id);
           this._reloadSoon(1200);
         }
       }));
+      root.querySelectorAll('.opt-wieder').forEach((b) => {
+        b.querySelector('.ring').style.animationDelay = `-${b.dataset.left}s`;
+        b.addEventListener('click', async () => {
+          const undo = OPTION_UNDO.get(b.dataset.kat);
+          OPTION_UNDO.delete(b.dataset.kat);
+          b.disabled = true;
+          this._noteAnchor();
+          this._storeView();
+          if (undo) await undo.restore();
+          await this._load();
+        });
+      });
     }
 
     // --- success box (green, stays a few seconds, survives redraws) ----------------------------------
@@ -1108,7 +1168,7 @@ export function defineSettingsPage(S, D) {
           const weak = ids.filter((x) => this._contrastHint(colorOf(x))).length;
           return `${t('sum_persons', { n: ids.length, of: all.length })}${weak ? ` · ${t('sum_contrast', { n: weak })}` : ''}`;
         }
-        case 'map': return `${t(`ed_tiles_${v.tiles}`)} · ${t(`map_dark_${v[`map_dark_${v.tiles}`] || 'view'}`)}`;
+        case 'map': return t(`ed_tiles_${v.tiles}`);
         case 'zones': {
           const zones = this._zoneList();
           const hidden = zones.filter((z) => (v.hidden_zones || []).includes(z.entity_id)).length;
@@ -1376,10 +1436,6 @@ export function defineSettingsPage(S, D) {
         if (f.custom === 'tiles') row = this._tiles(c.id);
         else if (f.custom === 'zones') row = this._zones(c.id);
         else if (f.custom === 'apps') row = this._apps(c.id);
-        else if (f.custom === 'themes') {
-          row = this._themes(c.id);
-          if (!row) return;
-        }
         else {
           const fixed = locked || this._fixedKey(c.id, f.key);
           row = this._row(f, values[f.key], fixed, (value) => this._savePersonalChecked(c.id, f.key, value)
@@ -1391,7 +1447,7 @@ export function defineSettingsPage(S, D) {
         if (f.needs) row.dataset.needs = f.needs;
         if (f.hideOff) row.dataset.verstecken = '1';
         this._fieldLockButton(row, c.id, f.custom === 'tiles' ? ['tiles'] : f.custom === 'zones' ? ['hidden_zones', 'zone_colors']
-          : f.custom === 'apps' ? ['map_link_apps'] : f.custom === 'themes' ? ['theme_live', 'theme_history', 'theme_settings'] : [f.key]);
+          : f.custom === 'apps' ? ['map_link_apps'] : [f.key]);
         box.appendChild(row);
       });
       this._applyNeeds(c.id);
@@ -1799,7 +1855,6 @@ export function defineSettingsPage(S, D) {
       this._applyNeeds(category);
       this._updateSummary(category);
       this._colorWarnings(category);
-      if (category === 'map' && key.startsWith('map_dark_')) { this._rerenderCategory('persons'); this._rerenderCategory('zones'); }
       return true;
     }
 
@@ -1872,6 +1927,7 @@ export function defineSettingsPage(S, D) {
         if (summary) summary.textContent = this._groupSummary(group);
       }
       if (field.key === 'address_sensors' || field.key === 'address_source') this._redrawAdmin('addresses');
+      ADMIN.filter((c) => (c.reset || []).includes(field.key)).forEach((c) => this._refreshAdminFoot(c.id));
       return true;
     }
 
@@ -2282,28 +2338,19 @@ export function defineSettingsPage(S, D) {
         if (!ok) { this._fillPersonal(PERSONAL.find((c) => c.id === category)); return; }
         row.querySelectorAll('.stil').forEach((l) => l.classList.toggle('gewaehlt', l.querySelector('input').checked));
       }));
-      const modeField = (src) => ({ key: `map_dark_${src}`, sel: (tt) => sel(['view', 'light', 'dark'].map((v) => ({ value: v, label: tt(`map_dark_${v}`) }))) });
-      const modeRow = (src) => {
-        const f = modeField(src);
-        const r = this._row(f, values[f.key], locked || this._fixedKey(category, f.key),
-          (value) => this._savePersonal(category, f.key, value).then((ok) => { this._redrawCategory(category); return ok; }),
-          { kind: 'personal', scope: this._scope, user: this._user && this._user.id, category, key: f.key, label: t(`st_${f.key}`) });
-        r.dataset.key = f.key;
-        r.classList.add('innen-zeile');
-        this._fieldLockButton(r, category, [f.key]);
-        return r;
-      };
-      ['esri', 'osm'].forEach((src) => {
-        const sub = this._subsection(`sub_dark_${src}`, t('sub_dark'), t(`map_dark_${values[`map_dark_${src}`] || 'view'}`));
-        sub.inner.appendChild(modeRow(src));
-        row.querySelector(`.unterpunkte[data-src="${src}"]`).appendChild(sub.el);
-      });
-      // CARTO: light/dark and the styles per map, then the key
+      // CARTO: the styles per map and light/dark, then the key
       const label = (v) => t(`ed_carto_${v}`);
       const holder = row.querySelector('.unterpunkte[data-src="carto"]');
       const sub = this._subsection('sub_carto', t('sub_carto'),
-        `${t(`map_dark_${values.map_dark_carto || 'view'}`)} · ${t('sum_carto', { live: label(values.carto_live_light), history: label(values.carto_history_light) })}`);
-      sub.inner.appendChild(modeRow('carto'));
+        t('sum_carto', { live: label(values.carto_live_light), history: label(values.carto_history_light) }));
+      const about = document.createElement('div');
+      about.className = 'zeile breit innen-zeile';
+      about.style.borderTop = 'none';
+      about.innerHTML = `<div class="beschriftung"><span>${esc(t('st_carto_styles'))}</span>
+          <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
+        <div class="infotext" hidden>${rich(t('si_carto_styles'))}</div>`;
+      this._infoToggle(about);
+      sub.inner.appendChild(about);
       const grid = document.createElement('div');
       grid.className = 'stilraster';
       grid.innerHTML = `<span class="kopf leer"></span><span class="kopf spalte">${esc(t('carto_light'))}</span><span class="kopf spalte">${esc(t('carto_dark'))}</span>`;
@@ -2458,31 +2505,6 @@ export function defineSettingsPage(S, D) {
       status.textContent = this._keyState === 'bad' ? t('carto_key_rejected') : t('carto_key_unchecked');
     }
 
-    // "Custom" light/dark: one choice per view, in a sub-area (only shown with "custom").
-    _themes(category) {
-      const t = this._t;
-      const values = this._values(category);
-      if (values.theme !== 'custom') return null;
-      const locked = this._locked(category);
-      const row = document.createElement('div');
-      row.className = 'zeile breit';
-      row.style.padding = '0';
-      const names = ['live', 'history', 'settings'].map((v) => `${t(`opt_view_${v}`)}: ${t(`theme_${values[`theme_${v}`] || 'auto'}`)}`);
-      const sub = this._subsection('sub_themes', t('sub_themes'), names.join(' · '));
-      sub.el.open = true;
-      ['live', 'history', 'settings'].forEach((view) => {
-        const key = `theme_${view}`;
-        const f = { key, sel: (tt) => sel(['auto', 'light', 'dark'].map((v) => ({ value: v, label: tt(`theme_${v}`) }))) };
-        const r = this._row(f, values[key], locked || this._fixedKey(category, key), (value) => this._savePersonal(category, key, value),
-          { kind: 'personal', scope: this._scope, user: this._user && this._user.id, category, key, label: t(`st_${key}`) });
-        r.dataset.key = key;
-        r.classList.add('innen-zeile');
-        sub.inner.appendChild(r);
-      });
-      row.appendChild(sub.el);
-      return row;
-    }
-
     // Map apps offered on phones and tablets: a field with ticks (at least one).
     _apps(category) {
       const t = this._t;
@@ -2528,15 +2550,11 @@ export function defineSettingsPage(S, D) {
       return (this._data.zones || []).filter((z) => !z.passive);
     }
 
-    // Too little contrast against the map backgrounds in use (light and/or dark)? Text of the hint, or ''.
+    // Too little contrast against the light and/or dark map background? Text of the hint, or ''.
     _contrastHint(color) {
       const t = this._t;
-      const maps = this._values('map') || {};
-      const views = this._values('views') || {};
-      let style = maps[`map_dark_${maps.tiles || 'esri'}`] || 'view';
-      if (style === 'view') style = views.theme === 'light' || views.theme === 'dark' ? views.theme : 'auto';
-      const modes = style === 'auto' ? ['light', 'dark'] : [style];
-      const bad = modes.filter((m) => S.contrastRatio(color, S.MAP_BACKGROUNDS[m]) < S.MIN_MAP_CONTRAST);
+      // The maps follow Home Assistant, so both backgrounds count.
+      const bad = ['light', 'dark'].filter((m) => S.contrastRatio(color, S.MAP_BACKGROUNDS[m]) < S.MIN_MAP_CONTRAST);
       if (!bad.length) return '';
       return t(bad.length === 2 ? 'contrast_both' : `contrast_${bad[0]}`);
     }

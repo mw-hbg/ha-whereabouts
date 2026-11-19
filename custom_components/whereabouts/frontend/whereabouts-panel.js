@@ -15,21 +15,6 @@ const CSS = `
   .wa-panel { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; overscroll-behavior: none;
               background: var(--primary-background-color);
               color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, inherit); }
-  /* "Light or dark" under Views: the whole view in a fixed mode, independent of Home Assistant */
-  .wa-panel.wap-dunkel { color-scheme: dark;
-    --primary-background-color: #111111; --secondary-background-color: #282828; --card-background-color: #1c1c1c;
-    --ha-card-background: #1c1c1c; --primary-text-color: #e1e1e1; --secondary-text-color: #9b9b9b; --disabled-text-color: #6f6f6f;
-    --divider-color: rgba(225,225,225,.12); --app-header-background-color: #101e24; --app-header-text-color: #e1e1e1;
-    --mdc-text-field-fill-color: #2a2a2a; --input-fill-color: #2a2a2a; --mdc-text-field-ink-color: #e1e1e1;
-    --mdc-text-field-label-ink-color: #9b9b9b; --mdc-select-fill-color: #2a2a2a; --mdc-select-ink-color: #e1e1e1;
-    --mdc-theme-surface: #1c1c1c; --mdc-theme-text-primary-on-background: #e1e1e1; --code-editor-background-color: #1c1c1c; }
-  .wa-panel.wap-hell { color-scheme: light;
-    --primary-background-color: #fafafa; --secondary-background-color: #e5e5e5; --card-background-color: #ffffff;
-    --ha-card-background: #ffffff; --primary-text-color: #212121; --secondary-text-color: #727272; --disabled-text-color: #bdbdbd;
-    --divider-color: rgba(0,0,0,.12); --app-header-background-color: #03a9f4; --app-header-text-color: #ffffff;
-    --mdc-text-field-fill-color: #f5f5f5; --input-fill-color: #f5f5f5; --mdc-text-field-ink-color: #212121;
-    --mdc-text-field-label-ink-color: #727272; --mdc-select-fill-color: #f5f5f5; --mdc-select-ink-color: #212121;
-    --mdc-theme-surface: #ffffff; --mdc-theme-text-primary-on-background: #212121; }
   .wa-panel .wap-kopf { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; height: var(--header-height, 56px);
                     padding: 0 4px 0 12px; box-sizing: border-box;
                     background: var(--app-header-background-color, var(--primary-color));
@@ -88,19 +73,7 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
       this._hass = hass;
       Object.values(this._pages).forEach((el) => { if (el && el.tagName) el.hass = hass; });
       if (first) this._start();
-      else { this._menuButton(); this._applyTheme(); }
-    }
-
-    // "Light or dark" under Views: auto = nothing to do (like Home Assistant); otherwise the
-    // view gets its own colours - only when they differ from Home Assistant's.
-    _applyTheme() {
-      if (!this._root || !this._info) return;
-      const settings = this._info.settings || {};
-      const view = this._view || 'live';
-      const mode = (settings.theme === 'custom' ? settings[`theme_${view}`] : settings.theme) || 'auto';
-      const haDark = Boolean(this._hass && this._hass.themes && this._hass.themes.darkMode);
-      this._root.classList.toggle('wap-dunkel', mode === 'dark' && !haDark);
-      this._root.classList.toggle('wap-hell', mode === 'light' && haDark);
+      else this._menuButton();
     }
 
     get hass() { return this._hass; }
@@ -299,7 +272,6 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
       const left = this._shown && this._shown !== view ? this._pages[this._shown] : null;
       if (left && left.deactivate) left.deactivate();
       this._view = view;
-      this._applyTheme();
       this._root.querySelectorAll('.wap-reiter button').forEach((b) => {
         const on = b.dataset.view === view;
         b.classList.toggle('wap-aktiv', on);

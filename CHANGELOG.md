@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- Light or dark: the choice is gone – the dashboard and the maps always follow Home
+  Assistant. Under CARTO only the styles per map for light and dark mode remain
+  (for an always dark map, pick a dark style under "Light" as well). Stored values
+  of the former choice are removed.
+- Settings: "Reset to standard" is greyed out in the administration categories
+  (sidebar, recording, addresses) too when everything has its built-in value;
+  afterwards "Restore own values" for 30 s, as in the personal categories.
+
+---
+
+- Hell oder dunkel: Die Auswahl entfällt – das Dashboard und die Karten folgen immer
+  Home Assistant. Unter CARTO bleiben nur die Stile je Karte für den hellen und den
+  dunklen Modus (für eine immer dunkle Karte auch bei „Hell“ einen dunklen Stil
+  wählen). Gespeicherte Werte der bisherigen Auswahl werden entfernt.
+- Einstellungen: „Auf Standard zurücksetzen“ ist auch in den Verwaltungskategorien
+  (Seitenleiste, Aufzeichnung, Adressen) ausgegraut, wenn alles dem eingebauten Wert
+  entspricht; danach 30 s „Eigene Werte wiederherstellen“ wie bei den persönlichen
+  Kategorien.
+
 ## 0.5.1
 
 - Phone: the height of the dashboard is measured as in 0.4.4 again (0.5.0 left a gap

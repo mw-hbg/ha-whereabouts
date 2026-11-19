@@ -113,7 +113,7 @@ export function defineHistoryCard(S, D) {
         this._start();
         return;
       }
-      const dark = S.mapDark(hass, this._config, 'history');
+      const dark = S.mapDark(hass, this._config);
       if (this._map && dark !== this._dark) this._setTiles(dark);
       if (this._map) this._drawZones();
     }
@@ -448,7 +448,7 @@ export function defineHistoryCard(S, D) {
       S.applyHeight(this, c);
       const personCss = this._persons.map((p) => `
           .personWahl .person.p-${p.key} { --farbe: ${p.color}; }
-          .statusbar .wer.p-${p.key} { color: ${S.readableColor(p.color, S.cardBackground(this._hass, this._config.height_mode === 'fill' ? S.viewDark(this._hass, this._config, 'history') : null))}; }`).join('');
+          .statusbar .wer.p-${p.key} { color: ${S.readableColor(p.color, S.cardBackground(this._hass))}; }`).join('');
       this.innerHTML = `
         ${S.leafletCss()}
         <ha-card class="wa-history${c.height_mode === 'fill' ? ' flach' : ''}" style="height: 100%; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;${c.height_mode === 'fill' ? ' border-radius: 0; border: none; box-shadow: none;' : ''}">
@@ -749,7 +749,7 @@ export function defineHistoryCard(S, D) {
         this._gear = {};
         S.updateGear(this._map, this._gear, this._info, this._t('open_settings'));
         S.compactAttribution(this._map);
-        this._setTiles(S.mapDark(this._hass, this._config, 'history'));
+        this._setTiles(S.mapDark(this._hass, this._config));
         S.watchZoneNames(this._map, mapDiv, this._config);
         this._map.on('zoomend', () => this._simplify());
         this._drawZones();

@@ -495,13 +495,24 @@ async def test_image_fetch_refuses_local_addresses(hass: HomeAssistant, hass_cli
         assert response.status == 400, url
 
 
-async def test_map_style_becomes_per_service(hass: HomeAssistant, hass_storage, hass_admin_user):
+async def test_light_dark_settings_are_dropped(hass: HomeAssistant, hass_storage, hass_admin_user):
+    """0.5.2: views and maps follow Home Assistant - old light/dark values go."""
     hass_storage["whereabouts.settings"] = {
         "version": 1,
         "key": "whereabouts.settings",
-        "data": {"defaults": {}, "users": {OTHER: {"map": {"map_style": "dark", "tiles": "osm"}}}},
+        "data": {
+            "defaults": {"views": {"theme": "dark", "start_view": "history"}, "map": {"map_dark_esri": "dark"}},
+            "users": {
+                OTHER: {
+                    "map": {"map_style": "dark", "map_dark_osm": "light", "tiles": "osm"},
+                    "views": {"theme": "custom", "theme_live": "dark"},
+                }
+            },
+            "field_locks": {OTHER: {"views": ["theme", "theme_live"], "map": ["map_dark_carto", "tiles"]}},
+        },
     }
     entry = await _setup(hass, hass_admin_user.id)
-    own = entry.runtime_data.settings.own(OTHER)["map"]
-    assert "map_style" not in own
-    assert own["map_dark_osm"] == "dark" and own["map_dark_esri"] == "dark" and own["map_dark_carto"] == "dark"
+    settings = entry.runtime_data.settings
+    assert settings.own(OTHER) == {"map": {"tiles": "osm"}}
+    assert settings.data["defaults"] == {"views": {"start_view": "history"}}
+    assert settings.field_locks(OTHER) == {"map": ["tiles"]}

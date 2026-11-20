@@ -1,5 +1,5 @@
 // Whereabouts – page in the sidebar: "Where is…?", "Location history" and the settings.
-// The two maps are the same cards as in dashboards; the settings page is settings-page.js.
+// The two maps are the same cards as in dashboards; the settings page is settings-page.js (with its parts settings-*.js).
 
 const query = new URL(import.meta.url).search;
 const load = (name) => import(`./${name}${query}`);
@@ -50,7 +50,7 @@ const MENU_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="curre
   const [S] = await Promise.all([load('shared.js'), load('whereabouts-cards.js')]);
   await Promise.all(['whereabouts-live-card', 'whereabouts-history-card'].map((n) => customElements.whenDefined(n)));
   const [settingsModule, download] = await Promise.all([load('settings-page.js'), load('download.js')]);
-  settingsModule.defineSettingsPage(S, download);
+  await settingsModule.defineSettingsPage(S, download);
 
   class WhereaboutsPanel extends HTMLElement {
     constructor() {

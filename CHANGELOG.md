@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.3
 
 - Settings, map: the CARTO key now comes before the CARTO styles. It is no longer
   marked as an own value (no dot, no arrow back to the standard) and has nothing to

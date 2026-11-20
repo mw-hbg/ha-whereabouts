@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Whereabouts – UI test page</title>
+<!--
+  Test page for the screenshot check: mounts <whereabouts-panel> like Home Assistant's
+  ha-panel-custom does, with a fake hass object (mock-hass.js).
+  Query parameters:
+    view=live|history|settings   (default live; passed as route.path like HA does)
+    theme=light|dark             (default light; hass.themes.darkMode + HA CSS variables)
+    lang=de|en                   (default de)
+    user=admin|normal            (default admin)
+-->
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { background: var(--primary-background-color); color: var(--primary-text-color);
+         font-family: Roboto, "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+         -webkit-font-smoothing: antialiased; }
+  /* stand-in for Home Assistant's layout: sidebar + panel area */
+  #ha-main { display: flex; height: 100%; }
+  #ha-sidebar { flex: 0 0 256px; box-sizing: border-box; border-right: 1px solid var(--divider-color);
+                background: var(--sidebar-background-color); color: var(--sidebar-text-color); }
+  #ha-sidebar .kopf { height: 56px; display: flex; align-items: center; padding: 0 16px; font-size: 20px;
+                      border-bottom: 1px solid var(--divider-color); box-sizing: border-box; }
+  #ha-sidebar .eintrag { margin: 4px 8px; padding: 10px 12px; border-radius: 4px; font-size: 14px; }
+  #ha-sidebar .eintrag.aktiv { background: rgba(3, 169, 244, .12); color: var(--primary-color); }
+  #ha-panel { flex: 1 1 auto; min-width: 0; height: 100%; position: relative; }
+  .narrow #ha-sidebar { display: none; }
+  /* stand-ins for HA's own elements (the real ones are not available here) */
+  ha-card { display: block; position: relative; box-sizing: border-box; background: var(--ha-card-background, var(--card-background-color));
+            color: var(--primary-text-color); border-radius: var(--ha-card-border-radius, 12px);
+            border: 1px solid var(--ha-card-border-color, var(--divider-color)); }
+  ha-icon { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; flex: 0 0 auto;
+            width: var(--mdc-icon-size, 24px); height: var(--mdc-icon-size, 24px); }
+  ha-icon::before { content: ""; display: block; width: 70%; height: 70%; border-radius: 30%; background: currentColor; opacity: .45; }
+</style>
+</head>
+<body>
+<div id="ha-main">
+  <aside id="ha-sidebar"><div class="kopf">Home Assistant</div><div class="eintrag">Overview</div><div class="eintrag aktiv" id="ha-sidebar-panel">Standorte</div></aside>
+  <div id="ha-panel"></div>
+</div>
+<script type="module">
+  import { createHass, applyTheme } from './mock-hass.js';
+
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get('view') || 'live';
+  const dark = params.get('theme') === 'dark';
+  const lang = params.get('lang') || 'de';
+  const user = params.get('user') || 'admin';
+  document.documentElement.lang = lang;
+  document.getElementById('ha-sidebar-panel').textContent = lang === 'de' ? 'Standorte' : 'Whereabouts';
+  // Home Assistant's breakpoint for the narrow layout (sidebar hidden, menu button)
+  const narrow = window.matchMedia('(max-width: 870px)').matches;
+  document.documentElement.classList.toggle('narrow', narrow);
+  applyTheme(dark);
+
+  // A fresh page each time: no remembered settings view / drafts from earlier runs.
+  try { window.sessionStorage.clear(); window.localStorage.clear(); } catch (err) { /* nothing */ }
+
+  window.__waReady = false;
+  (async () => {
+    const manifest = await (await fetch('/custom_components/whereabouts/manifest.json')).json();
+    const version = manifest.version;
+    const hass = createHass({ dark, lang, user, version, narrow });
+    window.__hass = hass;
+    // As Home Assistant: the integration registers the panel with module_url
+    // /whereabouts_static/whereabouts-panel.js?v=<version> and adds the cards file
+    // to every page (add_extra_js_url).
+    await Promise.all([
+      import(`/whereabouts_static/whereabouts-cards.js?v=${version}`),
+      import(`/whereabouts_static/whereabouts-panel.js?v=${version}`),
+    ]);
+    // ha-panel-custom creates the element right after the import - possibly before the
+    // (asynchronous) define of the panel; the panel takes the values over.
+    const el = document.createElement('whereabouts-panel');
+    el.hass = hass;
+    el.narrow = narrow;
+    el.route = { prefix: '/whereabouts', path: `/${view}` };
+    el.panel = {
+      component_name: 'custom', icon: 'mdi:map-marker-radius', title: lang === 'de' ? 'Standorte' : 'Whereabouts',
+      config: { _panel_custom: { name: 'whereabouts-panel', module_url: `/whereabouts_static/whereabouts-panel.js?v=${version}`, embed_iframe: false, trust_external: false }, version },
+      url_path: 'whereabouts', require_admin: false, config_panel_domain: null,
+    };
+    document.getElementById('ha-panel').appendChild(el);
+    await customElements.whenDefined('whereabouts-panel');
+    window.__waReady = true;
+  })().catch((err) => console.error('MOCK: test page failed', err));
+</script>
+</body>
+</html>

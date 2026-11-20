@@ -8,3 +8,9 @@ venv/
 
 # screenshots of local checks
 /*.png
+
+# UI screenshot check (tests/ui): pictures are never committed
+tests/ui/out/
+/shots/
+/old-shots/
+/diff/

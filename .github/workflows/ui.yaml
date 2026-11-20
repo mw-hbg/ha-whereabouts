@@ -1,0 +1,91 @@
+name: UI
+
+# Screenshots of the sidebar page (live map, history, settings) in a fake Home
+# Assistant (tests/ui), compared with the last successful run on main.
+# Nothing is committed: the pictures are only kept as workflow artifacts.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright and Pillow
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright pillow
+          python -m playwright install --with-deps chromium
+
+      - name: Take screenshots
+        id: shoot
+        run: |
+          if python tests/ui/shoot.py --out shots; then
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download screenshots of the last successful run on main
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CURRENT_RUN: ${{ github.run_id }}
+        run: |
+          mkdir -p old-shots
+          previous=$(gh run list --workflow ui.yaml --branch main --status success --limit 20 \
+            --json databaseId --jq ".[].databaseId | select(. != ${CURRENT_RUN})" | head -n 1 || true)
+          if [ -n "$previous" ]; then
+            echo "Comparing with run $previous"
+            gh run download "$previous" --name ui-shots --dir old-shots || echo "No ui-shots artifact in run $previous"
+          else
+            echo "No previous successful run on main"
+          fi
+
+      - name: Compare
+        if: always()
+        id: compare
+        run: |
+          python tests/ui/compare.py --old old-shots --new shots --diff diff --errors shots/errors.json
+          cat diff/report.md >> "$GITHUB_STEP_SUMMARY"
+          if compgen -G "diff/*.png" > /dev/null; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-shots
+          path: shots/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload differences
+        if: always() && steps.compare.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-diff
+          path: diff/
+          retention-days: 30
+
+      - name: Fail on JavaScript errors
+        if: always() && steps.shoot.outputs.failed != 'false'
+        run: |
+          echo "::error::The screenshot run reported JavaScript errors (see the job summary and errors.json in ui-shots)."
+          exit 1

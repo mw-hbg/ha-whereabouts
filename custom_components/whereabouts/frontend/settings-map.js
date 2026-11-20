@@ -31,7 +31,7 @@ export default (ctx, Base) => {
         if (!ok) { this._fillPersonal(PERSONAL.find((c) => c.id === category)); return; }
         row.querySelectorAll('.stil').forEach((l) => l.classList.toggle('gewaehlt', l.querySelector('input').checked));
       }));
-      // CARTO: the styles per map and light/dark, then the key
+      // CARTO: the key, then the styles per map and light/dark
       const label = (v) => t(`ed_carto_${v}`);
       const holder = row.querySelector('.unterpunkte[data-src="carto"]');
       const sub = this._subsection('sub_carto', t('sub_carto'),
@@ -68,13 +68,14 @@ export default (ctx, Base) => {
         });
       });
       sub.inner.appendChild(grid);
-      holder.appendChild(sub.el);
       this._cartoKey(holder, row.querySelector('.api-status'));
+      holder.appendChild(sub.el);
       return row;
     }
 
-    // The CARTO key as a sub-area under CARTO (like the styles). Closed while the key works;
+    // The CARTO key as a sub-area under CARTO, above the styles. Closed while the key works;
     // open without a key or when CARTO refuses it. "API ✓/✗" next to the name CARTO.
+    // Not an "own value": no dot or arrow, not part of "Reset to standard"; only "Remove" takes it away.
     _cartoKey(holder, badge) {
       const t = this._t;
       const d = this._data;
@@ -107,7 +108,7 @@ export default (ctx, Base) => {
       const box = document.createElement('div');
       box.className = 'zeile breit innen-zeile';
       box.style.borderTop = 'none';
-      box.innerHTML = `<div class="beschriftung"><span>${esc(t('st_carto_api_key'))}</span><span class="marker" data-opt-key="1"></span>
+      box.innerHTML = `<div class="beschriftung"><span>${esc(t('st_carto_api_key'))}</span>
           <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
         <div class="infotext" hidden>${rich(t('si_carto_api_key'))}</div>
         <div class="schluesselreihe">
@@ -166,18 +167,6 @@ export default (ctx, Base) => {
         if (!await this._confirm(t('carto_remove_title'), t('confirm_carto_remove'), t('carto_remove'), true)) return;
         savable.set('');
         await savable.save();
-      });
-      // own value: a key is set; back = remove it (30 s to restore)
-      this._fillMarker(box.querySelector('[data-opt-key]'), {
-        undoKey: 'option:carto_api_key',
-        own: Boolean(current),
-        standardText: t('value_empty'),
-        back: async () => {
-          if (!await this._confirm(t('carto_remove_title'), t('confirm_carto_remove'), t('carto_remove'), true)) return false;
-          return store('');
-        },
-        restore: () => store(current),
-        redraw: () => this._redrawCategory('map'),
       });
     }
 

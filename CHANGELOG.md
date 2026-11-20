@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- Settings, map: the CARTO key now comes before the CARTO styles. It is no longer
+  marked as an own value (no dot, no arrow back to the standard) and has nothing to
+  do with "Reset to standard"; only "Remove" next to it takes it away.
+- Settings page split into several files, one per area (settings-*.js) – same
+  behaviour, easier to maintain.
+- Screenshot check on GitHub: every push photographs the sidebar page in a fake Home
+  Assistant (computer, phone upright and sideways, light and dark), reports
+  JavaScript errors and shows which pictures changed.
+
+---
+
+- Einstellungen, Karte: Der CARTO-Schlüssel steht jetzt vor den CARTO-Kartenstilen. Er
+  gilt nicht mehr als eigener Wert (kein Punkt, kein Pfeil zurück zum Standard) und
+  hat mit „Auf Standard zurücksetzen“ nichts zu tun; entfernt wird er nur über
+  „Entfernen“ daneben.
+- Einstellungsseite in mehrere Dateien je Bereich aufgeteilt (settings-*.js) – gleiches
+  Verhalten, leichter zu pflegen.
+- Bildschirmprüfung auf GitHub: Jeder Push fotografiert die Seitenleisten-Seite in einem
+  nachgebauten Home Assistant (Computer, Handy hochkant und quer, hell und dunkel),
+  meldet JavaScript-Fehler und zeigt, welche Bilder sich geändert haben.
+
 ## 0.5.2
 
 - Light or dark: the choice is gone – the dashboard and the maps always follow Home

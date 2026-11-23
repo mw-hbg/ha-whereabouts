@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
 - Import: CSV entries that are away or have no state get the zone they lie in, like
   GPX. The recording rules ("Same place within … metres", "At the same place store at

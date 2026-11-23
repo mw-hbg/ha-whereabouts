@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
 
 from .const import STATE_HOME, STATE_NOT_HOME
+from .rules import zone_at
 from .storage import clean_text, distance_m, to_float
 
 ATTR_DEVICE_TRACKERS = "device_trackers"
@@ -84,15 +85,8 @@ def zone_snapshot(hass: HomeAssistant) -> list[tuple[str, float, float, float]]:
 
 
 def zone_in_snapshot(zones: list[tuple[str, float, float, float]], lat: float, lon: float) -> str:
-    """Person state a point would have: "home", a zone name or "not_home".
-
-    Like Home Assistant itself: the smallest zone containing the point wins.
-    """
-    best: tuple[float, str] | None = None
-    for name, zlat, zlon, radius in zones:
-        if distance_m(lat, lon, zlat, zlon) <= radius and (best is None or radius < best[0]):
-            best = (radius, name)
-    return best[1] if best else STATE_NOT_HOME
+    """Person state a point would have: "home", a zone name or "not_home"."""
+    return zone_at(zones, lat, lon)
 
 
 def zone_for(hass: HomeAssistant, lat: float, lon: float) -> str:

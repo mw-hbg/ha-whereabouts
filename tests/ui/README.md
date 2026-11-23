@@ -33,7 +33,7 @@ python tests/ui/serve.py 8765
 # http://localhost:8765/tests/ui/index.html?view=settings&theme=dark&lang=en&user=normal
 ```
 
-Parameters: `view=live|history|settings`, `theme=light|dark`, `lang=de|en`, `user=admin|normal`.
+Parameters: `view=live|history|settings`, `theme=light|dark`, `lang=de|en`, `user=admin|normal`, `zones=changed` (question about changed zones).
 
 ## In GitHub Actions
 

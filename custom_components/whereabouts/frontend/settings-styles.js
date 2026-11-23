@@ -338,7 +338,9 @@ export const CSS = `
   .wa-set .neue-benutzer .person-recht b { display: block; margin-bottom: 4px; }
   .wa-set .neue-benutzer .rechtzeile { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; margin: 2px 0; }
   .wa-set .neue-benutzer .rechtzeile > span { min-width: 110px; color: var(--secondary-text-color); }
-  .wa-set .neue-benutzer label.chip { padding: 2px 8px 2px 4px; }
+  .wa-set .neue-benutzer label.chip, .wa-set .dialog .chips label.chip { padding: 2px 8px 2px 4px; }
+  .wa-set .dialog input[type="date"] { font: inherit; font-size: 14px; padding: 4px 6px; border: 1px solid var(--divider-color); border-radius: 6px;
+                                      background: var(--card-background-color); color: var(--primary-text-color); color-scheme: light dark; }
   @media (max-width: 870px) {
     .wa-set { display: block; padding: 0 8px 16px; }
     .wa-set .toc { display: none; }

@@ -114,6 +114,8 @@ function createBackend(userKey) {
     user_flags: {},
     field_locks: { [USERS.normal.id]: { map: ['tiles'] } },
     pending_users: {},
+    // a paused lookup of missing addresses (shows the progress line)
+    address_job: { status: 'paused', total: 42, done: 17, found: 15, persons: ['alex'], from: '', to: '', waiting_for_osm: false },
     options: {
       ...clone(OPTION_DEFAULTS),
       record_persons: ['person.alex', 'person.sam'],
@@ -242,6 +244,10 @@ function createBackend(userKey) {
         options: clone(db.options),
         option_defaults: clone(OPTION_DEFAULTS),
         all_persons: allPersons().map(personInfo),
+        // ?zones=changed: the question about changed zones appears
+        zone_changes: new URLSearchParams(window.location.search).get('zones') === 'changed'
+          ? [{ kind: 'renamed', entity_id: 'zone.office', name: 'Office', old_name: 'Work' }, { kind: 'removed', entity_id: 'zone.gym', name: 'Gym' }] : [],
+        address_job: clone(db.address_job),
         address: addressInfo(),
       };
     }
@@ -341,6 +347,15 @@ function createBackend(userKey) {
     'whereabouts/settings/diagnostics': () => diagnostics(),
     'whereabouts/settings/retention_preview': (msg) => ({ files: 0, before: isoDate(new Date(Date.now() - msg.days * DAY_MS)) }),
     'whereabouts/settings/image_in_use': () => ({ in_use: false }),
+    'whereabouts/maintenance/rules': (msg) => ({ points: 120, stays: 80, merged: 30, dropped: 10, days: 4, days_changed: 3, same_place_distance: 50, min_interval: 60, preview: msg.preview }),
+    'whereabouts/maintenance/zones': (msg) => ({ checked: 80, changed: 5, need_address: 2, days: 4, days_changed: 2, transitions: [{ from: 'Office', to: 'not_home', n: 2 }, { from: 'not_home', to: 'Park', n: 3 }], renames: {}, preview: msg.preview }),
+    'whereabouts/maintenance/zone_ack': () => null,
+    'whereabouts/addresses/status': () => clone(db.address_job),
+    'whereabouts/addresses/start': (msg) => (msg.preview ? { missing: 42, busy: false } : clone(db.address_job)),
+    'whereabouts/addresses/control': (msg) => {
+      db.address_job.status = { pause: 'paused', resume: 'running', cancel: 'cancelled' }[msg.action];
+      return clone(db.address_job);
+    },
     'image/delete': () => null,
   };
 
@@ -374,9 +389,24 @@ function createBackend(userKey) {
     },
   };
 
-  const fetchWithAuth = async (url) => {
+  const fetchWithAuth = async (url, init = {}) => {
     const path = String(url).split('?')[0];
     if (path === '/api/whereabouts/export') return new Response('date;start;end\n', { status: 200, headers: { 'Content-Type': 'text/csv' } });
+    if (path === '/api/whereabouts/import') {
+      const preview = init.body && init.body.get && init.body.get('preview') === 'true';
+      const days = historyDays();
+      const body = preview ? {
+        persons: ['alex'], total: 40, days: 3, first: '2020-01-01', last: days[1], mode: 'merge', stays: 12, merged: 24, dropped: 4,
+        not_recorded: ['alex'], retention_days: 365, same_place_distance: 50, min_interval: 60,
+        plan: [
+          { person: 'alex', date: '2020-01-01', existing: 0, new: 3, status: 'new', points: 10, stays: 3, merged: 6, dropped: 1, expired: true, entries: [] },
+          { person: 'alex', date: days[0], existing: 4, new: 2, status: 'add', points: 15, stays: 5, merged: 8, dropped: 2, expired: false,
+            entries: [{ start: '08:00:00', end: '09:00:00', state: 'not_home', address: '' }, { start: '10:00:00', end: '11:00:00', state: 'Office', address: '' }] },
+          { person: 'alex', date: days[1], existing: 0, new: 4, status: 'new', points: 15, stays: 4, merged: 10, dropped: 1, expired: false, entries: [] },
+        ],
+      } : { persons: ['alex'], added: 6, skipped: 0, days: 2, total: 40, missing_addresses: 3, first: days[0], last: days[1] };
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
     console.error('MOCK: unknown message', `fetch:${path}`);
     return new Response('{"message":"not mocked"}', { status: 404, headers: { 'Content-Type': 'application/json' } });
   };

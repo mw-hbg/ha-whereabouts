@@ -10,6 +10,7 @@ from datetime import UTC
 import pytest
 
 from custom_components.whereabouts.importer import ImportError_, read_import
+from custom_components.whereabouts.rules import apply_rules
 from custom_components.whereabouts.storage import HistoryStorage, Point, build_stays, export_csv
 
 D = "2026-06-24"
@@ -143,7 +144,9 @@ def test_import_gpx_assigns_zones_and_merges():
 <trkpt lat="1" lon="1"></trkpt>
 </trkseg></trk></gpx>"""
     zone = lambda lat, lon: "home" if lat > 52.0 else "not_home"  # noqa: E731
-    points = read_import("track.gpx", gpx, timezone=UTC, zone_for=zone, same_place_distance=50)[""]
+    raw = read_import("track.gpx", gpx, timezone=UTC, zone_for=zone)[""]
+    assert len(raw) == 4  # the rules merge them later
+    points, _ = apply_rules(raw, 50, 60)
     assert [(p.time, p.end, p.state) for p in points] == [
         ("06:00:00", "06:10:00", "home"),
         ("07:00:00", "", "not_home"),

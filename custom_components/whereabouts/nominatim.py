@@ -1,7 +1,7 @@
 """Reverse geocoding with OpenStreetMap Nominatim (optional).
 
 Follows the usage policy (https://operations.osmfoundation.org/policies/nominatim/):
-at most one request per 1.5 s, own user agent, results cached in a file.
+at most one request per 1.5 s (background job: 1 s), own user agent, results cached in a file.
 After a 403/429 answer, no request is sent for one hour.
 """
 
@@ -26,6 +26,7 @@ _LOGGER = logging.getLogger(__name__)
 _STREET_KEYS = ("road", "pedestrian", "footway", "path", "cycleway", "square", "residential", "place")
 _CITY_KEYS = ("city", "town", "village", "municipality", "suburb", "hamlet")
 _CACHE_LIMIT = 20000
+_SAVE_EVERY_SECONDS = 30
 
 
 def format_address(answer: object, home_country: str) -> str:
@@ -56,6 +57,8 @@ class Nominatim:
         self._lock = asyncio.Lock()
         self._last_request = 0.0
         self._paused_at = 0.0
+        self._dirty = False
+        self._saved_at = 0.0
 
     def _load(self) -> dict[str, str]:
         try:
@@ -80,17 +83,25 @@ class Nominatim:
     def paused(self) -> bool:
         return bool(self._paused_at) and time.monotonic() - self._paused_at < NOMINATIM_PAUSE_SECONDS
 
-    async def reverse(self, lat: float, lon: float) -> str:
-        """Address for a position ("" if unknown or not reachable). Never raises."""
+    async def reverse(self, lat: float, lon: float, min_gap: float = NOMINATIM_MIN_GAP_SECONDS) -> str:
+        """Address for a position ("" if unknown or not reachable). Never raises.
+
+        ``min_gap``: seconds since the last request (the background job for
+        missing addresses uses exactly 1 s, the usage policy's limit).
+        """
+        return (await self.lookup(lat, lon, min_gap))[0]
+
+    async def lookup(self, lat: float, lon: float, min_gap: float = NOMINATIM_MIN_GAP_SECONDS) -> tuple[str, bool]:
+        """(address, answered): ``answered`` is False when OpenStreetMap could not be asked."""
         key = f"{lat:.4f},{lon:.4f}"  # ~10 m
         async with self._lock:
             if self._cache is None:
                 self._cache = await self._hass.async_add_executor_job(self._load)
             if key in self._cache:
-                return self._cache[key]
+                return self._cache[key], True
             if self.paused:
-                return ""
-            wait = self._last_request + NOMINATIM_MIN_GAP_SECONDS - time.monotonic()
+                return "", False
+            wait = self._last_request + max(1.0, min_gap) - time.monotonic()
             if wait > 0:
                 await asyncio.sleep(wait)
             try:
@@ -98,11 +109,21 @@ class Nominatim:
             finally:
                 self._last_request = time.monotonic()
             if answer is None:
-                return ""  # errors are not cached, try again next time
+                return "", False  # errors are not cached, try again next time
             address = format_address(answer, self._hass.config.country or "")
             self._cache[key] = address
-            await self._hass.async_add_executor_job(self._save, dict(self._cache))
-            return address
+            self._dirty = True
+            if time.monotonic() - self._saved_at >= _SAVE_EVERY_SECONDS:
+                await self.flush()
+            return address, True
+
+    async def flush(self) -> None:
+        """Write the cache file if something new is in it (at most every 30 s while busy)."""
+        if self._cache is None or not self._dirty:
+            return
+        self._dirty = False
+        self._saved_at = time.monotonic()
+        await self._hass.async_add_executor_job(self._save, dict(self._cache))
 
     async def _request(self, lat: float, lon: float) -> dict | None:
         session = async_get_clientsession(self._hass)

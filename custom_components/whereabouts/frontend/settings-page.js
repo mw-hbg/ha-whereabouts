@@ -125,7 +125,7 @@ async function ensureSelector() {
 
 // The page is put together from these parts (settings-<name>.js), each a class
 // extending the one before. Loaded with the same "?v=<version>" as this file.
-const PARTS = ['values', 'layout', 'fields', 'persons', 'map', 'zones', 'admin', 'users', 'data', 'diagnostics', 'dialogs'];
+const PARTS = ['values', 'layout', 'fields', 'persons', 'map', 'zones', 'admin', 'users', 'data', 'maintenance', 'diagnostics', 'dialogs'];
 
 export async function defineSettingsPage(S, D) {
   if (customElements.get('whereabouts-settings')) return;

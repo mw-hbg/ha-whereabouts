@@ -16,7 +16,8 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
-from . import api, settings_api
+from . import api, maintenance, settings_api
+from .addresses import AddressJob
 from .const import (
     CARDS_FILE,
     CONF_PANEL,
@@ -35,6 +36,7 @@ from .const import (
     STORAGE_FOLDER,
 )
 from .logger import LocationLogger
+from .maintenance import ZoneWatch
 from .nominatim import Nominatim
 from .settings import Settings
 from .storage import HistoryStorage
@@ -79,6 +81,8 @@ class Runtime:
     logger: LocationLogger
     settings: Settings
     nominatim: Nominatim | None = None
+    addresses: AddressJob | None = None
+    zones: ZoneWatch | None = None
     js_url: str | None = None
     panel: bool = False
     _known: set[str] = field(default_factory=set)
@@ -97,6 +101,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register the API and the card files once."""
     api.async_register(hass)
     settings_api.async_register(hass)
+    maintenance.async_register(hass)
     return True
 
 
@@ -161,6 +166,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     settings = Settings(hass)
     await settings.async_load(dict(entry.options))
     runtime = Runtime(version, options, storage, logger, settings, nominatim)
+    runtime.zones = ZoneWatch(hass)
+    await runtime.zones.async_load()
+    runtime.addresses = AddressJob(
+        hass,
+        storage,
+        nominatim,
+        float(options[CONF_SAME_PLACE_DISTANCE]),
+        lambda: async_dispatcher_send(hass, SIGNAL_INFO_CHANGED),
+    )
     await runtime.async_refresh_known(hass)
 
     # The card files are always loaded: the sidebar page uses them, too.
@@ -171,6 +185,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN] = runtime
     entry.runtime_data = runtime
     logger.start()
+    await runtime.addresses.async_load()  # a job that was running goes on
     entry.async_on_unload(entry.add_update_listener(_options_updated))
     async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)  # open cards follow the new options
     return True
@@ -183,6 +198,8 @@ async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     runtime: Runtime = entry.runtime_data
     runtime.logger.stop()
+    if runtime.addresses:
+        await runtime.addresses.async_stop()
     if runtime.js_url:
         remove_extra_js_url(hass, runtime.js_url)
     # The sidebar page stays (see _register_panel); it is removed with the entry.

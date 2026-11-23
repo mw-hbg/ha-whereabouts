@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import CONF_MIN_INTERVAL, CONF_RECORD_PERSONS, CONF_RETENTION_DAYS, DEFAULT_OPTIONS, DOMAIN, STATE_NOT_HOME
 from .geo import zone_in_snapshot, zone_snapshot
 from .importer import ImportError_, read_import, summarize
 from .logger import person_key
+from .rules import apply_rules
 
 
 async def import_bytes(
@@ -24,12 +27,22 @@ async def import_bytes(
 ) -> dict:
     """Read a file and store its points (or only plan it with preview=True).
 
+    The recording rules ("same place up to … m", minimum interval) are applied
+    first: points at the same place become one stay, points closer in time than
+    the minimum interval are thinned out - like the live recording does.
+
     ``mode``: "merge" (only entries that fall into gaps of stored days are
     added), "replace" (imported days replace stored days) or "skip" (days
     that already have data are left alone). Without it, ``replace`` decides
     between "replace" and "merge". ``days`` ("person|YYYY-MM-DD") limits the import
     to the days ticked in the preview.
     """
+    runtime = hass.data.get(DOMAIN)
+    if runtime is None:
+        raise ImportError_("not_set_up")
+    options = runtime.options
+    min_interval = float(options.get(CONF_MIN_INTERVAL) or DEFAULT_OPTIONS[CONF_MIN_INTERVAL])
+
     # Zones are read here (event loop); the importer runs in the executor.
     zones = zone_snapshot(hass)
     parsed = await hass.async_add_executor_job(
@@ -59,16 +72,32 @@ async def import_bytes(
 
     total, day_count = summarize(p for points in by_person.values() for p in points)
     dates = sorted({p.date for points in by_person.values() for p in points})
-    runtime = hass.data.get(DOMAIN)
-    if runtime is None:
-        raise ImportError_("not_set_up")
+
+    # The recording rules, per person
+    stats: dict[str, dict] = {}
+    for dest in list(by_person):
+        by_person[dest], stats[dest] = await hass.async_add_executor_job(
+            apply_rules, by_person[dest], same_place_distance, min_interval
+        )
+
     if mode not in ("merge", "replace", "skip"):
         mode = "replace" if replace else "merge"
     if preview:
+        retention = int(options.get(CONF_RETENTION_DAYS) or 0)
+        expired_before = (dt_util.now() - timedelta(days=retention)).strftime("%Y-%m-%d") if retention else ""
+        recorded = {person_key(p) for p in options.get(CONF_RECORD_PERSONS) or []}
         plan = []
         for dest, points in sorted(by_person.items()):
             for day in await hass.async_add_executor_job(runtime.storage.import_plan, dest, points, mode):
-                plan.append({"person": dest, **day})
+                rules = stats[dest][day["date"]].as_dict()
+                plan.append(
+                    {
+                        "person": dest,
+                        **day,
+                        **rules,
+                        "expired": bool(expired_before and day["date"] < expired_before),
+                    }
+                )
         return {
             "persons": sorted(by_person),
             "total": total,
@@ -77,6 +106,13 @@ async def import_bytes(
             "last": dates[-1] if dates else "",
             "mode": mode,
             "plan": plan,
+            "stays": sum(len(points) for points in by_person.values()),
+            "dropped": sum(s.dropped for per_day in stats.values() for s in per_day.values()),
+            "merged": sum(s.merged for per_day in stats.values() for s in per_day.values()),
+            "not_recorded": sorted(dest for dest in by_person if dest not in recorded),
+            "retention_days": retention,
+            "same_place_distance": same_place_distance,
+            "min_interval": min_interval,
         }
 
     added = skipped = day_total = 0
@@ -90,12 +126,33 @@ async def import_bytes(
         added += outcome["added"]
         skipped += outcome["skipped"]
         day_total += outcome["days"]
-    days = day_total
     await runtime.async_refresh_known(hass)
+
+    # Imported stays away without an address: the page offers to look them up.
+    chosen = None if days is None else {d for d in days}
+    touched = [
+        (dest, p.date)
+        for dest, points in by_person.items()
+        for p in points
+        if chosen is None or f"{dest}|{p.date}" in chosen
+    ]
+    missing = sum(
+        1
+        for dest, points in by_person.items()
+        for p in points
+        if p.state == STATE_NOT_HOME
+        and not p.address
+        and p.latitude is not None
+        and (chosen is None or f"{dest}|{p.date}" in chosen)
+    )
+    touched_dates = sorted({d for _, d in touched})
     return {
         "persons": sorted(by_person),
         "added": added,
         "skipped": skipped,
-        "days": days,
+        "days": day_total,
         "total": total,
+        "missing_addresses": missing,
+        "first": touched_dates[0] if touched_dates else "",
+        "last": touched_dates[-1] if touched_dates else "",
     }

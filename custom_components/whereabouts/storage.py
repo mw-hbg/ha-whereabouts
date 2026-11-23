@@ -303,6 +303,88 @@ class HistoryStorage:
                     removed += 1
         return removed
 
+    # --- whole days (rules, zones, addresses) ------------------------------
+    @staticmethod
+    def rows_to_points(date: str, rows: list[list[str]]) -> list[Point]:
+        points = []
+        for row in rows:
+            if len(row) < 4 or not is_valid_time(row[0].strip()):
+                continue
+            end = row[5].strip() if len(row) > 5 and is_valid_time(row[5].strip()) else ""
+            points.append(
+                Point(
+                    date=date,
+                    time=row[0].strip(),
+                    state=row[1].strip(),
+                    latitude=to_float(row[2]),
+                    longitude=to_float(row[3]),
+                    address=row[4].strip() if len(row) > 4 else "",
+                    end=end,
+                )
+            )
+        return sorted(points, key=lambda p: p.time)
+
+    @staticmethod
+    def point_row(point: Point) -> list[str]:
+        return [
+            point.time,
+            clean_text(point.state),
+            format_coordinate(point.latitude),
+            format_coordinate(point.longitude),
+            clean_text(point.address) if point.state == STATE_NOT_HOME else "",
+            point.end if point.end and point.end > point.time else "",
+        ]
+
+    def read_points(self, person: str, date: str) -> list[Point]:
+        """The stored rows of one day as points (sorted by time)."""
+        with self._lock:
+            rows = self._read_rows(self.path(person, date))
+        return self.rows_to_points(date, rows)
+
+    def transform_day(self, person: str, date: str, change, write: bool = True):
+        """Read a day, let ``change(points)`` return ``(new points or None, result)``, write it.
+
+        Runs under the storage lock, so no point recorded meanwhile gets lost.
+        ``None`` (or ``write=False``) leaves the file as it is. Returns ``result``.
+        """
+        path = self.path(person, date)
+        with self._lock:
+            rows = self._read_rows(path)
+            if not rows:
+                return change([])[1]
+            new, result = change(self.rows_to_points(date, rows))
+            if write and new is not None:
+                self._write_rows(path, [self.point_row(p) for p in sorted(new, key=lambda p: p.time)])
+        return result
+
+    def set_addresses(self, person: str, date: str, addresses: dict[str, str]) -> int:
+        """Fill the empty address of away rows ({start time: address}). Returns how many."""
+        path = self.path(person, date)
+        filled = 0
+        with self._lock:
+            rows = self._read_rows(path)
+            for row in rows:
+                address = addresses.get(row[0].strip()) if len(row) >= 4 else None
+                if not address or row[1].strip() != STATE_NOT_HOME:
+                    continue
+                while len(row) < 6:
+                    row.append("")
+                if not row[4].strip():
+                    row[4] = clean_text(address)
+                    filled += 1
+            if filled:
+                self._write_rows(path, rows)
+        return filled
+
+    def files_in(self, persons: Iterable[str] | None, date_from: str = "", date_to: str = "") -> list[tuple[str, str]]:
+        """(person, date) of the stored days within a selection (empty = everything)."""
+        wanted = set(persons) if persons is not None else None
+        return [
+            (p, d)
+            for p, d in self.list_files()
+            if (wanted is None or p in wanted) and (not date_from or d >= date_from) and (not date_to or d <= date_to)
+        ]
+
     # --- import / export --------------------------------------------------
     @staticmethod
     def _by_day(points: Iterable[Point]) -> dict[str, list[Point]]:

@@ -28,7 +28,6 @@ from .storage import (
     is_valid_date,
     is_valid_key,
     is_valid_time,
-    same_stay,
     to_float,
 )
 
@@ -71,8 +70,11 @@ def _legacy_name(name: str) -> tuple[str, str] | None:
     return None
 
 
-def parse_whereabouts_csv(text: str) -> dict[str, list[Point]]:
-    """Whereabouts exchange format -> {person: [points]}."""
+def parse_whereabouts_csv(text: str, zone_for: ZoneLookup | None = None) -> dict[str, list[Point]]:
+    """Whereabouts exchange format -> {person: [points]}.
+
+    An empty state or "not_home" gets the zone the point lies in (like GPX).
+    """
     first_line = text.split("\n", 1)[0]
     delimiter = ";" if first_line.count(";") > first_line.count(",") else ","
     reader = csv.reader(io.StringIO(text), delimiter=delimiter)
@@ -94,13 +96,17 @@ def parse_whereabouts_csv(text: str) -> dict[str, list[Point]]:
         if not (is_valid_key(person) and is_valid_date(date) and is_valid_time(start)):
             continue
         end = get("end")
+        state = from_export_text(get("state")) or STATE_NOT_HOME
+        lat, lon = to_float(get("latitude")), to_float(get("longitude"))
+        if state == STATE_NOT_HOME and zone_for and lat is not None and lon is not None:
+            state = zone_for(lat, lon) or STATE_NOT_HOME
         result.setdefault(person, []).append(
             Point(
                 date=date,
                 time=start,
-                state=from_export_text(get("state")) or STATE_NOT_HOME,
-                latitude=to_float(get("latitude")),
-                longitude=to_float(get("longitude")),
+                state=state,
+                latitude=lat,
+                longitude=lon,
                 address=from_export_text(get("address")),
                 end=end if is_valid_time(end) else "",
             )
@@ -133,13 +139,8 @@ def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def parse_gpx(
-    data: bytes,
-    timezone: tzinfo,
-    zone_for: ZoneLookup,
-    same_place_distance: float,
-) -> list[Point]:
-    """GPX track/route/waypoints -> points merged into stays.
+def parse_gpx(data: bytes, timezone: tzinfo, zone_for: ZoneLookup) -> list[Point]:
+    """GPX track/route/waypoints -> points (merged into stays later by the rules).
 
     Each point gets the state it would have had: the zone it lies in (via
     ``zone_for``), otherwise ``not_home``. Points without a time are skipped.
@@ -168,19 +169,10 @@ def parse_gpx(
         raw.append((stamp.astimezone(timezone), lat, lon))
     raw.sort(key=lambda item: item[0])
 
-    points: list[Point] = []
-    for stamp, lat, lon in raw:
-        date, time = stamp.strftime("%Y-%m-%d"), stamp.strftime("%H:%M:%S")
-        state = zone_for(lat, lon)
-        if points:
-            last = points[-1]
-            if last.date == date and same_stay(
-                last.state, last.latitude, last.longitude, state, lat, lon, same_place_distance
-            ):
-                last.end = max(last.end or last.time, time)
-                continue
-        points.append(Point(date, time, state, lat, lon))
-    return points
+    return [
+        Point(stamp.strftime("%Y-%m-%d"), stamp.strftime("%H:%M:%S"), zone_for(lat, lon), lat, lon)
+        for stamp, lat, lon in raw
+    ]
 
 
 def read_import(
@@ -189,9 +181,9 @@ def read_import(
     *,
     timezone: tzinfo,
     zone_for: ZoneLookup,
-    same_place_distance: float,
+    same_place_distance: float = 0,
 ) -> dict[str, list[Point]]:
-    """Any supported file -> {person key or "": [points]}.
+    """Any supported file -> {person key or "": [points]} (the rules are applied later).
 
     The key "" means: the file does not say whose history it is (GPX).
     """
@@ -202,13 +194,13 @@ def read_import(
     if lower.endswith(".zip") or data[:4] == b"PK\x03\x04":
         return _read_zip(data, timezone=timezone, zone_for=zone_for, same_place_distance=same_place_distance)
     if lower.endswith(".gpx") or data.lstrip()[:5] in (b"<?xml", b"<gpx "):
-        return {"": parse_gpx(data, timezone, zone_for, same_place_distance)}
+        return {"": parse_gpx(data, timezone, zone_for)}
 
     text = _decode(data)
     legacy = _legacy_name(filename)
     first = text.lstrip().split("\n", 1)[0].lower()
     if first.startswith("person"):
-        return parse_whereabouts_csv(text)
+        return parse_whereabouts_csv(text, zone_for)
     if legacy:
         return {legacy[0]: parse_legacy_day(text, legacy[1])}
     raise ImportError_("unknown_format")

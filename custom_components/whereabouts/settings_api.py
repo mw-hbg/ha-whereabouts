@@ -216,6 +216,9 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
             },
             "all_persons": _persons(hass),
             "address": _address_info(hass, runtime, base),
+            # zones created, changed, renamed or removed since the data was last checked
+            "zone_changes": (await runtime.zones.async_changes())[0] if runtime.zones else [],
+            "address_job": runtime.addresses.status() if runtime.addresses else {"status": "idle"},
         }
     connection.send_result(msg["id"], result)
 

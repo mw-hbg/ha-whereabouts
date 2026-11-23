@@ -51,6 +51,16 @@ export default (ctx, Base) => {
             <div class="kontrast" hidden style="flex:1 1 100%"></div>
           </div>`).join('') : `<span class="klein">${esc(t('no_zones'))}</span>`}
         </div></div>`;
+      if (this._admin) {
+        const recalc = document.createElement('div');
+        recalc.className = 'zeile';
+        recalc.innerHTML = `<div class="beschriftung"><span>${esc(t('maint_zones'))}</span>
+            <button class="info" type="button" aria-expanded="false" aria-label="${esc(t('more_info'))}"><ha-icon icon="mdi:information-outline"></ha-icon></button></div>
+          <div class="steuer"><button class="knopf neu-berechnen" type="button" style="width:auto"><ha-icon icon="mdi:map-marker-path"></ha-icon>${esc(t('maint_zones_button'))}</button></div>
+          <div class="infotext" hidden>${rich(t('si_maint_zones'))}</div>`;
+        recalc.querySelector('.neu-berechnen').addEventListener('click', () => this._zonesDialog());
+        sub.inner.appendChild(recalc);
+      }
       this._infoToggle(sub.inner);
       // remove the general marker of the list (single zones have their own)
       const general = sub.inner.querySelector('.marker[data-mk]');

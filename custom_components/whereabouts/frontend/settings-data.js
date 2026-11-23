@@ -58,7 +58,8 @@ export default (ctx, Base) => {
         sel: sel(['merge', 'skip', 'replace'].map((v) => ({ value: v, label: t(`import_mode_${v}`) }))) },
       this._import.mode, false, (value) => { this._import.mode = value || 'merge'; return true; }));
       const area = document.createElement('div');
-      area.innerHTML = `<div class="ablage" tabindex="0" role="button">${esc(t('drop_file'))}</div>
+      area.innerHTML = `<div class="warnung">${esc(t('import_irreversible'))}</div>
+        <div class="ablage" tabindex="0" role="button">${esc(t('drop_file'))}</div>
         <input type="file" accept=".csv,.zip,.gpx" hidden>
         <div class="ergebnis"></div>
         ${this._formatHelpHtml()}`;
@@ -92,6 +93,7 @@ export default (ctx, Base) => {
         info.setAttribute('aria-expanded', text.hidden ? 'false' : 'true');
       }));
       box.appendChild(area);
+      this._maintenanceSection(box);
     }
 
     // "What must the file look like?" and a prompt for an AI assistant.
@@ -158,7 +160,15 @@ export default (ctx, Base) => {
         const result = await this._importCall(fileObject, false, days);
         out.innerHTML = `<span class="ok">${esc(t('import_result', {
           added: result.added, skipped: result.skipped, days: result.days, persons: result.persons.map(nameOf).join(', '),
-        }))}</span>`;
+        }))}</span>${result.missing_addresses && result.added ? `<div class="reihe" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+          <span>${esc(t('import_missing_addresses', { n: result.missing_addresses }))}</span>
+          <button class="knopf adressen-holen" type="button"><ha-icon icon="mdi:map-search"></ha-icon>${esc(t('addr_fetch'))}</button></div>` : ''}`;
+        const fetchButton = out.querySelector('.adressen-holen');
+        if (fetchButton) {
+          fetchButton.addEventListener('click', () => this._addressDialog({
+            persons: result.persons.map((key) => `person.${key}`), from: result.first, to: result.last,
+          }));
+        }
       } catch (err) {
         out.innerHTML = `<span class="schlecht">${esc(t('import_failed'))}</span>`;
       }
@@ -169,7 +179,9 @@ export default (ctx, Base) => {
       const t = this._t;
       const plan = preview.plan || [];
       const replace = preview.mode === 'replace';
-      const chosen = new Set(plan.filter((d) => d.new > 0).map((d) => `${d.person}|${d.date}`));
+      const chosen = new Set(plan.filter((d) => d.new > 0 && !d.expired).map((d) => `${d.person}|${d.date}`));
+      const expired = plan.filter((d) => d.expired).length;
+      const rulesText = t('import_rules', { m: preview.same_place_distance, s: preview.min_interval, n: preview.total, stays: preview.stays, merged: preview.merged, dropped: preview.dropped });
       const placeOf = (e) => (e.state === 'not_home' && e.address ? e.address : S.placeText(t, e.state));
       return new Promise((resolve) => {
         const overlay = document.createElement('div');
@@ -180,16 +192,21 @@ export default (ctx, Base) => {
           overlay.innerHTML = `<div class="fenster breit" role="dialog" aria-modal="true">
             <h3>${esc(t('import_preview_title'))}</h3>
             <div class="text">${esc(t('import_preview', { file: fileObject.name, n: preview.total, days: preview.days, persons: preview.persons.map(nameOf).join(', '), from: preview.first, to: preview.last }))}</div>
+            <div class="text">${esc(rulesText)}</div>
             ${replace ? `<div class="warnung" style="margin:8px 0">${esc(t('confirm_import_replace'))}</div>` : ''}
+            <div class="warnung" style="margin:8px 0">${esc(t('import_irreversible'))}</div>
+            ${expired ? `<div class="warnung" style="margin:8px 0">${esc(t('import_expired_warning', { n: expired, d: preview.retention_days }))}</div>` : ''}
+            ${(preview.not_recorded || []).length ? `<div class="warnung" style="margin:8px 0">${esc(t('import_not_recorded', { persons: preview.not_recorded.map(nameOf).join(', ') }))}</div>` : ''}
             <div class="vorschau-tabelle"><table>
               <thead><tr><th><input type="checkbox" class="alle"${plan.some((d) => d.new > 0) && plan.every((d) => d.new === 0 || chosen.has(`${d.person}|${d.date}`)) ? ' checked' : ''}${plan.some((d) => d.new > 0) ? '' : ' disabled'} aria-label="${esc(t('select_all'))}"></th>
-                <th>${esc(t('col_date'))}</th><th>${esc(t('col_person'))}</th><th>${esc(t('import_existing'))}</th><th>${esc(t('import_new'))}</th><th>${esc(t('import_status'))}</th><th></th></tr></thead>
+                <th>${esc(t('col_date'))}</th><th>${esc(t('col_person'))}</th><th>${esc(t('import_existing'))}</th><th>${esc(t('import_from_file'))}</th><th>${esc(t('import_new'))}</th><th>${esc(t('import_status'))}</th><th></th></tr></thead>
               <tbody>${plan.map((d, i) => `<tr>
                 <td><input type="checkbox" data-i="${i}"${chosen.has(`${d.person}|${d.date}`) ? ' checked' : ''}${d.new === 0 ? ' disabled' : ''}></td>
-                <td>${esc(d.date)}</td><td>${esc(nameOf(d.person))}</td><td>${d.existing}</td><td>${d.new}</td>
-                <td>${esc(t(`import_status_${d.status}`))}</td>
+                <td>${esc(d.date)}</td><td>${esc(nameOf(d.person))}</td><td>${d.existing}</td>
+                <td title="${esc(t('import_day_rules', { merged: d.merged || 0, dropped: d.dropped || 0 }))}">${d.points ?? d.new} → ${d.stays ?? d.new}${d.dropped ? ` <span class="klein">(−${d.dropped})</span>` : ''}</td><td>${d.new}</td>
+                <td>${esc(t(`import_status_${d.status}`))}${d.expired ? `<br><span class="schlecht">${esc(t('import_status_expired'))}</span>` : ''}</td>
                 <td>${d.new ? `<button class="auf" type="button" data-i="${i}">${esc(t('import_show'))}</button>` : ''}</td></tr>
-                <tr class="details" data-for="${i}" hidden><td></td><td colspan="6">${d.entries.map((e) => `${esc(e.start.slice(0, 5))}–${esc(e.end.slice(0, 5))} ${esc(placeOf(e))}`).join('<br>')}${d.new > d.entries.length ? '<br>…' : ''}</td></tr>`).join('')}
+                <tr class="details" data-for="${i}" hidden><td></td><td colspan="7">${d.entries.map((e) => `${esc(e.start.slice(0, 5))}–${esc(e.end.slice(0, 5))} ${esc(placeOf(e))}`).join('<br>')}${d.new > d.entries.length ? '<br>…' : ''}</td></tr>`).join('')}
               </tbody></table></div>
             <div class="text">${esc(t('import_summary', { n: total, days: chosen.size, none: nothing }))}</div>
             <div class="knoepfe"><button class="knopf" data-wahl="cancel">${esc(t('cancel'))}</button>

@@ -21,18 +21,23 @@ alex,2026-06-24,08:41:02,16:58:30,Work,52.509,13.388,
 | `person` | Object ID of the person entity (`person.alex` → `alex`): lower-case letters, digits, `_` |
 | `date` | Local date `YYYY-MM-DD` |
 | `start`, `end` | Local time `HH:MM:SS`; `end` may be empty (= `start`) |
-| `state` | State of the person: `home`, `not_home` or the name of a zone |
+| `state` | State of the person: `home`, `not_home` or the name of a zone; empty or `not_home` → on import the Home Assistant zone the point lies in (otherwise `not_home`) |
 | `latitude`, `longitude` | Decimal degrees (WGS84) |
 | `address` | Only for `not_home`, optional |
 
 One row is one stay. On import, the person in the file is used unless you
 choose a target person.
 
+On import of every format, the recording rules apply: consecutive points within
+the "same place" radius become one stay, and points on the way that are closer
+in time than the store interval are thinned out (a change of zone is always
+kept).
+
 ### GPX
 
 Tracks (`trkpt`), routes (`rtept`) and waypoints (`wpt`) with a `<time>` are
 imported; points without a time are skipped. Each point gets the zone it lies
-in (or `not_home`), consecutive points at the same place become one stay. A GPX
+in (or `not_home`); then the recording rules apply (see above). A GPX
 file does not say whose track it is, so you choose the person when importing.
 
 The export writes one waypoint per stay and one track per day.
@@ -68,19 +73,24 @@ alex,2026-06-24,08:41:02,16:58:30,Arbeit,52.509,13.388,
 | `person` | Objekt-ID der Personen-Entität (`person.alex` → `alex`): Kleinbuchstaben, Ziffern, `_` |
 | `date` | Lokales Datum `JJJJ-MM-TT` |
 | `start`, `end` | Lokale Uhrzeit `HH:MM:SS`; `end` darf leer sein (= `start`) |
-| `state` | Zustand der Person: `home`, `not_home` oder der Name einer Zone |
+| `state` | Zustand der Person: `home`, `not_home` oder der Name einer Zone; leer oder `not_home` → beim Import die Zone aus Home Assistant, in der der Punkt liegt (sonst `not_home`) |
 | `latitude`, `longitude` | Dezimalgrad (WGS84) |
 | `address` | Nur bei `not_home`, optional |
 
 Eine Zeile ist ein Aufenthalt. Beim Import gilt die Person aus der Datei, außer
 du wählst eine Ziel-Person.
 
+Beim Import gelten für jedes Format die Aufzeichnungsregeln: Aufeinanderfolgende
+Punkte im Umkreis „gleicher Ort“ werden ein Aufenthalt, und Punkte unterwegs, die
+zeitlich enger liegen als der Speicherabstand, werden ausgedünnt (ein
+Zonenwechsel bleibt immer erhalten).
+
 ### GPX
 
 Importiert werden Tracks (`trkpt`), Routen (`rtept`) und Wegpunkte (`wpt`) mit
 `<time>`; Punkte ohne Zeit werden übersprungen. Jeder Punkt bekommt die Zone,
-in der er liegt (sonst `not_home`), aufeinanderfolgende Punkte am selben Ort
-werden ein Aufenthalt. Eine GPX-Datei sagt nicht, wessen Track es ist – die
+in der er liegt (sonst `not_home`); danach gelten die Aufzeichnungsregeln
+(siehe oben). Eine GPX-Datei sagt nicht, wessen Track es ist – die
 Person wählst du beim Import.
 
 Der Export schreibt pro Aufenthalt einen Wegpunkt und pro Tag einen Track.

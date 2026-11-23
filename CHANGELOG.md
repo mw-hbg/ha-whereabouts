@@ -1,5 +1,60 @@
 # Changelog
 
+## Unreleased
+
+- Import: CSV entries that are away or have no state get the zone they lie in, like
+  GPX. The recording rules ("Same place within … metres", "At the same place store at
+  most every … seconds") are applied to every import; the preview shows per day how
+  many points become how many stays and how many are thinned out. A warning says that
+  this cannot be undone and that the source file should be kept. Days outside the
+  retention are marked and not ticked; a hint appears when recording is off for the
+  person. After the import, missing addresses can be fetched with one click.
+- New part "Maintain stored data" (Settings → Import and export, administrators):
+  "Adapt data to the recording rules" applies today's rules to stored days, with
+  persons, period and a preview.
+- "Fetch missing addresses": a background job looks up the address of stays away
+  without one at OpenStreetMap – exactly one request per second, places close
+  together only once, with progress, pause and cancel; it goes on after a restart of
+  Home Assistant.
+- Zones: "Recalculate zones in the data" (Settings → Zones → Choose and colour zones,
+  administrators) gives every stored entry the zone it lies in today – choice of
+  zones, persons and period, with a preview. A renamed zone gives its entries the new
+  name; entries of a deleted zone become away and can get an address. When zones were
+  added, changed, renamed or removed in Home Assistant, the settings page asks
+  administrators once: "Recalculate", "Later" or "Don't ask again".
+- The AI text ("Have data from another app converted") now also converts exports of
+  the Google Maps Timeline (phone export Timeline.json, older Takeout exports
+  "Semantic Location History" and Records.json) and large files (via a short script).
+
+---
+
+- Import: CSV-Einträge, die unterwegs sind oder keinen Zustand haben, bekommen wie bei
+  GPX die Zone, in der sie liegen. Die Aufzeichnungsregeln („Gleicher Ort bis … Meter“,
+  „Am selben Ort höchstens alle … Sekunden speichern“) gelten für jeden Import; die
+  Vorschau zeigt pro Tag, aus wie vielen Punkten wie viele Aufenthalte werden und wie
+  viele ausgedünnt werden. Ein Hinweis sagt, dass das unwiderruflich ist und die
+  Quelldatei aufbewahrt werden sollte. Tage außerhalb der Aufbewahrung sind markiert
+  und nicht angehakt; ist für die Person die Aufzeichnung aus, erscheint ein Hinweis.
+  Nach dem Import lassen sich fehlende Adressen mit einem Klick nachholen.
+- Neuer Teil „Gespeicherte Daten pflegen“ (Einstellungen → Import und Export,
+  Administratoren): „Daten an Aufzeichnungsregeln anpassen“ wendet die heutigen Regeln
+  auf gespeicherte Tage an – mit Personen, Zeitraum und Vorschau.
+- „Adressen nachholen“: Ein Auftrag im Hintergrund schlägt für Aufenthalte unterwegs
+  ohne Adresse die Adresse bei OpenStreetMap nach – genau eine Anfrage pro Sekunde,
+  nahe Orte nur einmal, mit Fortschritt, Pause und Abbrechen; nach einem Neustart von
+  Home Assistant geht es weiter.
+- Zonen: „Zonen in den Daten neu berechnen“ (Einstellungen → Zonen → Zonen auswählen
+  und einfärben, Administratoren) gibt jedem gespeicherten Eintrag die Zone, in der er
+  heute liegt – Auswahl von Zonen, Personen und Zeitraum, mit Vorschau. Eine
+  umbenannte Zone gibt ihren Einträgen den neuen Namen; Einträge einer gelöschten Zone
+  werden „unterwegs“ und können eine Adresse bekommen. Wurden in Home Assistant Zonen
+  angelegt, geändert, umbenannt oder gelöscht, fragt die Einstellungsseite
+  Administratoren einmal: „Neu berechnen“, „Später“ oder „Nicht mehr fragen“.
+- Der KI-Text („Daten aus einer anderen App umwandeln lassen“) wandelt jetzt auch
+  Exporte der Google-Maps-Zeitachse um (Handy-Export Timeline.json, ältere
+  Takeout-Exporte „Semantic Location History“ und Records.json) sowie große Dateien
+  (über ein kurzes Skript).
+
 ## 0.5.3
 
 - Settings, map: the CARTO key now comes before the CARTO styles. It is no longer

@@ -1,0 +1,294 @@
+"""Changing stored data: recording rules, zones, missing addresses.
+
+WebSocket commands for administrators:
+
+- whereabouts/maintenance/rules       adapt stored days to the recording rules
+- whereabouts/maintenance/zones       recalculate the zones of stored entries
+- whereabouts/maintenance/zone_ack    "don't ask again" for the current zone changes
+- whereabouts/addresses/status        state of the background job
+- whereabouts/addresses/start         start it (or count what it would do)
+- whereabouts/addresses/control       pause | resume | cancel
+
+Every command with ``preview: true`` only counts; without it the change is
+made and cannot be undone.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import voluptuous as vol
+from homeassistant.components import websocket_api
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.storage import Store
+
+from .const import CONF_MIN_INTERVAL, CONF_SAME_PLACE_DISTANCE, DEFAULT_OPTIONS, DOMAIN, SIGNAL_INFO_CHANGED
+from .geo import zone_snapshot
+from .rules import DayStats, ZoneStats, apply_rules, recalculate_zones
+from .storage import HistoryStorage
+
+ZONES_STORE_KEY = "whereabouts.zones_seen"
+ZONES_STORE_VERSION = 1
+
+_PERSON = vol.Match(r"^person\.[a-z0-9_]{1,100}$")
+_DATE = vol.Any("", vol.Match(r"^\d{4}-\d{2}-\d{2}$"))
+_SCOPE = {
+    vol.Required("persons"): vol.All([_PERSON], vol.Length(min=1, max=200)),
+    vol.Optional("from", default=""): _DATE,
+    vol.Optional("to", default=""): _DATE,
+}
+
+
+@callback
+def async_register(hass: HomeAssistant) -> None:
+    for command in (ws_rules, ws_zones, ws_zone_ack, ws_address_status, ws_address_start, ws_address_control):
+        websocket_api.async_register_command(hass, command)
+
+
+def _keys(persons: list[str]) -> list[str]:
+    return [p.split(".", 1)[1] for p in persons]
+
+
+def _runtime(hass: HomeAssistant, connection, msg):
+    runtime = hass.data.get(DOMAIN)
+    if runtime is None:
+        connection.send_error(msg["id"], "not_set_up", "Whereabouts is not set up")
+    return runtime
+
+
+# --- recording rules ------------------------------------------------------------------------------------
+def rules_on_days(
+    storage: HistoryStorage,
+    files: list[tuple[str, str]],
+    same_place_distance: float,
+    min_interval: float,
+    write: bool,
+) -> dict[str, Any]:
+    total = DayStats()
+    days_changed = 0
+    for person, date in files:
+
+        def change(points, date=date):
+            new, stats = apply_rules(points, same_place_distance, min_interval)
+            day = stats.get(date, DayStats())
+            return (new if day.stays != day.points else None), day
+
+        day = storage.transform_day(person, date, change, write)
+        total.points += day.points
+        total.stays += day.stays
+        total.merged += day.merged
+        total.dropped += day.dropped
+        days_changed += day.stays != day.points
+    return {**total.as_dict(), "days": len(files), "days_changed": days_changed}
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "whereabouts/maintenance/rules", vol.Optional("preview", default=True): bool, **_SCOPE}
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_rules(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    runtime = _runtime(hass, connection, msg)
+    if runtime is None:
+        return
+    options = runtime.options
+    distance = float(options.get(CONF_SAME_PLACE_DISTANCE) or DEFAULT_OPTIONS[CONF_SAME_PLACE_DISTANCE])
+    interval = float(options.get(CONF_MIN_INTERVAL) or DEFAULT_OPTIONS[CONF_MIN_INTERVAL])
+    files = await hass.async_add_executor_job(runtime.storage.files_in, _keys(msg["persons"]), msg["from"], msg["to"])
+    result = await hass.async_add_executor_job(
+        rules_on_days, runtime.storage, files, distance, interval, not msg["preview"]
+    )
+    if not msg["preview"] and result["days_changed"]:
+        async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
+    connection.send_result(
+        msg["id"], {**result, "same_place_distance": distance, "min_interval": interval, "preview": msg["preview"]}
+    )
+
+
+# --- zones ----------------------------------------------------------------------------------------------
+def _zone_entries(hass: HomeAssistant) -> dict[str, list]:
+    """Active zones by entity ID: [state name, latitude, longitude, radius]."""
+    result = {}
+    for zone in hass.states.async_all("zone"):
+        if zone.attributes.get("passive"):
+            continue
+        lat, lon = zone.attributes.get("latitude"), zone.attributes.get("longitude")
+        radius = zone.attributes.get("radius")
+        if lat is None or lon is None or radius is None:
+            continue
+        name = "home" if zone.entity_id == "zone.home" else zone.name
+        result[zone.entity_id] = [name, round(float(lat), 6), round(float(lon), 6), float(radius)]
+    return result
+
+
+def zone_diff(old: dict[str, list], new: dict[str, list]) -> tuple[list[dict], dict[str, str]]:
+    """What changed between two zone lists: (changes, renames {old name: new name}).
+
+    A zone whose entity ID changed but that lies at the same place with the
+    same radius counts as renamed (zones from YAML get a new ID with a new name).
+    """
+    changes: list[dict] = []
+    renames: dict[str, str] = {}
+    removed = {eid: z for eid, z in old.items() if eid not in new}
+    added = {eid: z for eid, z in new.items() if eid not in old}
+    for eid, gone in list(removed.items()):
+        twin = next((a for a, z in added.items() if z[1:] == gone[1:]), None)
+        if twin:
+            renames[gone[0]] = added[twin][0]
+            changes.append({"kind": "renamed", "entity_id": twin, "name": added[twin][0], "old_name": gone[0]})
+            del removed[eid], added[twin]
+    for eid, zone in new.items():
+        if eid in old and eid not in added:
+            before = old[eid]
+            if before[0] != zone[0]:
+                renames[before[0]] = zone[0]
+                changes.append({"kind": "renamed", "entity_id": eid, "name": zone[0], "old_name": before[0]})
+            elif before[1:] != zone[1:]:
+                changes.append({"kind": "changed", "entity_id": eid, "name": zone[0]})
+    changes += [{"kind": "added", "entity_id": eid, "name": z[0]} for eid, z in added.items()]
+    changes += [{"kind": "removed", "entity_id": eid, "name": z[0]} for eid, z in removed.items()]
+    return changes, renames
+
+
+class ZoneWatch:
+    """Remembers the zones the data was last checked against."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.hass = hass
+        self._store: Store[dict[str, Any]] = Store(hass, ZONES_STORE_VERSION, ZONES_STORE_KEY, private=True)
+        self._seen: dict[str, list] | None = None
+
+    async def async_load(self) -> None:
+        data = await self._store.async_load()
+        self._seen = data.get("zones") if isinstance(data, dict) and isinstance(data.get("zones"), dict) else None
+
+    async def async_changes(self) -> tuple[list[dict], dict[str, str]]:
+        """Changes since the last check. The first time, today's zones are simply remembered."""
+        current = _zone_entries(self.hass)
+        if self._seen is None:
+            await self.async_ack()
+            return [], {}
+        return zone_diff(self._seen, current)
+
+    async def async_ack(self) -> None:
+        self._seen = _zone_entries(self.hass)
+        await self._store.async_save({"zones": self._seen})
+
+
+def zones_on_days(
+    storage: HistoryStorage,
+    files: list[tuple[str, str]],
+    zones: list,
+    renames: dict[str, str],
+    only: set[str] | None,
+    write: bool,
+) -> dict[str, Any]:
+    total = ZoneStats()
+    days_changed = 0
+    for person, date in files:
+
+        def change(points):
+            new, stats = recalculate_zones(points, zones, renames, only)
+            return (new if stats.changed else None), stats
+
+        stats = storage.transform_day(person, date, change, write)
+        total.add(stats)
+        days_changed += bool(stats.changed)
+    return {**total.as_dict(), "days": len(files), "days_changed": days_changed}
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/maintenance/zones",
+        vol.Optional("preview", default=True): bool,
+        # zone names, "not_home" and "__gone__" (zones that no longer exist); missing = all
+        vol.Optional("zones"): vol.All([vol.All(str, vol.Length(max=200))], vol.Length(max=500)),
+        # after "Recalculate" in the question about changed zones: remember today's zones
+        vol.Optional("ack", default=False): bool,
+        **_SCOPE,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_zones(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    runtime = _runtime(hass, connection, msg)
+    if runtime is None:
+        return
+    _, renames = await runtime.zones.async_changes()
+    zones = zone_snapshot(hass)
+    only = set(msg["zones"]) if "zones" in msg else None
+    files = await hass.async_add_executor_job(runtime.storage.files_in, _keys(msg["persons"]), msg["from"], msg["to"])
+    result = await hass.async_add_executor_job(
+        zones_on_days, runtime.storage, files, zones, renames, only, not msg["preview"]
+    )
+    if not msg["preview"]:
+        if msg["ack"]:
+            await runtime.zones.async_ack()
+        if result["days_changed"]:
+            async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
+    connection.send_result(msg["id"], {**result, "renames": renames, "preview": msg["preview"]})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "whereabouts/maintenance/zone_ack"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_zone_ack(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    runtime = _runtime(hass, connection, msg)
+    if runtime is None:
+        return
+    await runtime.zones.async_ack()
+    connection.send_result(msg["id"], None)
+
+
+# --- missing addresses ----------------------------------------------------------------------------------
+@websocket_api.websocket_command({vol.Required("type"): "whereabouts/addresses/status"})
+@websocket_api.require_admin
+@callback
+def ws_address_status(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    runtime = _runtime(hass, connection, msg)
+    if runtime is None:
+        return
+    connection.send_result(msg["id"], runtime.addresses.status())
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "whereabouts/addresses/start", vol.Optional("preview", default=True): bool, **_SCOPE}
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_address_start(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    from .addresses import count_missing
+
+    runtime = _runtime(hass, connection, msg)
+    if runtime is None:
+        return
+    keys = _keys(msg["persons"])
+    if msg["preview"]:
+        files = await hass.async_add_executor_job(runtime.storage.files_in, keys, msg["from"], msg["to"])
+        missing = await hass.async_add_executor_job(count_missing, runtime.storage, files)
+        connection.send_result(msg["id"], {"missing": missing, "busy": runtime.addresses.busy})
+        return
+    try:
+        status = await runtime.addresses.async_start(keys, msg["from"], msg["to"])
+    except RuntimeError:
+        connection.send_error(msg["id"], "busy", "A lookup is already running")
+        return
+    connection.send_result(msg["id"], status)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/addresses/control",
+        vol.Required("action"): vol.In(["pause", "resume", "cancel"]),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_address_control(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    runtime = _runtime(hass, connection, msg)
+    if runtime is None:
+        return
+    job = runtime.addresses
+    await {"pause": job.async_pause, "resume": job.async_resume, "cancel": job.async_cancel}[msg["action"]]()
+    connection.send_result(msg["id"], job.status())

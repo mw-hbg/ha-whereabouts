@@ -76,7 +76,7 @@ export default (ctx, Base) => {
       this._wire();
       this._showDrafts();
       this._showSuccess();
-      this._askNewUsers();
+      this._askNewUsers().then(() => this._askZoneChanges());
       requestAnimationFrame(() => { this._restoreAnchor(anchor); this._noteAnchor(); });
     }
 

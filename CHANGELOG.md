@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 - Time zones: every time is now stored with its offset from UTC. The hour from 2 to 3
   o'clock that occurs twice when the clocks go back in autumn is no longer mixed up;

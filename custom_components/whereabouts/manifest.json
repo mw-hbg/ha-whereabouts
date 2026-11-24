@@ -22,7 +22,9 @@
   "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/mw-hbg/ha-whereabouts/issues",
-  "requirements": ["tzfpy==2.1.2"],
+  "requirements": [
+    "tzfpy==2.1.2"
+  ],
   "single_config_entry": true,
-  "version": "0.6.0"
+  "version": "0.7.0"
 }

@@ -403,6 +403,7 @@ export default (ctx, Base) => {
       if (c.custom === 'rights') this._rights(box);
       if (c.custom === 'sensors' && this._admin) this._sensors(box);
       if (c.custom === 'data') this._dataSection(box);
+      if (c.custom === 'maintenance' && this._admin) this._maintenanceSection(box);
       if (c.custom === 'diagnostics' && this._open.has('diagnostics')) {
         if (this._diag) this._showDiagnostics(); else this._loadDiagnostics();
       }

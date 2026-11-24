@@ -502,6 +502,42 @@ export function defineLiveCard(S) {
       return { st, picture: p.picture || S.safeUrl(st.attributes.entity_picture), pos };
     }
 
+    // "since 14:05" - for a place in another time zone also (or only) its local time
+    _sinceLine(d) {
+      const t = this._t;
+      const text = t('since', { time: S.sinceText(this._hass, t, d.st.last_changed) });
+      const zone = this._zoneOf(d);
+      if (!zone) return text;
+      return S.withLocalTime(this._hass, t, this._config.time_display, text, [Date.parse(d.st.last_changed)], zone);
+    }
+
+    // Time zone of a person's position ("" = Home Assistant's), asked from the server once per area
+    _zoneOf(d) {
+      if (!d || !d.pos || this._config.time_display === 'ha') return '';
+      if (!this._zones) { this._zones = new Map(); this._zonesWanted = new Map(); }
+      const key = `${d.pos.lat.toFixed(2)},${d.pos.lon.toFixed(2)}`;
+      if (this._zones.has(key)) return this._zones.get(key);
+      if (!this._zonesWanted.has(key)) {
+        this._zonesWanted.set(key, [d.pos.lat, d.pos.lon]);
+        clearTimeout(this._zonesTimer);
+        this._zonesTimer = setTimeout(() => this._fetchZones(), 50);
+      }
+      return '';
+    }
+
+    async _fetchZones() {
+      const wanted = [...this._zonesWanted.entries()].filter(([key]) => !this._zones.has(key)).slice(0, 100);
+      if (!wanted.length) return;
+      let result;
+      try {
+        result = await this._hass.callWS({ type: 'whereabouts/time_zones', points: wanted.map(([, point]) => point) });
+      } catch (err) {
+        result = { zones: [] }; // older server or error: no local times
+      }
+      wanted.forEach(([key], i) => this._zones.set(key, (result.zones || [])[i] || ''));
+      if (wanted.some(([key]) => this._zones.get(key))) { this._renderBar(); this._renderPanel(); }
+    }
+
     // Zone name or (away) the Companion app's address
     _placeLine(p, d) {
       const t = this._t;
@@ -528,7 +564,7 @@ export function defineLiveCard(S) {
         status.textContent = `${S.placeText(t, d.st.state)} `;
         const since = document.createElement('span');
         since.className = 'seit';
-        since.textContent = t('since', { time: S.sinceText(this._hass, t, d.st.last_changed) });
+        since.textContent = this._sinceLine(d);
         status.append(since);
         const text = d.st.state === 'not_home' ? S.phoneAddress(this._hass, this._sensorFor(p)) : '';
         address.textContent = text;
@@ -834,7 +870,7 @@ export function defineLiveCard(S) {
             <div class="bild"></div>
             <div class="zeilen">
               <div class="wer">${esc(p.name)}</div>
-              <div class="ort">${esc(this._placeLine(p, d))} <span class="seit">${esc(t('since', { time: S.sinceText(this._hass, t, d.st.last_changed) }))}</span></div>
+              <div class="ort">${esc(this._placeLine(p, d))} <span class="seit">${esc(this._sinceLine(d))}</span></div>
               <div class="leise">${esc(t('info_seen'))} ${esc(S.agoText(t, d.st.last_updated))} · ${esc(t('time', { time: S.clock(this._hass, new Date(d.st.last_updated)) }))}</div>
               <div><a class="koord" data-person="${p.key}" title="${esc(t('open_in_map'))}">${d.pos.lat.toFixed(5)}, ${d.pos.lon.toFixed(5)}</a>${d.pos.accuracy > 0 ? ` <span class="leise">± ${Math.round(d.pos.accuracy)} m</span>` : ''}</div>
             </div>

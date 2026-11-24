@@ -93,7 +93,6 @@ export default (ctx, Base) => {
         info.setAttribute('aria-expanded', text.hidden ? 'false' : 'true');
       }));
       box.appendChild(area);
-      this._maintenanceSection(box);
     }
 
     // "What must the file look like?" and a prompt for an AI assistant.
@@ -112,6 +111,7 @@ export default (ctx, Base) => {
           <ul>
             <li>${esc(t('format_col_person'))}</li><li>${esc(t('format_col_date'))}</li><li>${esc(t('format_col_time'))}</li>
             <li>${esc(t('format_col_state'))}</li><li>${esc(t('format_col_coords'))}</li><li>${esc(t('format_col_address'))}</li>
+            <li>${esc(t('format_col_offset'))}</li>
           </ul>
           <p>${esc(t('format_help_gpx'))}</p>
           <p>${esc(t('format_help_zip'))}</p>

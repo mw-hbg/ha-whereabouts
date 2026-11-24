@@ -5,6 +5,7 @@ WebSocket commands for administrators:
 - whereabouts/maintenance/rules       adapt stored days to the recording rules
 - whereabouts/maintenance/zones       recalculate the zones of stored entries
 - whereabouts/maintenance/zone_ack    "don't ask again" for the current zone changes
+- whereabouts/maintenance/timezones   add missing UTC offsets and time zones of places
 - whereabouts/addresses/status        state of the background job
 - whereabouts/addresses/start         start it (or count what it would do)
 - whereabouts/addresses/control       pause | resume | cancel
@@ -42,7 +43,15 @@ _SCOPE = {
 
 @callback
 def async_register(hass: HomeAssistant) -> None:
-    for command in (ws_rules, ws_zones, ws_zone_ack, ws_address_status, ws_address_start, ws_address_control):
+    for command in (
+        ws_rules,
+        ws_zones,
+        ws_zone_ack,
+        ws_time_zones,
+        ws_address_status,
+        ws_address_start,
+        ws_address_control,
+    ):
         websocket_api.async_register_command(hass, command)
 
 
@@ -104,6 +113,34 @@ async def ws_rules(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
     connection.send_result(
         msg["id"], {**result, "same_place_distance": distance, "min_interval": interval, "preview": msg["preview"]}
     )
+
+
+# --- time zones -----------------------------------------------------------------------------------------
+def time_zones_on_days(storage: HistoryStorage, files: list[tuple[str, str]], write: bool) -> dict[str, Any]:
+    total = {"rows": 0, "offsets": 0, "zones": 0, "assumed": 0}
+    days_changed = 0
+    for person, date in files:
+        day = storage.fill_time_zones(person, date, write)
+        for key in total:
+            total[key] += day[key]
+        days_changed += bool(day["offsets"] or day["zones"])
+    return {**total, "days": len(files), "days_changed": days_changed}
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "whereabouts/maintenance/timezones", vol.Optional("preview", default=True): bool, **_SCOPE}
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_time_zones(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    runtime = _runtime(hass, connection, msg)
+    if runtime is None:
+        return
+    files = await hass.async_add_executor_job(runtime.storage.files_in, _keys(msg["persons"]), msg["from"], msg["to"])
+    result = await hass.async_add_executor_job(time_zones_on_days, runtime.storage, files, not msg["preview"])
+    if not msg["preview"] and result["days_changed"]:
+        async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
+    connection.send_result(msg["id"], {**result, "preview": msg["preview"]})
 
 
 # --- zones ----------------------------------------------------------------------------------------------

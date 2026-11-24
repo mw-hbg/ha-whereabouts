@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -155,3 +156,29 @@ async def test_address_job_fills_once_per_place_pauses_and_resumes(
         await job.async_resume()
         await job._task
     assert hass.data["whereabouts"].storage.read_points("alex", "2026-06-25")[0].address.startswith("Street")
+
+
+def _write_old_day(folder: Path) -> None:
+    """A day as written before 0.7 (no offset, no time zone)."""
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"alex_{D}.csv").write_text("08:00:00;not_home;40.7128;-74.006;;09:00:00\n")
+
+
+async def test_time_zones_commands(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    _person(hass, "alex")
+    await setup_integration(hass)
+    runtime = hass.data["whereabouts"]
+    await hass.async_add_executor_job(_write_old_day, Path(runtime.storage.folder))
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "whereabouts/maintenance/timezones", "persons": ["person.alex"]})
+    preview = (await ws.receive_json())["result"]
+    assert (preview["days_changed"], preview["offsets"], preview["zones"]) == (1, 1, 1)
+    await ws.send_json(
+        {"id": 2, "type": "whereabouts/maintenance/timezones", "persons": ["person.alex"], "preview": False}
+    )
+    assert (await ws.receive_json())["result"]["days_changed"] == 1
+    [stay] = runtime.storage.read_day("alex", D)
+    assert stay.tz == "America/New_York" and stay.offset
+
+    await ws.send_json({"id": 3, "type": "whereabouts/time_zones", "points": [[40.7128, -74.006]]})
+    assert (await ws.receive_json())["result"]["zones"] == ["America/New_York"]

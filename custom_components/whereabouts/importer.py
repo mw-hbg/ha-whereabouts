@@ -3,7 +3,8 @@
 Supported (see FORMAT.md):
 
 - Whereabouts CSV (header ``person,date,start,end,state,latitude,longitude,address``,
-  separator ``,`` or ``;``) - also what the export writes
+  optionally ``utc_offset,end_utc_offset,time_zone``; separator ``,`` or ``;``) -
+  also what the export writes
 - Daily files of the original pyscript version (``<person>_<YYYY-MM-DD>.csv``),
   single or as ZIP
 - GPX (tracks, routes and waypoints with time stamps)
@@ -30,13 +31,25 @@ from .storage import (
     is_valid_time,
     to_float,
 )
+from .timezones import clean_offset, format_offset
 
 # Limits against oversized uploads (also inside ZIP files)
 MAX_FILE_BYTES = 50 * 1024 * 1024
 MAX_ZIP_ENTRIES = 20000
 MAX_TOTAL_BYTES = 200 * 1024 * 1024
 
-WHEREABOUTS_HEADER = ["person", "date", "start", "end", "state", "latitude", "longitude", "address"]
+WHEREABOUTS_HEADER = [
+    "person",
+    "date",
+    "start",
+    "end",
+    "state",
+    "latitude",
+    "longitude",
+    "address",
+    "utc_offset",
+    "end_utc_offset",
+]
 
 ZoneLookup = Callable[[float, float], str]
 
@@ -109,13 +122,15 @@ def parse_whereabouts_csv(text: str, zone_for: ZoneLookup | None = None) -> dict
                 longitude=lon,
                 address=from_export_text(get("address")),
                 end=end if is_valid_time(end) else "",
+                offset=clean_offset(get("utc_offset")),
+                end_offset=clean_offset(get("end_utc_offset")),
             )
         )
     return result
 
 
 def parse_legacy_day(text: str, date: str) -> list[Point]:
-    """One daily file of the original version (``start;state;lat;lon[;address[;end]]``)."""
+    """One daily file (``start;state;lat;lon[;address[;end[;offset[;end_offset[;time_zone]]]]]``)."""
     points = []
     for row in csv.reader(io.StringIO(text), delimiter=";"):
         if len(row) < 4 or not is_valid_time(row[0].strip()):
@@ -130,6 +145,8 @@ def parse_legacy_day(text: str, date: str) -> list[Point]:
                 longitude=to_float(row[3]),
                 address=row[4].strip() if len(row) > 4 else "",
                 end=end if is_valid_time(end) else "",
+                offset=clean_offset(row[6]) if len(row) > 6 else "",
+                end_offset=clean_offset(row[7]) if len(row) > 7 else "",
             )
         )
     return points
@@ -170,7 +187,14 @@ def parse_gpx(data: bytes, timezone: tzinfo, zone_for: ZoneLookup) -> list[Point
     raw.sort(key=lambda item: item[0])
 
     return [
-        Point(stamp.strftime("%Y-%m-%d"), stamp.strftime("%H:%M:%S"), zone_for(lat, lon), lat, lon)
+        Point(
+            stamp.strftime("%Y-%m-%d"),
+            stamp.strftime("%H:%M:%S"),
+            zone_for(lat, lon),
+            lat,
+            lon,
+            offset=format_offset(stamp.utcoffset()),
+        )
         for stamp, lat, lon in raw
     ]
 

@@ -1,3 +1,4 @@
 pytest-homeassistant-custom-component
 home-assistant-frontend
 ruff
+tzfpy==2.1.2

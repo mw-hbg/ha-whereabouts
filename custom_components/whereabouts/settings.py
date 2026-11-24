@@ -75,6 +75,8 @@ CATEGORIES: dict[str, dict[str, tuple[Any, Any]]] = {
         "carto_live_dark": ("dark_matter", vol.In(CARTO_STYLES)),
         "carto_history_light": ("voyager", vol.In(CARTO_STYLES)),
         "carto_history_dark": ("dark_matter", vol.In(CARTO_STYLES)),
+        # times of places in another time zone: Home Assistant's, the local one or both
+        "time_display": ("both", vol.In(["both", "ha", "local"])),
     },
     "zones": {
         # in which map the zones are drawn

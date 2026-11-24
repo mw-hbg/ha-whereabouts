@@ -72,6 +72,7 @@ const FACTORY = {
   map: {
     tiles: 'esri', map_link: 'google', map_link_choice: true, map_link_apps: ['apple', 'google'],
     carto_live_light: 'voyager', carto_live_dark: 'dark_matter', carto_history_light: 'voyager', carto_history_dark: 'dark_matter',
+    time_display: 'both',
   },
   zones: { zones_in: 'both', zone_color_home: '#2E7D32', zone_color: '#EF6C00', zone_names_zoom: 14, hidden_zones: [], zone_colors: {} },
   live: { show_info_bar: true, show_status_bar: true, show_accuracy: true, follow: true, live_auto_refresh: true, live_refresh_interval: 30 },
@@ -350,6 +351,8 @@ function createBackend(userKey) {
     'whereabouts/maintenance/rules': (msg) => ({ points: 120, stays: 80, merged: 30, dropped: 10, days: 4, days_changed: 3, same_place_distance: 50, min_interval: 60, preview: msg.preview }),
     'whereabouts/maintenance/zones': (msg) => ({ checked: 80, changed: 5, need_address: 2, days: 4, days_changed: 2, transitions: [{ from: 'Office', to: 'not_home', n: 2 }, { from: 'not_home', to: 'Park', n: 3 }], renames: {}, preview: msg.preview }),
     'whereabouts/maintenance/zone_ack': () => null,
+    'whereabouts/maintenance/timezones': (msg) => ({ rows: 120, offsets: 110, zones: 6, assumed: 1, days: 4, days_changed: 3, preview: msg.preview }),
+    'whereabouts/time_zones': (msg) => ({ zones: (msg.points || []).map(([, lon]) => (lon < -30 ? 'America/New_York' : '')), home: 'Europe/Berlin' }),
     'whereabouts/addresses/status': () => clone(db.address_job),
     'whereabouts/addresses/start': (msg) => (msg.preview ? { missing: 42, busy: false } : clone(db.address_job)),
     'whereabouts/addresses/control': (msg) => {

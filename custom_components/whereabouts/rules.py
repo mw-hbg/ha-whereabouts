@@ -19,7 +19,7 @@ from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 
-from .storage import STATE_NOT_HOME, Point, distance_m, is_valid_time, same_stay, to_float
+from .storage import STATE_NOT_HOME, Point, distance_m, is_valid_time, point_end_key, point_key, same_stay, to_float
 
 ZoneList = list[tuple[str, float, float, float]]  # (state name, latitude, longitude, radius)
 
@@ -28,11 +28,6 @@ ZoneList = list[tuple[str, float, float, float]]  # (state name, latitude, longi
 ZONE_TOLERANCE_M = 100.0
 
 GONE = "__gone__"  # selection: states of zones that no longer exist
-
-
-def _seconds(clock: str) -> int:
-    hours, minutes, seconds = (int(part) for part in clock.split(":"))
-    return hours * 3600 + minutes * 60 + seconds
 
 
 @dataclass
@@ -58,7 +53,7 @@ def apply_rules(
     """
     ordered = sorted(
         (p for p in points if is_valid_time(p.time)),
-        key=lambda p: (p.date, p.time),
+        key=lambda p: (p.date, point_key(p)),
     )
     result: list[Point] = []
     stats: dict[str, DayStats] = {}
@@ -66,12 +61,16 @@ def apply_rules(
     for point in ordered:
         day = stats.setdefault(point.date, DayStats())
         day.points += 1
-        moment = _seconds(point.time)
+        moment = point_key(point)
         last = result[-1] if result and result[-1].date == point.date else None
         if last is not None and same_stay(
             last.state, last.latitude, last.longitude, point.state, point.latitude, point.longitude, same_place_distance
         ):
-            last.end = max(last.end or last.time, point.end or point.time)
+            if point_end_key(point) > point_end_key(last):
+                last.end = point.end or point.time
+                last.end_offset = (point.end_offset or point.offset) if point.end else point.offset
+            if not last.tz and point.tz:
+                last.tz = point.tz
             if not last.address and point.address:
                 last.address = point.address
             if moment - last_kept >= min_interval:
@@ -82,8 +81,8 @@ def apply_rules(
             day.dropped += 1
             continue
         kept = replace(point)
-        if kept.end and kept.end <= kept.time:
-            kept.end = ""
+        if kept.end and point_end_key(kept) <= point_key(kept):
+            kept.end, kept.end_offset = "", ""
         result.append(kept)
         last_kept = moment
         day.stays += 1

@@ -26,6 +26,7 @@ export const DEFAULTS_MAP = {
   zone_color: '#EF6C00',
   height_mode: 'auto', // auto (full height in a panel view) | full | fixed
   height: 450,
+  time_display: 'both', // places in another time zone: both | ha (Home Assistant's time) | local
 };
 
 // --- translations ---------------------------------------------------------
@@ -543,6 +544,82 @@ export function clock(hass, date, seconds = false) {
   const options = { hour: '2-digit', minute: '2-digit' };
   if (seconds) options.second = '2-digit';
   return date.toLocaleTimeString(language(hass), options);
+}
+
+// --- time zones (0.7) ------------------------------------------------------
+// Stored times are Home Assistant's local time with their UTC offset ("+01:00").
+// A place in another time zone (IANA name) also shows its local time.
+export function offsetSeconds(text) {
+  const m = /^([+-])(\d{2}):?(\d{2})$/.exec(String(text || ''));
+  if (!m) return null;
+  const seconds = Number(m[2]) * 3600 + Number(m[3]) * 60;
+  return m[1] === '-' ? -seconds : seconds;
+}
+
+// Milliseconds of a stored time, or null without a valid offset
+export function storedInstant(date, clock, offset) {
+  const shift = offsetSeconds(offset);
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ''));
+  const c = /^(\d{2}):(\d{2})(?::(\d{2}))?/.exec(String(clock || ''));
+  if (shift === null || !d || !c) return null;
+  return Date.UTC(Number(d[1]), Number(d[2]) - 1, Number(d[3]), Number(c[1]), Number(c[2]), Number(c[3] || 0)) - shift * 1000;
+}
+
+const ZONE_FORMATS = new Map();
+// { date: 'YYYY-MM-DD', time: 'HH:MM' } of a moment in a time zone; null if the zone is unknown
+export function zoneParts(ms, zone) {
+  if (!zone || ms === null || ms === undefined) return null;
+  let format = ZONE_FORMATS.get(zone);
+  if (format === undefined) {
+    try {
+      format = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    } catch (err) {
+      format = null;
+    }
+    ZONE_FORMATS.set(zone, format);
+  }
+  if (!format) return null;
+  const p = {};
+  format.formatToParts(new Date(ms)).forEach((x) => { p[x.type] = x.value; });
+  return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour === '24' ? '00' : p.hour}:${p.minute}` };
+}
+
+// Short name of a time zone at a moment ("UTC-5", "EST"…)
+export function zoneLabel(hass, zone, ms) {
+  try {
+    const part = new Intl.DateTimeFormat(language(hass), { timeZone: zone, timeZoneName: 'short' })
+      .formatToParts(new Date(ms)).find((x) => x.type === 'timeZoneName');
+    if (part && part.value) return part.value.replace(/^GMT(?=[+-−])/, 'UTC');
+  } catch (err) {
+    // unknown zone: no label
+  }
+  return zone;
+}
+
+// Times of a place in another time zone, following the setting "time_display":
+// haText as it is ("ha", or the place has the same time as Home Assistant),
+// only the local time ("local") or both ("both", default). moments: milliseconds
+// (start and end); haDate: the day the entry belongs to (Home Assistant's day).
+export function withLocalTime(hass, t, mode, haText, moments, zone, haDate = '') {
+  if (mode === 'ha' || !zone) return haText;
+  const home = hass && hass.config && hass.config.time_zone;
+  const times = moments.filter((ms) => ms !== null && ms !== undefined);
+  if (!times.length) return haText;
+  const local = times.map((ms) => zoneParts(ms, zone));
+  if (local.some((x) => !x)) return haText;
+  const own = times.map((ms) => zoneParts(ms, home));
+  const differs = local.some((x, i) => !own[i] || x.time !== own[i].time || x.date !== own[i].date);
+  if (!differs) return haText;
+  const day = haDate || (own[0] && own[0].date) || '';
+  const lang = language(hass);
+  const dayText = (value) => {
+    const [y, m, d] = value.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(lang, { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+  };
+  const pieces = local.map((x) => (x.date !== day ? `${dayText(x.date)}, ${x.time}` : x.time));
+  const span = pieces.length > 1 && pieces[1] !== pieces[0] ? `${pieces[0]} – ${pieces[1]}` : pieces[0];
+  const text = t('local_time', { time: span, zone: zoneLabel(hass, zone, times[0]) });
+  return mode === 'local' ? text : `${haText} · ${text}`;
 }
 
 export function sinceText(hass, t, iso) {

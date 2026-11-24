@@ -1,5 +1,47 @@
 # Changelog
 
+## Unreleased
+
+- Time zones: every time is now stored with its offset from UTC. The hour from 2 to 3
+  o'clock that occurs twice when the clocks go back in autumn is no longer mixed up;
+  stays over the clock change keep their real length.
+- Journeys: the time zone of a place outside Home Assistant's is looked up offline from
+  the coordinates (new requirement tzfpy). New setting "Time in another time zone"
+  (Settings → Map): both times (default), only Home Assistant's or only the local time –
+  in "Location history" and "Where is…?". Summer and winter time of every place are
+  taken into account; if it is another day there, the date is added. Entries stay with
+  Home Assistant's day.
+- Import: times with their own offset (e.g. Google Maps Timeline, recorded abroad) are
+  converted to Home Assistant's time and day; missing offsets and the time zone of every
+  place are added right away. CSV export: new columns `utc_offset`, `end_utc_offset` and
+  `time_zone`; GPX export with exact UTC times also in the doubled hour. The prompt for
+  an AI assistant asks for `utc_offset`.
+- New category "Data maintenance" (administrators) between "Import and export" and
+  "Diagnostics": adapt data to the recording rules, recalculate zones in the data (still
+  also under Zones), new "Add time zones" for older data, fetch missing addresses.
+
+---
+
+- Zeitzonen: Jede Uhrzeit wird jetzt mit ihrer Abweichung von UTC gespeichert. Die
+  Stunde von 2 bis 3 Uhr, die es bei der Zeitumstellung im Herbst zweimal gibt, wird
+  nicht mehr vermischt; Aufenthalte über die Umstellung behalten ihre echte Dauer.
+- Reisen: Die Zeitzone eines Orts außerhalb der von Home Assistant wird offline aus den
+  Koordinaten bestimmt (neue Abhängigkeit tzfpy). Neue Einstellung „Uhrzeit in anderer
+  Zeitzone“ (Einstellungen → Karte): beide Zeiten (Standard), nur die von Home Assistant
+  oder nur die Ortszeit – im „Standortverlauf“ und in „Wo ist…?“. Sommer- und Winterzeit
+  jedes Orts werden berücksichtigt; ist dort ein anderer Tag, steht das Datum dabei.
+  Einträge bleiben beim Tag von Home Assistant.
+- Import: Uhrzeiten mit eigener Abweichung (z. B. Google Maps Zeitachse, im Ausland
+  aufgezeichnet) werden in Uhrzeit und Tag von Home Assistant umgerechnet; fehlende
+  Abweichungen und die Zeitzone jedes Orts werden gleich eingetragen. CSV-Export: neue
+  Spalten `utc_offset`, `end_utc_offset` und `time_zone`; GPX-Export mit exakten
+  UTC-Zeiten auch in der doppelten Stunde. Der Text für einen KI-Assistenten fragt
+  `utc_offset` ab.
+- Neue Kategorie „Datenpflege“ (Administratoren) zwischen „Import und Export“ und
+  „Diagnose“: Daten an Aufzeichnungsregeln anpassen, Zonen in den Daten neu berechnen
+  (weiterhin auch unter Zonen), neu „Zeitzonen ergänzen“ für ältere Daten, Adressen
+  nachholen.
+
 ## 0.6.0
 
 - Import: CSV entries that are away or have no state get the zone they lie in, like

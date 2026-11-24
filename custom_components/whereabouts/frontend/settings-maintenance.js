@@ -1,6 +1,7 @@
-// Whereabouts – settings page: changing stored data (administrators only).
-// "Adapt data to the recording rules", "Recalculate zones in the data", the
-// question after changed zones and "Fetch missing addresses" (background job).
+// Whereabouts – settings page: category "Data maintenance" (administrators only).
+// "Adapt data to the recording rules", "Recalculate zones in the data", "Add
+// time zones", the question after changed zones and "Fetch missing addresses"
+// (background job).
 // Part of settings-page.js, which loads all parts and puts them together.
 
 export default (ctx, Base) => {
@@ -8,13 +9,9 @@ export default (ctx, Base) => {
   const POLL_MS = 3000;
 
   return class extends Base {
-    // --- section in "Import and export" ------------------------------------------------------------------
+    // --- category "Data maintenance" ------------------------------------------------------------------------
     _maintenanceSection(box) {
       const t = this._t;
-      const head = document.createElement('div');
-      head.className = 'abschnitt-kopf';
-      head.innerHTML = `<ha-icon icon="mdi:database-cog"></ha-icon>${esc(t('maint_title'))}`;
-      box.appendChild(head);
       const row = (icon, label, info, button, extra = '') => {
         const el = document.createElement('div');
         el.className = 'zeile';
@@ -28,6 +25,10 @@ export default (ctx, Base) => {
       };
       const rules = row('mdi:tune-vertical', t('maint_rules'), t('si_maint_rules'), t('maint_rules_button'));
       rules.querySelector('.steuer .knopf').addEventListener('click', () => this._rulesDialog());
+      const zones = row('mdi:map-marker-path', t('maint_zones'), t('si_maint_zones'), t('maint_zones_button'));
+      zones.querySelector('.steuer .knopf').addEventListener('click', () => this._zonesDialog());
+      const times = row('mdi:clock-time-four-outline', t('maint_tz'), t('si_maint_tz'), t('maint_tz_button'));
+      times.querySelector('.steuer .knopf').addEventListener('click', () => this._timeZonesDialog());
       const addresses = row('mdi:map-search', t('addr_title'), t('si_addr'), t('addr_fetch'),
         '<div class="adressauftrag" style="grid-column:1 / -1"></div>');
       addresses.querySelector('.steuer .knopf').addEventListener('click', () => this._addressDialog());
@@ -104,6 +105,28 @@ export default (ctx, Base) => {
       const { win, ...scope } = answer;
       const done = await this._ws({ type: 'whereabouts/maintenance/rules', preview: false, ...scope });
       if (done) this._toast(t('maint_rules_done', { days: done.days_changed, removed: done.points - done.stays }), false, true);
+    }
+
+    // --- UTC offsets and time zones of places --------------------------------------------------------------
+    async _timeZonesDialog() {
+      const t = this._t;
+      const html = `<h3>${esc(t('maint_tz'))}</h3>
+        <div class="text">${esc(t('maint_tz_text'))}</div>
+        ${this._scopeHtml()}
+        <div class="text vorschau" style="margin-top:12px"></div>`;
+      const answer = await this._liveDialog(html, t('maint_tz_button'), false, async (win, scope, current) => {
+        const preview = await this._ws({ type: 'whereabouts/maintenance/timezones', preview: true, ...scope });
+        if (!current() || !preview) return false;
+        win.querySelector('.vorschau').textContent = preview.days_changed
+          ? [t('maint_tz_preview', { changed: preview.days_changed, days: preview.days, offsets: preview.offsets, zones: preview.zones }),
+            preview.assumed ? t('maint_tz_assumed', { n: preview.assumed }) : ''].filter(Boolean).join('\n')
+          : t('maint_tz_nothing', { days: preview.days });
+        return preview.days_changed > 0;
+      });
+      if (!answer) return;
+      const { win, ...scope } = answer;
+      const done = await this._ws({ type: 'whereabouts/maintenance/timezones', preview: false, ...scope });
+      if (done) this._toast(t('maint_tz_done', { days: done.days_changed }), false, true);
     }
 
     // --- zones in the stored data --------------------------------------------------------------------------

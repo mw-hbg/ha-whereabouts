@@ -12,6 +12,7 @@ from .geo import zone_in_snapshot, zone_snapshot
 from .importer import ImportError_, read_import, summarize
 from .logger import person_key
 from .rules import apply_rules
+from .storage import complete_points
 
 
 async def import_bytes(
@@ -56,6 +57,13 @@ async def import_bytes(
     )
     if not any(parsed.values()):
         raise ImportError_("no_points")
+
+    # UTC offsets (where the file has none) and the time zone of every place
+    def complete() -> None:
+        for points in parsed.values():
+            complete_points(points, runtime.storage.zone)
+
+    await hass.async_add_executor_job(complete)
 
     # Whose history is it?
     by_person: dict[str, list] = {}

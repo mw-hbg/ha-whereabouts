@@ -85,14 +85,15 @@ what it does; actions that delete or overwrite something ask first.
 |---|---|---|
 | Views | every user | which views the Whereabouts dashboard shows, the start view (light or dark always follows Home Assistant) |
 | Persons | every user | who appears, order, display name, colour, profile picture (drop or choose a picture, or load one from the internet, and crop it in a circle – stored as 256 × 256), in which card (both, only "Where is…?", only "Location history"); warnings for similar colours and colours that are hard to see on the map |
-| Map | every user | map style (Esri, OpenStreetMap, CARTO, each with a link to examples; automatic fallback if a service fails), CARTO styles per map for light and dark mode (pick a dark style for light as well for an always dark map), the CARTO key ("API ✓" when it works), preferred map and – on phones and tablets – which map apps are offered (default: Apple Maps and Google Maps; never Apple Maps on Android; one app left = opens directly) |
+| Map | every user | map style (Esri, OpenStreetMap, CARTO, each with a link to examples; automatic fallback if a service fails), CARTO styles per map for light and dark mode (pick a dark style for light as well for an always dark map), the CARTO key ("API ✓" when it works), preferred map and – on phones and tablets – which map apps are offered (default: Apple Maps and Google Maps; never Apple Maps on Android; one app left = opens directly); for places in another time zone: both times (default), only Home Assistant's or only the local time (summer and winter time of every place included; another day gets the date) |
 | Zones, "Where is…?" display, "Location history" display | every user (advanced) | in which card zones are shown, zone colours, choose and colour single zones, recalculating the zones in the stored data (administrators), info bar, status bar, accuracy circle, following, start view (route, heat map or table), start period (today, last 3 or 7 days, last 4 weeks), legend, hiding the points of long routes (from 400 entries), automatic refresh and refresh interval |
 | Persons in Whereabouts | administrators | which Home Assistant persons Whereabouts works with at all |
 | Users | administrators, only when there are other users | one table: rules for everybody (see live / see history / delete history: all persons, own person, nobody), own rights per user, settings view, synchronising, "Edit" for the standard or a user; technical users (e.g. the MQTT user) hidden |
 | Dashboard | administrators | hide in the sidebar, name, icon |
 | Recording | administrators | recorded persons; accuracy and keeping: store interval (60 s), "same place" radius (50 m), deleting old history (default: never; the confirmation says how many days disappear tonight) |
 | Addresses | administrators | address source: Companion app, otherwise OpenStreetMap (default) · only Companion app · only OpenStreetMap · none; distance up to which the phone's address is used; address sensor per person (found automatically, a warning when there is none) |
-| Import and export | export: everybody (own rights), import: administrators | "Export data" (day or period, persons, CSV/GPX, several files as ZIP); import that merges into gaps of existing days (or skips or replaces them) with a preview per day, format help and a prompt for converting other apps' data (also Google Maps Timeline) with an AI assistant; "Maintain stored data" (administrators): adapt data to the recording rules, fetch missing addresses |
+| Import and export | export: everybody (own rights), import: administrators | "Export data" (day or period, persons, CSV/GPX, several files as ZIP); import that merges into gaps of existing days (or skips or replaces them) with a preview per day, format help and a prompt for converting other apps' data (also Google Maps Timeline) with an AI assistant|
+| Data maintenance | administrators | adapt data to the recording rules, recalculate zones in the data, add time zones, fetch missing addresses |
 | Diagnostics | administrators | trackers, geocoded-location sensor and stored days per person |
 
 **Own values and the standard:** a blue dot marks a setting with an own value
@@ -202,6 +203,7 @@ zone_color: "#EF6C00"
 | Addresses from OpenStreetMap (default: only if the Companion app has none; can be switched off) | Home Assistant → `nominatim.openstreetmap.org` | coordinates of places on the way – also when an administrator starts "Fetch missing addresses" |
 | Map tiles | **your browser / app** → Esri, OpenStreetMap or CARTO (as chosen in the card) | the visible map area (like any online map) |
 | Map library (Leaflet) | Home Assistant itself | nothing – bundled, no CDN |
+| Time zone of a place (tzfpy) | Home Assistant | nothing – offline, data installed with the integration |
 
 Without internet the recording and the history keep working; only the map
 background stays empty.
@@ -230,7 +232,7 @@ another app converted") also handles Google Maps Timeline exports (`Timeline.jso
 from the phone, older Takeout exports "Semantic Location History" and
 `Records.json`) and large files (via a short script).
 
-**Maintain stored data** (administrators, in **Import and export**):
+**Data maintenance** (administrators, own category in the settings):
 
 - **Adapt data to the recording rules** applies today's rules to stored days.
   You choose persons and a period; a preview says how many entries are merged or
@@ -240,6 +242,13 @@ from the phone, older Takeout exports "Semantic Location History" and
   per second; places close together (within "same place") are asked only once.
   It shows its progress, can be paused, resumed or cancelled and continues after
   a restart of Home Assistant.
+- **Recalculate zones in the data** – see below (also in **Zones**).
+- **Add time zones**: since 0.7 every time is stored with its offset from UTC, so
+  the hour from 2 to 3 o'clock that occurs twice when the clocks go back stays
+  unambiguous, and places outside Home Assistant's time zone keep their time zone
+  (looked up offline from the coordinates). This adds both to older data; where
+  the time in the data jumps back, winter time applies, otherwise summer time is
+  assumed. Imports get both right away.
 
 **Recalculate zones in the data** (administrators, **Settings → Zones → Choose
 and colour zones**): every stored entry gets the zone it lies in with today's
@@ -359,14 +368,15 @@ oder überschreibt, fragt vorher nach.
 |---|---|---|
 | Ansichten | jeder Benutzer | welche Ansichten das Whereabouts-Dashboard zeigt, die Startansicht (hell oder dunkel folgt immer Home Assistant) |
 | Personen | jeder Benutzer | wer erscheint, Reihenfolge, Anzeigename, Farbe, Profilbild (Bild ablegen oder auswählen oder aus dem Internet laden und im Kreis zuschneiden – gespeichert als 256 × 256), in welcher Karte (beide, nur „Wo ist…?“, nur „Standortverlauf“); Hinweise bei ähnlichen und auf der Karte schlecht sichtbaren Farben |
-| Karte | jeder Benutzer | Kartenstil (Esri, OpenStreetMap, CARTO, jeweils mit Link zu Beispielen; automatischer Ersatz, wenn ein Dienst ausfällt), CARTO-Stile je Karte für den hellen und dunklen Modus (für eine immer dunkle Karte auch bei „Hell“ einen dunklen Stil wählen), der CARTO-Schlüssel („API ✓“, wenn er funktioniert), bevorzugte Karte und – auf Handy und Tablet – welche Karten-Apps zur Wahl stehen (Standard: Apple Karten und Google Maps; auf Android nie Apple Karten; nur eine App übrig = öffnet direkt) |
+| Karte | jeder Benutzer | Kartenstil (Esri, OpenStreetMap, CARTO, jeweils mit Link zu Beispielen; automatischer Ersatz, wenn ein Dienst ausfällt), CARTO-Stile je Karte für den hellen und dunklen Modus (für eine immer dunkle Karte auch bei „Hell“ einen dunklen Stil wählen), der CARTO-Schlüssel („API ✓“, wenn er funktioniert), bevorzugte Karte und – auf Handy und Tablet – welche Karten-Apps zur Wahl stehen (Standard: Apple Karten und Google Maps; auf Android nie Apple Karten; nur eine App übrig = öffnet direkt); bei Orten in einer anderen Zeitzone: beide Zeiten (Standard), nur die von Home Assistant oder nur die Ortszeit (Sommer- und Winterzeit jedes Orts berücksichtigt; ein anderer Tag bekommt das Datum) |
 | Zonen, Anzeige „Wo ist…?“, Anzeige „Standortverlauf“ | jeder Benutzer (erweitert) | in welcher Karte Zonen erscheinen, Zonenfarben, einzelne Zonen auswählen und einfärben, Zonen in den gespeicherten Daten neu berechnen (Administratoren), Infoleiste, Statusleiste, Genauigkeitskreis, Folgen, Startansicht (Route, Heatmap oder Tabelle), Startzeitraum (heute, letzte 3 oder 7 Tage, letzte 4 Wochen), Legende, Punkte langer Routen ausblenden (ab 400 Einträgen), automatisch aktualisieren und Aktualisierungsintervall |
 | Personen in Whereabouts | Administratoren | mit welchen Personen aus Home Assistant Whereabouts überhaupt arbeitet |
 | Benutzer | Administratoren, nur wenn es weitere Benutzer gibt | eine Tabelle: Regeln für alle (live sehen / Verlauf sehen / Verlauf löschen: alle Personen, eigene Person, niemand), eigene Rechte pro Benutzer, Ansicht Einstellungen, Synchronisieren, „Bearbeiten“ für den Standard oder einen Benutzer; technische Benutzer (z. B. der MQTT-Benutzer) ausgeblendet |
 | Dashboard | Administratoren | in der Seitenleiste ausblenden, Name, Symbol |
 | Aufzeichnung | Administratoren | aufgezeichnete Personen; Genauigkeit und Aufbewahrung: Speicherabstand (60 s), Umkreis „gleicher Ort“ (50 m), alten Verlauf löschen (Standard: nie; die Bestätigung nennt, wie viele Tage heute Nacht verschwinden) |
 | Adressen | Administratoren | Adressquelle: Companion App, sonst OpenStreetMap (Standard) · nur Companion App · nur OpenStreetMap · keine; Abstand, bis zu dem die Handy-Adresse übernommen wird; Adress-Sensor je Person (automatisch gefunden, Hinweis, wenn keiner da ist) |
-| Import und Export | Export: jeder (eigene Rechte), Import: Administratoren | „Daten exportieren“ (Tag oder Zeitraum, Personen, CSV/GPX, mehrere Dateien als ZIP); Import, der Lücken vorhandener Tage ergänzt (oder sie überspringt oder ersetzt), mit Vorschau pro Tag, Formathilfe und einem Text, mit dem ein KI-Assistent Daten anderer Apps (auch Google Maps Timeline) umwandelt; „Gespeicherte Daten pflegen“ (Administratoren): Daten an Aufzeichnungsregeln anpassen, Adressen nachholen |
+| Import und Export | Export: jeder (eigene Rechte), Import: Administratoren | „Daten exportieren“ (Tag oder Zeitraum, Personen, CSV/GPX, mehrere Dateien als ZIP); Import, der Lücken vorhandener Tage ergänzt (oder sie überspringt oder ersetzt), mit Vorschau pro Tag, Formathilfe und einem Text, mit dem ein KI-Assistent Daten anderer Apps (auch Google Maps Timeline) umwandelt|
+| Datenpflege | Administratoren | Daten an Aufzeichnungsregeln anpassen, Zonen in den Daten neu berechnen, Zeitzonen ergänzen, Adressen nachholen |
 | Diagnose | Administratoren | Tracker, Sensor „Geokodierter Standort“ und gespeicherte Tage pro Person |
 
 **Eigene Werte und Standard:** Ein blauer Punkt kennzeichnet eine Einstellung mit
@@ -482,6 +492,7 @@ zone_color: "#EF6C00"
 | Adressen aus der Companion App (Geokodierter Standort) | Home Assistant | nichts – die App hat sie schon geschickt |
 | Adressen von OpenStreetMap (Standard: nur wenn die Companion App keine hat; abschaltbar) | Home Assistant → `nominatim.openstreetmap.org` | Koordinaten von Orten unterwegs – auch, wenn ein Administrator „Adressen nachholen“ startet |
 | Kartenkacheln | **dein Browser / die App** → Esri, OpenStreetMap oder CARTO (je nach Karte) | den sichtbaren Kartenausschnitt (wie jede Online-Karte) |
+| Zeitzone eines Orts (tzfpy) | Home Assistant | nichts – offline, Daten kommen mit der Integration |
 | Kartenbibliothek (Leaflet) | Home Assistant selbst | nichts – eingebaut, kein CDN |
 
 Ohne Internet laufen Aufzeichnung und Verlauf weiter; nur der Kartenhintergrund
@@ -513,7 +524,7 @@ lassen“) kann auch Exporte der Google Maps Timeline (`Timeline.json` vom Handy
 ältere Takeout-Exporte „Semantic Location History“ und `Records.json`) und
 große Dateien (über ein kurzes Skript) umwandeln.
 
-**Gespeicherte Daten pflegen** (Administratoren, unter **Import und Export**):
+**Datenpflege** (Administratoren, eigene Kategorie in den Einstellungen):
 
 - **Daten an Aufzeichnungsregeln anpassen** wendet die heutigen Regeln auf
   gespeicherte Tage an. Du wählst Personen und Zeitraum; eine Vorschau nennt, wie
@@ -525,6 +536,14 @@ große Dateien (über ein kurzes Skript) umwandeln.
   Ort“) werden nur einmal abgefragt. Der Fortschritt wird angezeigt, du kannst
   pausieren, fortsetzen oder abbrechen, und nach einem Neustart von Home
   Assistant geht es weiter.
+- **Zonen in den Daten neu berechnen** – siehe unten (auch unter **Zonen**).
+- **Zeitzonen ergänzen**: Seit 0.7 wird jede Uhrzeit mit ihrer Abweichung von UTC
+  gespeichert – so bleibt die Stunde von 2 bis 3 Uhr, die es bei der
+  Zeitumstellung im Herbst zweimal gibt, eindeutig –, und Orte außerhalb der
+  Zeitzone von Home Assistant behalten ihre Zeitzone (offline aus den
+  Koordinaten bestimmt). Das ergänzt beides bei älteren Daten; springt die
+  Uhrzeit in den Daten zurück, gilt Winterzeit, sonst wird Sommerzeit
+  angenommen. Beim Import wird beides gleich eingetragen.
 
 **Zonen in den Daten neu berechnen** (Administratoren, **Einstellungen → Zonen →
 Zonen auswählen und einfärben**): Jeder gespeicherte Eintrag bekommt die Zone, in

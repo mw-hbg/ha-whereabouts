@@ -27,6 +27,7 @@ from .const import (
 from .geo import find_address_sensor, phone_address, position_for
 from .nominatim import Nominatim
 from .storage import HistoryStorage, Point
+from .timezones import foreign_zone, format_offset
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -123,7 +124,11 @@ class LocationLogger:
                     address = await self._address(entity_id, lat, lon)
             except Exception:  # an address must never prevent storing the point
                 _LOGGER.exception("Looking up the address failed")
-            point = Point(date, clock, person.state, lat, lon, address)
+            zone = ""
+            if lat is not None:
+                zone = await self.hass.async_add_executor_job(foreign_zone, lat, lon, self.storage.zone_name)
+            offset = format_offset(when.utcoffset())
+            point = Point(date, clock, person.state, lat, lon, address, offset=offset, tz=zone)
             try:
                 await self.hass.async_add_executor_job(self.storage.add_point, key, point)
             except (OSError, ValueError):

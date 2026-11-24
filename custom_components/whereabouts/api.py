@@ -31,6 +31,7 @@ from .const import (
 from .logger import person_key
 from .settings import CATEGORIES, card_settings
 from .storage import Stay, export_csv_multi, is_valid_date, is_valid_key
+from .timezones import foreign_zone, parse_offset
 
 DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 TIME_PATTERN = r"^\d{2}:\d{2}:\d{2}$"
@@ -77,6 +78,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_history)
     websocket_api.async_register_command(hass, ws_days)
     websocket_api.async_register_command(hass, ws_delete)
+    websocket_api.async_register_command(hass, ws_time_zones)
     hass.http.register_view(ExportView())
 
 
@@ -237,6 +239,26 @@ async def ws_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     connection.send_result(msg["id"], {"deleted": deleted})
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/time_zones",
+        vol.Required("points"): vol.All(
+            [vol.All([vol.Coerce(float)], vol.Length(min=2, max=2))], vol.Length(min=1, max=100)
+        ),
+    }
+)
+@websocket_api.async_response
+async def ws_time_zones(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Time zones of places ("" = Home Assistant's own or unknown) - for the local time in "Where is…?"."""
+    runtime = _runtime(hass)
+    if runtime is None:
+        connection.send_error(msg["id"], "not_set_up", "Whereabouts is not set up")
+        return
+    home = runtime.storage.zone_name
+    zones = await hass.async_add_executor_job(lambda: [foreign_zone(lat, lon, home) for lat, lon in msg["points"]])
+    connection.send_result(msg["id"], {"zones": zones, "home": home})
+
+
 class ExportView(HomeAssistantView):
     """GET /api/whereabouts/export?persons=person.a,person.b&from=…&to=…&format=csv|gpx
     &split_day=1&split_person=1
@@ -335,11 +357,15 @@ def export_gpx(person: str, rows: list[tuple[str, Stay]], timezone) -> str:
 
 def export_gpx_multi(groups: list[tuple[str, list[tuple[str, Stay]]]], timezone) -> str:
     """Several persons: waypoints named with the person, one track per person and day."""
-    from datetime import datetime
+    from datetime import datetime, timedelta
+    from datetime import timezone as dt_timezone
     from xml.sax.saxutils import escape, quoteattr
 
-    def stamp(day: str, clock: str) -> str:
-        local = datetime.fromisoformat(f"{day}T{clock}").replace(tzinfo=timezone)
+    def stamp(day: str, clock: str, offset: str = "") -> str:
+        # the stored UTC offset makes the doubled hour in autumn unambiguous
+        seconds = parse_offset(offset)
+        zone = timezone if seconds is None else dt_timezone(timedelta(seconds=seconds))
+        local = datetime.fromisoformat(f"{day}T{clock}").replace(tzinfo=zone)
         return local.astimezone(dt_util.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     lines = [
@@ -354,7 +380,7 @@ def export_gpx_multi(groups: list[tuple[str, list[tuple[str, Stay]]]], timezone)
                 label = f"{person}: {label}"
             lines.append(
                 f"  <wpt lat={quoteattr(str(stay.latitude))} lon={quoteattr(str(stay.longitude))}>"
-                f"<time>{stamp(day, stay.start)}</time><name>{escape(label)}</name>"
+                f"<time>{stamp(day, stay.start, stay.offset)}</time><name>{escape(label)}</name>"
                 f"<desc>{escape(f'{stay.start}-{stay.end}')}</desc></wpt>"
             )
     for person, rows in groups:
@@ -364,10 +390,13 @@ def export_gpx_multi(groups: list[tuple[str, list[tuple[str, Stay]]]], timezone)
         for day, stays in days.items():
             lines.append(f"  <trk><name>{escape(person)} {day}</name><trkseg>")
             for stay in stays:
-                for clock in dict.fromkeys((stay.start, stay.end)):
+                ends = [(stay.start, stay.offset)]
+                if (stay.end, stay.end_offset or stay.offset) != ends[0]:
+                    ends.append((stay.end, stay.end_offset or stay.offset))
+                for clock, offset in ends:
                     lines.append(
                         f"    <trkpt lat={quoteattr(str(stay.latitude))} lon={quoteattr(str(stay.longitude))}>"
-                        f"<time>{stamp(day, clock)}</time></trkpt>"
+                        f"<time>{stamp(day, clock, offset)}</time></trkpt>"
                     )
             lines.append("  </trkseg></trk>")
     lines.append("</gpx>")

@@ -6,12 +6,17 @@ called through the executor.
 One CSV file per person and day: ``<person>_<YYYY-MM-DD>.csv``, separator
 ``;``, no header, one row per stay::
 
-    start;state;latitude;longitude;address;end
+    start;state;latitude;longitude;address;end;offset;end_offset;time_zone
 
 - ``state`` is the person's state (``home``, ``not_home`` or a zone name).
 - ``address`` is only filled when the person was away (``not_home``).
 - ``end`` is the time the stay was last confirmed. Rows of older files may
   lack it; consecutive rows at the same place are merged when reading.
+- ``offset`` (0.7): UTC offset of ``start`` (``+01:00``); ``end_offset`` only
+  when the end has another one (the clocks changed during the stay);
+  ``time_zone`` only when the place lies in another time zone than Home
+  Assistant (see timezones.py). Rows without them are completed when read.
+  Empty trailing columns are left out.
 
 A stay is "the same place" when the state is equal AND, for ``not_home``,
 the new point is less than ``same_place_distance`` metres from where the
@@ -31,6 +36,9 @@ import re
 import threading
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import tzinfo
+
+from .timezones import clean_offset, foreign_zone, moment, offset_at, resolve_offsets, to_zone
 
 _KEY_RE = re.compile(r"^[a-z0-9_]{1,64}$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -106,6 +114,16 @@ def same_stay(
     return distance_m(la, oa, lb, ob) < same_place_distance
 
 
+# Columns of a stored row
+START, STATE, LAT, LON, ADDRESS, END, OFFSET, END_OFFSET, ZONE = range(9)
+COLUMNS = 9
+_NO_DATE = "1970-01-01"
+
+
+def _cell(row: list[str], index: int) -> str:
+    return row[index].strip() if len(row) > index else ""
+
+
 @dataclass
 class Stay:
     """One stay at one place, as shown in the cards."""
@@ -118,6 +136,11 @@ class Stay:
     address: str = ""
     # Start times of all rows merged into this stay (needed for deleting)
     times: list[str] = field(default_factory=list)
+    offset: str = ""  # UTC offset of start
+    end_offset: str = ""  # UTC offset of end
+    tz: str = ""  # time zone of the place when it is not Home Assistant's
+    start_key: int = 0  # moment of start/end (orders the doubled hour correctly)
+    end_key: int = 0
 
     def as_dict(self) -> dict:
         return {
@@ -128,6 +151,9 @@ class Stay:
             "longitude": self.longitude,
             "address": self.address,
             "times": list(self.times),
+            "offset": self.offset,
+            "end_offset": self.end_offset or self.offset,
+            "tz": self.tz,
         }
 
 
@@ -142,43 +168,193 @@ class Point:
     longitude: float | None
     address: str = ""
     end: str = ""
+    offset: str = ""  # UTC offset of time ("" = unknown)
+    end_offset: str = ""  # UTC offset of end ("" = like offset)
+    tz: str = ""  # time zone of the place when it is not Home Assistant's
 
 
-def build_stays(rows: Iterable[list[str]], same_place_distance: float) -> list[Stay]:
+def point_key(point: Point) -> int:
+    """Moment of a point's start (seconds; without offset as if it were UTC)."""
+    return moment(point.date or _NO_DATE, point.time, point.offset)
+
+
+def point_end_key(point: Point) -> int:
+    """Moment of a point's end (its start when it has none)."""
+    if not point.end:
+        return point_key(point)
+    return moment(point.date or _NO_DATE, point.end, point.end_offset or point.offset)
+
+
+def parse_rows(date: str, rows: Iterable[list[str]], zone: tzinfo | None = None) -> tuple[list[Point], list[bool], int]:
+    """Stored rows -> points in stored order, completed with offsets when ``zone`` is given.
+
+    Also returns per point whether it had its own offset, and how many times
+    of the doubled hour had to be assumed to be summer time.
+    """
+    usable = [r for r in rows if len(r) >= 4 and is_valid_time(r[START].strip())]
+    points: list[Point] = []
+    had: list[bool] = []
+    for row in usable:
+        end = _cell(row, END)
+        points.append(
+            Point(
+                date=date,
+                time=row[START].strip(),
+                state=row[STATE].strip(),
+                latitude=to_float(row[LAT]),
+                longitude=to_float(row[LON]),
+                address=_cell(row, ADDRESS),
+                end=end if is_valid_time(end) else "",
+                offset=clean_offset(_cell(row, OFFSET)),
+                end_offset=clean_offset(_cell(row, END_OFFSET)),
+                tz=_cell(row, ZONE),
+            )
+        )
+        had.append(bool(points[-1].offset))
+    assumed = 0
+    if zone is not None and date and not all(had):
+        resolved, assumed = resolve_offsets(date, [(p.time, p.end) for p in points], zone)
+        for point, own, (offset, end_offset) in zip(points, had, resolved, strict=True):
+            if not own:
+                point.offset = offset
+                if not point.end_offset:
+                    point.end_offset = end_offset
+    for point in points:
+        if point.end and point_end_key(point) <= point_key(point):
+            point.end, point.end_offset = "", ""
+        if point.end_offset == point.offset:
+            point.end_offset = ""
+    return points, had, assumed
+
+
+def rows_to_points(date: str, rows: Iterable[list[str]], zone: tzinfo | None = None) -> list[Point]:
+    """Stored rows -> points sorted by their moment."""
+    return sorted(parse_rows(date, rows, zone)[0], key=point_key)
+
+
+def point_row(point: Point) -> list[str]:
+    """A point as stored row (empty trailing columns after "end" left out)."""
+    has_end = bool(point.end) and point_end_key(point) > point_key(point)
+    end_offset = point.end_offset if has_end and point.end_offset != point.offset else ""
+    row = [
+        point.time,
+        clean_text(point.state),
+        format_coordinate(point.latitude),
+        format_coordinate(point.longitude),
+        clean_text(point.address) if point.state == STATE_NOT_HOME else "",
+        point.end if has_end else "",
+        clean_offset(point.offset),
+        clean_offset(end_offset),
+        clean_text(point.tz),
+    ]
+    while len(row) > END + 1 and not row[-1]:
+        row.pop()
+    return row
+
+
+def build_stays(
+    rows: Iterable[list[str]], same_place_distance: float, date: str = "", zone: tzinfo | None = None
+) -> list[Stay]:
     """Merge consecutive rows at the same place into stays.
 
-    Rows are sorted by time first: while a point waits for its address, a
-    later point may be written before it.
+    Rows are sorted by their moment first: while a point waits for its
+    address, a later point may be written before it.
     """
     stays: list[Stay] = []
-    usable = sorted((r for r in rows if len(r) >= 4), key=lambda r: r[0].strip())
-    for row in usable:
-        start, state = row[0].strip(), row[1].strip()
-        lat, lon = to_float(row[2]), to_float(row[3])
-        if lat is None or lon is None or not is_valid_time(start):
+    for point in rows_to_points(date or _NO_DATE, rows, zone):
+        lat, lon = point.latitude, point.longitude
+        if lat is None or lon is None:
             continue
-        address = row[4].strip() if len(row) > 4 else ""
-        end = row[5].strip() if len(row) > 5 and is_valid_time(row[5].strip()) else start
+        end_key = point_end_key(point)
+        end_offset = (point.end_offset or point.offset) if point.end else point.offset
         if stays:
             last = stays[-1]
-            if same_stay(last.state, last.latitude, last.longitude, state, lat, lon, same_place_distance):
-                last.end = max(last.end, end)
-                last.times.append(start)
-                if not last.address and address:
-                    last.address = address
+            if same_stay(last.state, last.latitude, last.longitude, point.state, lat, lon, same_place_distance):
+                if end_key > last.end_key:
+                    last.end, last.end_offset, last.end_key = point.end or point.time, end_offset, end_key
+                last.times.append(point.time)
+                if not last.address and point.address:
+                    last.address = point.address
+                if not last.tz and point.tz:
+                    last.tz = point.tz
                 continue
-        stays.append(Stay(start, max(start, end), state, lat, lon, address, [start]))
+        stays.append(
+            Stay(
+                point.time,
+                point.end or point.time,
+                point.state,
+                lat,
+                lon,
+                point.address,
+                [point.time],
+                point.offset,
+                end_offset,
+                point.tz,
+                point_key(point),
+                end_key,
+            )
+        )
     return stays
+
+
+def _to_home_time(point: Point, zone: tzinfo) -> None:
+    """A time with another UTC offset (e.g. recorded abroad) -> Home Assistant's time and day."""
+    end_offset = point.end_offset or point.offset
+    date, clock, offset = to_zone(point.date, point.time, point.offset, zone)
+    if point.end and is_valid_time(point.end):
+        end_date, end, end_offset = to_zone(point.date, point.end, end_offset, zone)
+        if end_date != date:  # a stay never crosses midnight
+            end = "23:59:59"
+            end_offset = offset_at(date, end, zone)
+        point.end, point.end_offset = end, (end_offset if end_offset != offset else "")
+    point.date, point.time, point.offset = date, clock, offset
+
+
+def complete_points(points: list[Point], zone: tzinfo | None) -> int:
+    """Imported points (in file order): missing offsets and the time zone of the place.
+
+    Times with an offset are converted to Home Assistant's time (and day);
+    offsets missing in the file come from Home Assistant's time zone (the
+    order decides the doubled hour); the time zone always comes from the
+    coordinates. Returns how many times were assumed to be summer time.
+    """
+    home = str(getattr(zone, "key", "") or "")
+    assumed = 0
+    by_day: dict[str, list[Point]] = {}
+    for point in points:
+        if not (is_valid_date(point.date) and is_valid_time(point.time)):
+            continue
+        if zone is not None and point.offset:
+            _to_home_time(point, zone)
+        by_day.setdefault(point.date, []).append(point)
+    for date, day in by_day.items():
+        if zone is not None and not all(p.offset for p in day):
+            resolved, guessed = resolve_offsets(date, [(p.time, p.end) for p in day], zone)
+            assumed += guessed
+            for point, (offset, end_offset) in zip(day, resolved, strict=True):
+                if not point.offset:
+                    point.offset = offset
+                    if not point.end_offset:
+                        point.end_offset = end_offset
+        for point in day:
+            point.tz = foreign_zone(point.latitude, point.longitude, home)
+    return assumed
 
 
 class HistoryStorage:
     """All file access of the location history."""
 
-    def __init__(self, folder: str, same_place_distance: float = 50) -> None:
+    def __init__(self, folder: str, same_place_distance: float = 50, zone: tzinfo | None = None) -> None:
         self.folder = folder
         self.same_place_distance = same_place_distance
+        # Home Assistant's time zone: completes rows without offset (None in plain tests)
+        self.zone = zone
         # One lock for all files: writes are rare and short.
         self._lock = threading.Lock()
+
+    @property
+    def zone_name(self) -> str:
+        return str(getattr(self.zone, "key", "") or "")
 
     # --- paths ------------------------------------------------------------
     def path(self, person: str, date: str) -> str:
@@ -211,6 +387,18 @@ class HistoryStorage:
         os.chmod(temp, 0o600)
         os.replace(temp, path)
 
+    def complete(self, point: Point) -> Point:
+        """Offset from Home Assistant's time zone when the point has none."""
+        if not point.offset and self.zone is not None and is_valid_date(point.date) and is_valid_time(point.time):
+            point.offset = offset_at(point.date, point.time, self.zone)
+        return point
+
+    def rows_to_points(self, date: str, rows: list[list[str]]) -> list[Point]:
+        return rows_to_points(date, rows, self.zone)
+
+    def _write_points(self, path: str, points: Iterable[Point]) -> None:
+        self._write_rows(path, [point_row(p) for p in sorted(points, key=point_key)])
+
     # --- writing ----------------------------------------------------------
     def needs_address(self, person: str, date: str, state: str, lat: float | None, lon: float | None) -> bool:
         """Whether a new point would need an address.
@@ -234,32 +422,44 @@ class HistoryStorage:
         if not is_valid_time(point.time):
             raise ValueError("invalid time")
         path = self.path(person, point.date)
+        point = self.complete(point)
         lat, lon = format_coordinate(point.latitude), format_coordinate(point.longitude)
         state = clean_text(point.state)
-        address = clean_text(point.address) if state == STATE_NOT_HOME else ""
         with self._lock:
             self._ensure_folder()
             rows = self._read_rows(path)
             if rows:
                 last = rows[-1]
                 if len(last) >= 4 and same_stay(last[1], last[2], last[3], state, lat, lon, self.same_place_distance):
-                    while len(last) < 6:
-                        last.append("")
-                    if not last[4].strip() and address:
-                        last[4] = address
-                    last[5] = max(last[5].strip() or last[0], point.end or point.time)
-                    last[0] = min(last[0], point.time)  # a late, earlier point
-                    self._write_rows(path, rows)
-                    return "extended"
-            rows.append([point.time, state, lat, lon, address, point.end if point.end > point.time else ""])
+                    stored = parse_rows(point.date, [last], self.zone)[0]
+                    if stored:
+                        rows[-1] = point_row(self._extended(stored[0], point))
+                        self._write_rows(path, rows)
+                        return "extended"
+            rows.append(point_row(point))
             self._write_rows(path, rows)
             return "new"
+
+    @staticmethod
+    def _extended(stay: Point, point: Point) -> Point:
+        """The stored row ``stay`` extended by ``point`` (earlier start / later end)."""
+        if not stay.address and point.state == STATE_NOT_HOME and point.address:
+            stay.address = clean_text(point.address)
+        end_time, end_offset = stay.end or stay.time, (stay.end_offset or stay.offset) if stay.end else stay.offset
+        new_end = point.end or point.time
+        new_end_offset = (point.end_offset or point.offset) if point.end else point.offset
+        if moment(point.date, new_end, new_end_offset) > moment(stay.date, end_time, end_offset):
+            end_time, end_offset = new_end, new_end_offset
+        if point_key(point) < point_key(stay):  # a late, earlier point
+            stay.time, stay.offset = point.time, point.offset
+        stay.end, stay.end_offset = end_time, end_offset
+        return stay
 
     # --- reading ----------------------------------------------------------
     def read_day(self, person: str, date: str) -> list[Stay]:
         with self._lock:
             rows = self._read_rows(self.path(person, date))
-        return build_stays(rows, self.same_place_distance)
+        return build_stays(rows, self.same_place_distance, date, self.zone)
 
     def list_files(self) -> list[tuple[str, str]]:
         """All (person, date) pairs that have a file, sorted."""
@@ -303,38 +503,7 @@ class HistoryStorage:
                     removed += 1
         return removed
 
-    # --- whole days (rules, zones, addresses) ------------------------------
-    @staticmethod
-    def rows_to_points(date: str, rows: list[list[str]]) -> list[Point]:
-        points = []
-        for row in rows:
-            if len(row) < 4 or not is_valid_time(row[0].strip()):
-                continue
-            end = row[5].strip() if len(row) > 5 and is_valid_time(row[5].strip()) else ""
-            points.append(
-                Point(
-                    date=date,
-                    time=row[0].strip(),
-                    state=row[1].strip(),
-                    latitude=to_float(row[2]),
-                    longitude=to_float(row[3]),
-                    address=row[4].strip() if len(row) > 4 else "",
-                    end=end,
-                )
-            )
-        return sorted(points, key=lambda p: p.time)
-
-    @staticmethod
-    def point_row(point: Point) -> list[str]:
-        return [
-            point.time,
-            clean_text(point.state),
-            format_coordinate(point.latitude),
-            format_coordinate(point.longitude),
-            clean_text(point.address) if point.state == STATE_NOT_HOME else "",
-            point.end if point.end and point.end > point.time else "",
-        ]
-
+    # --- whole days (rules, zones, addresses, time zones) -------------------
     def read_points(self, person: str, date: str) -> list[Point]:
         """The stored rows of one day as points (sorted by time)."""
         with self._lock:
@@ -354,8 +523,32 @@ class HistoryStorage:
                 return change([])[1]
             new, result = change(self.rows_to_points(date, rows))
             if write and new is not None:
-                self._write_rows(path, [self.point_row(p) for p in sorted(new, key=lambda p: p.time)])
+                self._write_points(path, new)
         return result
+
+    def fill_time_zones(self, person: str, date: str, write: bool = True) -> dict[str, int]:
+        """Add missing UTC offsets and time zones of places to one stored day.
+
+        Returns the rows, how many got an offset, how many a time zone, and
+        how many times of the doubled hour were assumed to be summer time.
+        """
+        path = self.path(person, date)
+        home = self.zone_name
+        with self._lock:
+            rows = self._read_rows(path)
+            points, had, assumed = parse_rows(date, rows, self.zone)
+            offsets = sum(1 for own in had if not own) if self.zone is not None else 0
+            zones = 0
+            for point in points:
+                if point.tz:
+                    continue
+                found = foreign_zone(point.latitude, point.longitude, home)
+                if found:
+                    point.tz = found
+                    zones += 1
+            if write and (offsets or zones):
+                self._write_points(path, points)
+        return {"rows": len(points), "offsets": offsets, "zones": zones, "assumed": assumed if offsets else 0}
 
     def set_addresses(self, person: str, date: str, addresses: dict[str, str]) -> int:
         """Fill the empty address of away rows ({start time: address}). Returns how many."""
@@ -386,27 +579,25 @@ class HistoryStorage:
         ]
 
     # --- import / export --------------------------------------------------
-    @staticmethod
-    def _by_day(points: Iterable[Point]) -> dict[str, list[Point]]:
+    def _by_day(self, points: Iterable[Point]) -> dict[str, list[Point]]:
         by_day: dict[str, list[Point]] = {}
         for point in points:
             if is_valid_date(point.date) and is_valid_time(point.time):
-                by_day.setdefault(point.date, []).append(point)
+                by_day.setdefault(point.date, []).append(self.complete(point))
         return by_day
 
-    def _gap_points(self, rows: list[list[str]], day_points: list[Point]) -> list[Point]:
+    def _gap_points(self, date: str, rows: list[list[str]], day_points: list[Point]) -> list[Point]:
         """Points of an imported day that fall into a gap of the stored day.
 
         A point is new when its time span (start to end) overlaps no stored
         stay - so nothing is stored twice and nothing stored is overwritten,
         even when the times of the file do not match to the second.
         """
-        stays = build_stays(rows, self.same_place_distance)
-        spans = [(stay.start, stay.end) for stay in stays]
+        stays = build_stays(rows, self.same_place_distance, date, self.zone)
+        spans = [(stay.start_key, stay.end_key) for stay in stays]
         new = []
-        for point in sorted(day_points, key=lambda p: p.time):
-            start = point.time
-            end = point.end if point.end and point.end > start else start
+        for point in sorted(day_points, key=point_key):
+            start, end = point_key(point), max(point_key(point), point_end_key(point))
             if any(start <= s_end and end >= s_start for s_start, s_end in spans):
                 continue
             new.append(point)
@@ -418,13 +609,13 @@ class HistoryStorage:
         with self._lock:
             for day, day_points in sorted(self._by_day(points).items()):
                 rows = self._read_rows(self.path(person, day))
-                existing = len(build_stays(rows, self.same_place_distance))
+                existing = len(build_stays(rows, self.same_place_distance, day, self.zone))
                 if mode == "replace" or not rows:
-                    new = list(day_points)
+                    new = sorted(day_points, key=point_key)
                 elif mode == "skip":
                     new = []
                 else:
-                    new = self._gap_points(rows, day_points)
+                    new = self._gap_points(day, rows, day_points)
                 if not rows:
                     status = "new"
                 elif mode == "replace":
@@ -442,7 +633,7 @@ class HistoryStorage:
                         "entries": [
                             {
                                 "start": p.time,
-                                "end": p.end if p.end and p.end > p.time else p.time,
+                                "end": p.end if p.end and point_end_key(p) > point_key(p) else p.time,
                                 "state": clean_text(p.state),
                                 "address": clean_text(p.address) if p.state == STATE_NOT_HOME else "",
                             }
@@ -466,7 +657,7 @@ class HistoryStorage:
         - ``replace_days``: each imported day replaces the stored day completely.
         - otherwise (``merge``): only points that fall into a gap of the stored
           day are added (see ``_gap_points``); with ``merge=False`` only rows
-          with exactly the same start time are skipped (older behaviour).
+          with exactly the same start are skipped (older behaviour).
         - ``skip_existing``: days that already have data are left alone.
         - ``days``: only these dates are touched (from the preview).
         """
@@ -484,29 +675,20 @@ class HistoryStorage:
                     continue
                 touched += 1
                 if rows and merge:
-                    keep = self._gap_points(rows, day_points)
+                    keep = self._gap_points(day, rows, day_points)
                     skipped += len(day_points) - len(keep)
                     day_points = keep
-                existing = {row[0].strip() for row in rows}
+                stored = self.rows_to_points(day, rows)
+                existing = {point_key(p) for p in stored}
                 # Duplicates are only checked against what was stored before:
                 # a file may legitimately contain two rows with the same second.
-                for point in sorted(day_points, key=lambda p: p.time):
-                    if point.time in existing:
+                for point in sorted(day_points, key=point_key):
+                    if point_key(point) in existing:
                         skipped += 1
                         continue
-                    rows.append(
-                        [
-                            point.time,
-                            clean_text(point.state),
-                            format_coordinate(point.latitude),
-                            format_coordinate(point.longitude),
-                            clean_text(point.address) if point.state == STATE_NOT_HOME else "",
-                            point.end if point.end and point.end > point.time else "",
-                        ]
-                    )
+                    stored.append(point)
                     added += 1
-                rows.sort(key=lambda r: r[0].strip())
-                self._write_rows(path, rows)
+                self._write_points(path, stored)
         return {"added": added, "skipped": skipped, "days": touched}
 
     def export_rows(self, person: str, date_from: str, date_to: str) -> list[tuple[str, Stay]]:
@@ -531,6 +713,21 @@ def from_export_text(text: str) -> str:
     return text[1:] if text.startswith("'") and text[1:].startswith(_FORMULA_START) else text
 
 
+EXPORT_HEADER = [
+    "person",
+    "date",
+    "start",
+    "end",
+    "state",
+    "latitude",
+    "longitude",
+    "address",
+    "utc_offset",
+    "end_utc_offset",
+    "time_zone",
+]
+
+
 def export_csv(person: str, rows: list[tuple[str, Stay]]) -> str:
     """Whereabouts exchange format (see FORMAT.md), comma separated with header."""
     return export_csv_multi([(person, rows)])
@@ -540,9 +737,9 @@ def export_csv_multi(groups: list[tuple[str, list[tuple[str, Stay]]]]) -> str:
     """Several persons in one file (the column "person" tells them apart)."""
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
-    writer.writerow(["person", "date", "start", "end", "state", "latitude", "longitude", "address"])
+    writer.writerow(EXPORT_HEADER)
     rows = [(person, day, stay) for person, person_rows in groups for day, stay in person_rows]
-    rows.sort(key=lambda r: (r[1], r[2].start, r[0]))
+    rows.sort(key=lambda r: (r[1], r[2].start_key, r[2].start, r[0]))
     for person, day, stay in rows:
         writer.writerow(
             [
@@ -554,6 +751,9 @@ def export_csv_multi(groups: list[tuple[str, list[tuple[str, Stay]]]]) -> str:
                 stay.latitude,
                 stay.longitude,
                 _no_formula(stay.address),
+                stay.offset,
+                stay.end_offset if stay.end_offset != stay.offset else "",
+                stay.tz,
             ]
         )
     return out.getvalue()

@@ -405,12 +405,21 @@ export function defineHistoryCard(S, D) {
     _timeText(p) {
       const from = String(p.time || '').slice(0, 5);
       const to = String(p.end || '').slice(0, 5);
-      return this._t('time', { time: to && to !== from ? `${from} – ${to}` : from });
+      const text = this._t('time', { time: to && to !== from ? `${from} – ${to}` : from });
+      if (!p.tz) return text;
+      // a place in another time zone: also (or only) its local time
+      const moments = [S.storedInstant(p.date, p.time, p.offset)];
+      if (p.end && (p.end !== p.time || p.end_offset !== p.offset)) moments.push(S.storedInstant(p.date, p.end, p.end_offset || p.offset));
+      return S.withLocalTime(this._hass, this._t, this._config.time_display, text, moments, p.tz, p.date);
     }
 
     _minutes(p) {
-      const minutes = (v) => { const [h, m] = String(v || '').split(':').map(Number); return h * 60 + m; };
       if (!p.end || !p.time) return 0;
+      // with offsets also right when the clocks changed during the stay
+      const start = S.storedInstant(p.date, p.time, p.offset);
+      const end = S.storedInstant(p.date, p.end, p.end_offset || p.offset);
+      if (start !== null && end !== null) return Math.max(0, Math.round((end - start) / 60000));
+      const minutes = (v) => { const [h, m] = String(v || '').split(':').map(Number); return h * 60 + m; };
       return Math.max(0, minutes(p.end) - minutes(p.time));
     }
 
@@ -854,13 +863,15 @@ export function defineHistoryCard(S, D) {
           (result.value.stays || []).forEach((s) => points.push({
             person: persons[k].id, date: s.date || a, time: s.start, end: s.end, state: s.state,
             lat: s.latitude, lon: s.longitude, address: s.address, times: s.times,
+            offset: s.offset || '', end_offset: s.end_offset || s.offset || '', tz: s.tz || '',
           }));
         });
       }
       this._loading = false;
       this._loadedAt = new Date();
-      const order = (p) => `${p.date} ${p.time}`;
-      points.sort((a, b) => (order(a) < order(b) ? -1 : order(a) > order(b) ? 1 : a.person.localeCompare(b.person)));
+      // by the moment (right also in the doubled hour when the clocks go back)
+      const order = (p) => { const ms = S.storedInstant(p.date, p.time, p.offset); return ms === null ? Date.parse(`${p.date}T${p.time}Z`) : ms; };
+      points.sort((a, b) => (order(a) - order(b)) || a.person.localeCompare(b.person));
 
       const signature = `${first}|${last}|${points.length}|${points.map((p) => `${this._keyOf(p)}${p.end}${p.address}`).join(',')}`;
       if (options.onlyIfChanged && signature === this._signature && !failed.size) return;
@@ -910,7 +921,7 @@ export function defineHistoryCard(S, D) {
 
     // Unique key: person, day and start of the stay.
     _keyOf(p) {
-      return `${p.person}|${p.date}|${p.time}`;
+      return `${p.person}|${p.date}|${p.time}${p.offset || ''}`;
     }
 
     _download() {

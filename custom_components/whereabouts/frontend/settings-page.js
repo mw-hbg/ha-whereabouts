@@ -23,6 +23,7 @@ const PERSONAL = [
     { key: 'map_link', sel: (t) => sel(['google', 'apple', 'osm', 'waze', 'here', 'none'].map((v) => ({ value: v, label: t(`ed_link_${v}`) }))) },
     { key: 'map_link_choice', sel: B },
     { key: 'map_link_apps', custom: 'apps', needs: 'map_link_choice', hideOff: true },
+    { key: 'time_display', sel: (t) => sel(['both', 'ha', 'local'].map((v) => ({ value: v, label: t(`time_display_${v}`) }))) },
   ] },
   { id: 'zones', icon: 'mdi:map-marker-circle', weight: 'more', fields: [
     { key: 'zones_in', sel: (t) => sel(['both', 'live', 'history', 'none'].map((v) => ({ value: v, label: t(`zones_in_${v}`) }))) },
@@ -66,6 +67,7 @@ const ADMIN = [
     { key: 'address_max_distance', sel: num(10, 5000, 10, 'm'), hideWhen: (o) => o.address_source === 'osm' || o.address_source === 'off' },
   ], custom: 'sensors' },
   { id: 'data', icon: 'mdi:swap-vertical', custom: 'data', everyone: true },
+  { id: 'maintenance', icon: 'mdi:database-cog', custom: 'maintenance' },
   { id: 'diagnostics', icon: 'mdi:stethoscope', custom: 'diagnostics' },
 ];
 

@@ -111,7 +111,10 @@ def test_export_import_round_trip(store, tmp_path):
     store.add_point("alex", Point(D, "08:00:00", "home", 48.1, 8.1))
     store.add_point("alex", Point(D, "10:00:00", "not_home", 48.0, 8.0, "Street 1, Town, with comma"))
     text = export_csv("alex", store.export_rows("alex", D, D))
-    assert text.splitlines()[0] == "person,date,start,end,state,latitude,longitude,address"
+    assert (
+        text.splitlines()[0]
+        == "person,date,start,end,state,latitude,longitude,address,utc_offset,end_utc_offset,time_zone"
+    )
     other = HistoryStorage(str(tmp_path / "other"))
     parsed = read_import(
         "export.csv", text.encode(), timezone=UTC, zone_for=lambda a, b: "not_home", same_place_distance=50

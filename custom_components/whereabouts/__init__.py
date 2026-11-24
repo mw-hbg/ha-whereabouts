@@ -15,6 +15,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
+from homeassistant.util import dt as dt_util
 
 from . import api, maintenance, settings_api
 from .addresses import AddressJob
@@ -160,7 +161,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     options = merged_options(entry)
 
     base = hass.config.path(STORAGE_FOLDER)
-    storage = HistoryStorage(os.path.join(base, HISTORY_FOLDER), options[CONF_SAME_PLACE_DISTANCE])
+    storage = HistoryStorage(
+        os.path.join(base, HISTORY_FOLDER), options[CONF_SAME_PLACE_DISTANCE], dt_util.get_default_time_zone()
+    )
     nominatim = Nominatim(hass, os.path.join(base, GEOCODE_CACHE_FILE), version)
     logger = LocationLogger(hass, storage, nominatim, options)
     settings = Settings(hass)

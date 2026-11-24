@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.2
 
 - New action "Fill in missing coordinates" in "Data maintenance" (with preview): old
   rows without coordinates get a position – at a zone from the nearest entry at the

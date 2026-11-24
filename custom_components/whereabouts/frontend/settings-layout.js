@@ -299,9 +299,12 @@ export default (ctx, Base) => {
         case 'data': return t('sum_data');
         case 'maintenance': {
           const job = (d.admin && d.admin.address_job) || {};
-          return ['running', 'paused'].includes(job.status)
+          const journal = d.admin && d.admin.journal;
+          const main = ['running', 'paused'].includes(job.status)
             ? t('sum_address_job', { done: job.done || 0, total: job.total || 0 })
             : t('sum_maintenance');
+          // 0.7.3: many entries in the log - suggest cleaning up (also when the category is closed)
+          return journal && journal.hint ? `${main} · ${t('journal_hint_short', { n: journal.entries })}` : main;
         }
         case 'diagnostics': {
           const stored = d.admin && d.admin.stored;
@@ -392,15 +395,8 @@ export default (ctx, Base) => {
         let group = null;
         c.options.forEach((f) => {
           if (f.hideWhen && f.hideWhen(options)) return;
-          let row;
-          if (f.persons) row = this._personsOption(f);
-          else {
-            const shown = f.invert ? !options[f.key] : options[f.key];
-            const field = { ...f, label: f.label ? t(f.label) : undefined, info: f.info ? t(f.info) : undefined };
-            row = this._row(field, shown, false, (value) => this._saveOption(f, f.invert ? !value : value),
-              { kind: 'option', key: f.key, label: field.label || t(`st_${f.key}`) });
-            this._optionMarker(row, c.id, f);
-          }
+          if (f.late) return; // drawn by the category's own part (e.g. "Keep the trash" below the log)
+          const row = this._adminOptionRow(c, f);
           if (f.group) {
             if (!group) {
               group = this._subsection(`sub_${f.group}`, t(`sub_${f.group}`), this._groupSummary(f.group));
@@ -418,6 +414,28 @@ export default (ctx, Base) => {
       if (c.custom === 'diagnostics' && this._open.has('diagnostics')) {
         if (this._diag) this._showDiagnostics(); else this._loadDiagnostics();
       }
+    }
+
+    // One integration option as a row (with marker and an optional note below it, 0.7.3)
+    _adminOptionRow(c, f) {
+      const t = this._t;
+      const options = this._data.admin.options;
+      if (f.persons) return this._personsOption(f);
+      const shown = f.invert ? !options[f.key] : options[f.key];
+      const field = { ...f, label: f.label ? t(f.label) : undefined, info: f.info ? t(f.info) : undefined };
+      const row = this._row(field, shown, false, (value) => this._saveOption(f, f.invert ? !value : value),
+        { kind: 'option', key: f.key, label: field.label || t(`st_${f.key}`) });
+      this._optionMarker(row, c.id, f);
+      const note = f.note && this._optionNote ? this._optionNote(f.note) : '';
+      if (note) {
+        const el = document.createElement('div');
+        el.className = 'klein notiz';
+        el.dataset.notiz = f.note;
+        el.style.cssText = 'grid-column:1 / -1;margin-top:4px';
+        el.textContent = note;
+        row.appendChild(el);
+      }
+      return row;
     }
 
     // Marker for an integration option: differs from its built-in value?
@@ -469,9 +487,12 @@ export default (ctx, Base) => {
       const t = this._t;
       const o = (this._data.admin && this._data.admin.options) || {};
       if (group === 'precision') {
+        const size = this._data.admin && this._data.admin.history_size;
         return [t('sum_interval', { n: o.min_interval }), t('sum_same_place', { n: o.same_place_distance }),
-          Number(o.retention_days) > 0 ? t('sum_keep_days', { n: o.retention_days }) : t('sum_keep_forever')].join(' · ');
+          Number(o.retention_days) > 0 ? t('sum_keep_days', { n: o.retention_days }) : t('sum_keep_forever'),
+          size && this._bytes ? this._bytes(size.bytes) : ''].filter(Boolean).join(' · ');
       }
+      if (group === 'journal' && this._journalSummary) return this._journalSummary();
       return '';
     }
 

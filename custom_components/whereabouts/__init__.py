@@ -13,11 +13,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
-from . import api, maintenance, settings_api
+from . import api, journal_api, maintenance, settings_api
 from .addresses import AddressJob
 from .const import (
     CARDS_FILE,
@@ -36,6 +37,7 @@ from .const import (
     SIGNAL_INFO_CHANGED,
     STORAGE_FOLDER,
 )
+from .journal import Journal
 from .logger import LocationLogger
 from .maintenance import ZoneWatch
 from .nominatim import Nominatim
@@ -84,6 +86,7 @@ class Runtime:
     nominatim: Nominatim | None = None
     addresses: AddressJob | None = None
     zones: ZoneWatch | None = None
+    journal: Journal | None = None  # 0.7.3: log and trash of the data maintenance
     js_url: str | None = None
     panel: bool = False
     # Raised whenever stored data changes outside the live recording (import,
@@ -113,6 +116,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     api.async_register(hass)
     settings_api.async_register(hass)
     maintenance.async_register(hass)
+    journal_api.async_register(hass)
     return True
 
 
@@ -180,6 +184,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await settings.async_load(dict(entry.options))
     runtime = Runtime(version, options, storage, logger, settings, nominatim)
     runtime.zones = ZoneWatch(hass)
+    runtime.journal = Journal(base, storage.folder)
     await runtime.zones.async_load()
     runtime.addresses = AddressJob(
         hass,
@@ -188,6 +193,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         float(options[CONF_SAME_PLACE_DISTANCE]),
         lambda: runtime.data_changed(hass),
     )
+    runtime.addresses.journal = runtime.journal
     await runtime.async_refresh_known(hass)
 
     # The card files are always loaded: the sidebar page uses them, too.
@@ -200,6 +206,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     logger.start()
     await runtime.addresses.async_load()  # a job that was running goes on
     entry.async_on_unload(entry.add_update_listener(_options_updated))
+
+    async def _expire_trash(_now=None) -> None:
+        limit = journal_api.expire_limit(runtime.options)
+        if limit:
+            await hass.async_add_executor_job(runtime.journal.expire, limit)
+
+    await _expire_trash()
+    entry.async_on_unload(async_track_time_change(hass, _expire_trash, hour=3, minute=27, second=0))
     async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)  # open cards follow the new options
     return True
 

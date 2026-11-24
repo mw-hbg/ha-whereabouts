@@ -448,6 +448,8 @@ class HistoryStorage:
         self.zone = zone
         # One lock for all files: writes are rare and short.
         self._lock = threading.Lock()
+        # The trash of the action running in this thread (see with_backup)
+        self._local = threading.local()
 
     @property
     def zone_name(self) -> str:
@@ -470,9 +472,28 @@ class HistoryStorage:
         except FileNotFoundError:
             return []
 
-    @staticmethod
-    def _write_rows(path: str, rows: list[list[str]]) -> None:
+    def with_backup(self, backup, func, *args, **kwargs):
+        """Run ``func`` so that every day file it writes is saved to ``backup`` first (0.7.3).
+
+        Only writes of this thread are saved: the live recording goes on
+        unaffected in other threads.
+        """
+        self._local.backup = backup
+        try:
+            return func(*args, **kwargs)
+        finally:
+            self._local.backup = None
+
+    def locked(self, func, *args):
+        """Run ``func`` with the storage lock held (restoring from the trash)."""
+        with self._lock:
+            return func(*args)
+
+    def _write_rows(self, path: str, rows: list[list[str]]) -> None:
         """Replace a file atomically; remove it when no row is left."""
+        backup = getattr(self._local, "backup", None)
+        if backup is not None:
+            backup.save(path)
         if not rows:
             if os.path.exists(path):
                 os.remove(path)

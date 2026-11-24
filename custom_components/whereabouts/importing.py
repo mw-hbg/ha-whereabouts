@@ -10,6 +10,7 @@ from homeassistant.util import dt as dt_util
 from .const import CONF_MIN_INTERVAL, CONF_RECORD_PERSONS, CONF_RETENTION_DAYS, DEFAULT_OPTIONS, DOMAIN, STATE_NOT_HOME
 from .geo import zone_in_snapshot, zone_snapshot
 from .importer import ImportError_, read_import, summarize
+from .journal_api import async_begin, async_finish
 from .logger import person_key
 from .rules import apply_rules
 from .storage import complete_points
@@ -26,6 +27,7 @@ async def import_bytes(
     days: list[str] | None = None,
     mode: str | None = None,
     day_edges: bool = False,
+    user=None,
 ) -> dict:
     """Read a file and store its points (or only plan it with preview=True).
 
@@ -134,11 +136,17 @@ async def import_bytes(
         }
 
     added = skipped = day_total = edges = 0
+    storage = runtime.storage
+    entry_id, backup = async_begin(runtime)  # 0.7.3: the changed days go to the trash first
+
+    def run(func, *args):
+        return storage.with_backup(backup, func, *args) if backup is not None else func(*args)
+
     for dest, points in by_person.items():
         wanted = None if days is None else [d.split("|", 1)[1] for d in days if d.split("|", 1)[0] == dest]
         outcome = await hass.async_add_executor_job(
-            lambda dest=dest, points=points, wanted=wanted: runtime.storage.import_points(
-                dest, points, mode == "replace", wanted, True, mode == "skip"
+            lambda dest=dest, points=points, wanted=wanted: run(
+                storage.import_points, dest, points, mode == "replace", wanted, True, mode == "skip"
             )
         )
         added += outcome["added"]
@@ -146,7 +154,7 @@ async def import_bytes(
         day_total += outcome["days"]
         if day_edges:
             dates = runtime.storage.edge_dates(p.date for p in points if wanted is None or p.date in wanted)
-            found = await hass.async_add_executor_job(runtime.storage.fill_edges, dest, dates)
+            found = await hass.async_add_executor_job(run, storage.fill_edges, dest, dates)
             edges += found["starts"] + found["ends"]
     await runtime.async_refresh_known(hass, data_changed=True)
 
@@ -168,6 +176,20 @@ async def import_bytes(
         and (chosen is None or f"{dest}|{p.date}" in chosen)
     )
     touched_dates = sorted({d for _, d in touched})
+    await async_finish(
+        hass,
+        runtime,
+        entry_id,
+        backup,
+        "import",
+        user,
+        sorted(by_person),
+        touched_dates[0] if touched_dates else "",
+        touched_dates[-1] if touched_dates else "",
+        added,
+        mode=mode,
+        file=filename[:120],
+    )
     return {
         "persons": sorted(by_person),
         "added": added,

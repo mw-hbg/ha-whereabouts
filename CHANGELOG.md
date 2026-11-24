@@ -1,5 +1,46 @@
 # Changelog
 
+## Unreleased
+
+- New "Log and trash" at the bottom of "Data maintenance" (administrators only): every
+  change of stored data – recording rules, zones, time zones, edges of days, missing
+  coordinates, fetching addresses, import, deleting entries and restoring – gets an
+  entry with time, person(s), period, numbers and user. Entries stay until you delete
+  them (single ones or all older than a number of days); from 300 entries on a hint
+  appears.
+- Trash with "Restore": before an action writes, the days concerned are saved (only the
+  changed day files). "Restore" puts the whole action back; days changed since are
+  listed with a warning. Restoring is logged and saved too, so it can be undone.
+  Fetching addresses is only logged.
+- New option "Empty the trash after … days" (default 30, 0 = never) below the log, with
+  the size of the trash.
+- The size of the stored location history (in total and per person) is shown below
+  "Delete history automatically after … days" and in the summary of "Accuracy and
+  keeping".
+- "Done: … addresses found" disappears 30 seconds after the end; "Cancelled" stays until
+  it is hidden.
+
+---
+
+- Neu: „Protokoll und Papierkorb“ unten in der Datenpflege (nur Administratoren): Jede
+  Änderung gespeicherter Daten – Aufzeichnungsregeln, Zonen, Zeitzonen, Tagesrand,
+  fehlende Koordinaten, Adressen nachladen, Import, Löschen von Einträgen und
+  Wiederherstellen – bekommt einen Eintrag mit Zeitpunkt, Person(en), Zeitraum, Zahlen
+  und Benutzer. Einträge bleiben, bis du sie löschst (einzeln oder alle älter als eine
+  Anzahl Tage); ab 300 Einträgen erscheint ein Hinweis.
+- Papierkorb mit „Wiederherstellen“: Bevor eine Aktion schreibt, werden die betroffenen
+  Tage gesichert (nur die geänderten Tagesdateien). „Wiederherstellen“ spielt den ganzen
+  Vorgang zurück; seitdem geänderte Tage werden mit Warnung aufgelistet. Auch das
+  Wiederherstellen wird protokolliert und gesichert und lässt sich rückgängig machen.
+  „Adressen nachladen“ wird nur protokolliert.
+- Neue Einstellung „Papierkorb leeren nach … Tagen“ (Standard 30, 0 = nie) unter dem
+  Protokoll, mit der Größe des Papierkorbs.
+- Die Größe des gespeicherten Standortverlaufs (gesamt und je Person) steht unter
+  „Verlauf automatisch löschen nach … Tagen“ und in der Kurzzeile von „Genauigkeit und
+  Aufbewahrung“.
+- „Fertig: … Adressen gefunden“ verschwindet 30 Sekunden nach dem Ende; „Abgebrochen“
+  bleibt stehen, bis es ausgeblendet wird.
+
 ## 0.7.2
 
 - New action "Fill in missing coordinates" in "Data maintenance" (with preview): old

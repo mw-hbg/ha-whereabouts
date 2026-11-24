@@ -7,6 +7,7 @@
 export default (ctx, Base) => {
   const { esc, rich } = ctx;
   const POLL_MS = 3000;
+  const DONE_SHOWN_MS = 30000; // 0.7.3: "Done: … addresses found" disappears after 30 s
 
   return class extends Base {
     // --- category "Data maintenance" ------------------------------------------------------------------------
@@ -37,6 +38,7 @@ export default (ctx, Base) => {
         '<div class="adressauftrag" style="grid-column:1 / -1"></div>');
       addresses.querySelector('.steuer .knopf').addEventListener('click', () => this._addressDialog());
       this._addressStatus(addresses.querySelector('.adressauftrag'), (this._data.admin || {}).address_job);
+      if (this._journalSection) this._journalSection(box);
     }
 
     // --- choosing persons and days ----------------------------------------------------------------------
@@ -292,7 +294,15 @@ export default (ctx, Base) => {
     _addressStatus(el, status) {
       const t = this._t;
       clearTimeout(this._addressTimer);
+      clearTimeout(this._addressHideTimer);
       if (!el || !status || status.status === 'idle') { if (el) el.innerHTML = ''; return; }
+      // Done: shown for 30 s after the end, then hidden (the state stays on the server).
+      if (status.status === 'done') {
+        const finished = Date.parse(status.finished || '');
+        const left = Number.isFinite(finished) ? Math.min(DONE_SHOWN_MS, DONE_SHOWN_MS - (Date.now() - finished)) : 0;
+        if (left <= 0) { el.innerHTML = ''; return; }
+        this._addressHideTimer = setTimeout(() => { if (el.isConnected) el.innerHTML = ''; }, left);
+      }
       const running = status.status === 'running';
       const paused = status.status === 'paused';
       const percent = status.total ? Math.floor((100 * status.done) / status.total) : 100;
@@ -303,7 +313,8 @@ export default (ctx, Base) => {
         ${running || paused ? `<progress max="100" value="${percent}" style="width:100%"></progress>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
           <button class="knopf pause" type="button"><ha-icon icon="${paused ? 'mdi:play' : 'mdi:pause'}"></ha-icon>${esc(t(paused ? 'addr_resume' : 'addr_pause'))}</button>
-          <button class="knopf gefahr abbrechen" type="button"><ha-icon icon="mdi:stop"></ha-icon>${esc(t('addr_cancel'))}</button></div>` : ''}`;
+          <button class="knopf gefahr abbrechen" type="button"><ha-icon icon="mdi:stop"></ha-icon>${esc(t('addr_cancel'))}</button></div>` : ''}
+        ${status.status === 'cancelled' ? `<button class="knopf wegklicken" type="button" style="width:auto"><ha-icon icon="mdi:close"></ha-icon>${esc(t('addr_dismiss'))}</button>` : ''}`;
       const control = async (action) => {
         const next = await this._ws({ type: 'whereabouts/addresses/control', action });
         if (next) this._addressStatus(el, next);
@@ -312,6 +323,16 @@ export default (ctx, Base) => {
       if (pause) pause.addEventListener('click', () => control(paused ? 'resume' : 'pause'));
       const cancel = el.querySelector('.abbrechen');
       if (cancel) cancel.addEventListener('click', () => control('cancel'));
+      // Cancelled or broke off: stays until it is clicked away (for everybody)
+      const dismiss = el.querySelector('.wegklicken');
+      if (dismiss) {
+        dismiss.addEventListener('click', async () => {
+          const next = await this._ws({ type: 'whereabouts/addresses/control', action: 'dismiss' });
+          if (!next) return;
+          if (this._data.admin) this._data.admin.address_job = next;
+          this._addressStatus(el, next);
+        });
+      }
       if (running) {
         this._addressTimer = setTimeout(async () => {
           if (!el.isConnected) return;

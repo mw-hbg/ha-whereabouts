@@ -23,6 +23,7 @@ CONF_ADDRESS_MAX_DISTANCE = "address_max_distance"
 CONF_HISTORY_ACCESS = "history_access"
 CONF_DELETE_ACCESS = "delete_access"
 CONF_RETENTION_DAYS = "retention_days"
+CONF_TRASH_DAYS = "trash_days"  # 0.7.3: keep the trash of the data maintenance (0 = never delete)
 CONF_PERSONS = "persons"  # persons Whereabouts works with at all (empty = all)
 CONF_PANEL = "panel"  # entry in the sidebar
 CONF_PANEL_TITLE = "panel_title"  # empty = "Standorte" / "Whereabouts" by system language
@@ -62,6 +63,8 @@ DEFAULT_OPTIONS: dict = {
     CONF_ADDRESS_MAX_DISTANCE: 150,
     # 0 = keep forever. Nothing is ever deleted automatically by default.
     CONF_RETENTION_DAYS: 0,
+    # Backups of days changed by the data maintenance, so they can be restored.
+    CONF_TRASH_DAYS: 30,
     CONF_PANEL: True,
     CONF_PANEL_TITLE: "",
     CONF_PANEL_ICON: "mdi:map-marker-radius",

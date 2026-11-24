@@ -84,7 +84,7 @@ const FACTORY = {
 const CATEGORIES = Object.keys(FACTORY);
 
 const OPTION_DEFAULTS = {
-  persons: [], record_persons: [], min_interval: 60, same_place_distance: 50, retention_days: 0,
+  persons: [], record_persons: [], min_interval: 60, same_place_distance: 50, retention_days: 0, trash_days: 30,
   address_source: 'phone_osm', address_max_distance: 150, address_sensors: {}, panel: true, panel_title: '',
   panel_icon: 'mdi:map-marker-radius', carto_api_key: '',
 };
@@ -117,6 +117,13 @@ function createBackend(userKey) {
     pending_users: {},
     // a paused lookup of missing addresses (shows the progress line)
     address_job: { status: 'paused', total: 42, done: 17, found: 15, persons: ['alex'], from: '', to: '', waiting_for_osm: false },
+    // 0.7.3: log and trash of the data maintenance
+    journal: [
+      { id: '20261120-101500-a1b2c3', time: '2026-11-20T10:15:00+01:00', action: 'rules', persons: ['alex', 'sam'], from: '', to: '', user: 'Admin', rows: 40, days: 3, trash: true, size: 18432 },
+      { id: '20261118-083000-d4e5f6', time: '2026-11-18T08:30:00+01:00', action: 'import', persons: ['alex'], from: '2026-06-01', to: '2026-06-30', user: 'Admin', rows: 212, days: 30, trash: true, size: 61440, mode: 'merge' },
+      { id: '20261010-190000-0a0b0c', time: '2026-10-10T19:00:00+02:00', action: 'addresses', persons: ['alex'], from: '', to: '', user: 'Admin', rows: 9, total: 12, status: 'done', days: 0, trash: false, size: 0 },
+      { id: '20261001-120000-0d0e0f', time: '2026-10-01T12:00:00+02:00', action: 'zones', persons: ['sam'], from: '2026-09-01', to: '2026-09-30', user: 'Admin', rows: 5, days: 2, trash: false, size: 0, expired: true },
+    ],
     options: {
       ...clone(OPTION_DEFAULTS),
       record_persons: ['person.alex', 'person.sam'],
@@ -250,11 +257,19 @@ function createBackend(userKey) {
           ? [{ kind: 'renamed', entity_id: 'zone.office', name: 'Office', old_name: 'Work' }, { kind: 'removed', entity_id: 'zone.gym', name: 'Gym' }] : [],
         address_job: clone(db.address_job),
         stored: { persons: 2, days: 309 },
+        history_size: { bytes: 4980736, days: 309, persons: { alex: { bytes: 3040870, days: 190 }, sam: { bytes: 1939866, days: 119 } } },
+        journal: journalSummary(),
         address: addressInfo(),
       };
     }
     return result;
   };
+
+  const journalSummary = () => ({
+    entries: db.journal.length, hint: db.journal.length >= 300,
+    trash_bytes: db.journal.filter((e) => e.trash).reduce((n, e) => n + e.size, 0),
+    trash_entries: db.journal.filter((e) => e.trash).length,
+  });
 
   const diagnostics = () => ({
     persons: base().map((p) => {
@@ -359,8 +374,24 @@ function createBackend(userKey) {
     'whereabouts/addresses/status': () => clone(db.address_job),
     'whereabouts/addresses/start': (msg) => (msg.preview ? { missing: 42, busy: false } : clone(db.address_job)),
     'whereabouts/addresses/control': (msg) => {
+      if (msg.action === 'dismiss') { db.address_job = { status: 'idle' }; return clone(db.address_job); }
       db.address_job.status = { pause: 'paused', resume: 'running', cancel: 'cancelled' }[msg.action];
       return clone(db.address_job);
+    },
+    'whereabouts/journal/list': () => ({ ...journalSummary(), items: clone(db.journal), trash_days: db.options.trash_days }),
+    'whereabouts/journal/restore': (msg) => {
+      const entry = db.journal.find((e) => e.id === msg.entry);
+      if (!entry || !entry.trash) throw { code: 'not_found', message: 'Nothing to restore' };
+      if (msg.preview !== false) return { changed: entry.action === 'import' ? ['alex_2026-06-12'] : [], preview: true };
+      entry.restored = '20261124-120000-ffffff';
+      db.journal.unshift({ id: '20261124-120000-ffffff', time: new Date().toISOString(), action: 'restore', ref: entry.id, ref_action: entry.action, persons: entry.persons, from: entry.from, to: entry.to, user: 'Admin', rows: entry.days, days: entry.days, trash: true, size: entry.size });
+      return { days: entry.days, changed: [], preview: false };
+    },
+    'whereabouts/journal/delete': (msg) => {
+      const before = db.journal.length;
+      const limit = (msg.before || '').replace(/-/g, '');
+      db.journal = db.journal.filter((e) => !(msg.ids || []).includes(e.id) && !(limit && e.id.slice(0, 8) < limit));
+      return { deleted: before - db.journal.length };
     },
     'image/delete': () => null,
   };

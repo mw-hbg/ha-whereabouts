@@ -60,14 +60,17 @@ const ADMIN = [
     { key: 'record_persons', persons: true },
     { key: 'min_interval', sel: num(10, 3600, 10, 's'), group: 'precision' },
     { key: 'same_place_distance', sel: num(10, 1000, 10, 'm'), group: 'precision' },
-    { key: 'retention_days', sel: num(0, 36500, 1, 'd'), confirm: 'retention', group: 'precision' },
+    { key: 'retention_days', sel: num(0, 36500, 1, 'd'), confirm: 'retention', group: 'precision', note: 'history_size' },
   ] },
   { id: 'addresses', icon: 'mdi:map-search', reset: ['address_source', 'address_max_distance', 'address_sensors'], options: [
     { key: 'address_source', sel: (t) => sel(['phone_osm', 'phone', 'osm', 'off'].map((v) => ({ value: v, label: t(`opt_address_${v}`) }))) },
     { key: 'address_max_distance', sel: num(10, 5000, 10, 'm'), hideWhen: (o) => o.address_source === 'osm' || o.address_source === 'off' },
   ], custom: 'sensors' },
   { id: 'data', icon: 'mdi:swap-vertical', custom: 'data', everyone: true },
-  { id: 'maintenance', icon: 'mdi:database-cog', custom: 'maintenance' },
+  // 0.7.3: "Keep the trash" is drawn below the log (late), not at the top
+  { id: 'maintenance', icon: 'mdi:database-cog', custom: 'maintenance', reset: ['trash_days'], options: [
+    { key: 'trash_days', sel: num(0, 36500, 1, 'd'), group: 'journal', late: true, note: 'trash_size' },
+  ] },
   { id: 'diagnostics', icon: 'mdi:stethoscope', custom: 'diagnostics' },
 ];
 
@@ -127,7 +130,7 @@ async function ensureSelector() {
 
 // The page is put together from these parts (settings-<name>.js), each a class
 // extending the one before. Loaded with the same "?v=<version>" as this file.
-const PARTS = ['values', 'layout', 'fields', 'persons', 'map', 'zones', 'admin', 'users', 'data', 'maintenance', 'diagnostics', 'dialogs'];
+const PARTS = ['values', 'layout', 'fields', 'persons', 'map', 'zones', 'admin', 'users', 'data', 'maintenance', 'journal', 'diagnostics', 'dialogs'];
 
 export async function defineSettingsPage(S, D) {
   if (customElements.get('whereabouts-settings')) return;

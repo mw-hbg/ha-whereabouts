@@ -38,6 +38,7 @@ from .const import (
     CONF_RECORD_PERSONS,
     CONF_RETENTION_DAYS,
     CONF_SAME_PLACE_DISTANCE,
+    CONF_TRASH_DAYS,
     DEFAULT_OPTIONS,
     DOMAIN,
     SIGNAL_INFO_CHANGED,
@@ -45,6 +46,7 @@ from .const import (
 from .geo import find_address_sensor
 from .importer import ImportError_
 from .importing import import_bytes
+from .journal import history_size
 from .logger import person_key
 from .settings import CATEGORIES, LOCK_MODES, RIGHT_KINDS, RIGHT_LEVELS, category_defaults, validate_values
 
@@ -67,6 +69,7 @@ OPTIONS_SCHEMA = vol.Schema(
         vol.Optional(CONF_MIN_INTERVAL): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
         vol.Optional(CONF_SAME_PLACE_DISTANCE): vol.All(vol.Coerce(int), vol.Range(min=10, max=1000)),
         vol.Optional(CONF_RETENTION_DAYS): vol.All(vol.Coerce(int), vol.Range(min=0, max=36500)),
+        vol.Optional(CONF_TRASH_DAYS): vol.All(vol.Coerce(int), vol.Range(min=0, max=36500)),
         vol.Optional(CONF_ADDRESS_SOURCE): vol.In(ADDRESS_SOURCES),
         vol.Optional(CONF_ADDRESS_MAX_DISTANCE): vol.All(vol.Coerce(int), vol.Range(min=10, max=5000)),
         vol.Optional(CONF_ADDRESS_SENSORS): vol.Schema({_PERSON: vol.Any(None, vol.Match(r"^sensor\.[a-z0-9_]+$"))}),
@@ -225,6 +228,9 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
             "address_job": runtime.addresses.status() if runtime.addresses else {"status": "idle"},
             # short info for the header of "Diagnostics"
             "stored": _stored_counts(await hass.async_add_executor_job(runtime.storage.list_files)),
+            # 0.7.3: size of the history (per person) and of the trash
+            "history_size": await hass.async_add_executor_job(history_size, runtime.storage.folder),
+            "journal": await hass.async_add_executor_job(runtime.journal.summary) if runtime.journal else None,
         }
     connection.send_result(msg["id"], result)
 
@@ -767,6 +773,7 @@ class ImportView(HomeAssistantView):
                 days=days,
                 mode=fields.get("mode"),
                 day_edges=fields.get("day_edges") == "true",
+                user=user,
             )
         except ImportError_ as err:
             return self.json({"error": err.key, "detail": err.detail}, HTTPStatus.BAD_REQUEST)

@@ -28,6 +28,7 @@ from .const import (
     PANEL_URL,
     SIGNAL_INFO_CHANGED,
 )
+from .journal_api import async_logged
 from .logger import person_key
 from .settings import CATEGORIES, card_settings
 from .storage import Stay, export_csv_multi, is_valid_date, is_valid_key
@@ -234,8 +235,16 @@ async def ws_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     if not _check(hass, connection, msg, person, can_delete):
         return
     runtime = _runtime(hass)
-    deleted = await hass.async_add_executor_job(
-        runtime.storage.delete_times, person_key(person), msg["date"], msg["times"]
+    deleted = await async_logged(
+        hass,
+        runtime,
+        "delete",
+        connection.user,
+        [person],
+        msg["date"],
+        msg["date"],
+        lambda: runtime.storage.delete_times(person_key(person), msg["date"], msg["times"]),
+        lambda n: n,
     )
     connection.send_result(msg["id"], {"deleted": deleted})
     if deleted:

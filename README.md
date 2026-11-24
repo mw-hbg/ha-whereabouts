@@ -186,6 +186,10 @@ zone_color: "#EF6C00"
 
 - The history is stored only in `<config>/whereabouts/history/` – outside `www/`,
   so it is **not** reachable via `/local/` or any other web address.
+- Before the data maintenance, an import or deleting entries changes days, the old
+  files are kept in `<config>/whereabouts/trash/` (log: `journal.json`) for 30 days by
+  default, so the change can be restored. Deleted entries therefore only disappear
+  completely once the trash is emptied (option "Empty the trash after … days").
 - The cards read the history only through Home Assistant's authenticated
   connection; every request is checked against the logged-in user.
 - Addresses come first from the Companion app. Only if it has no fitting address,
@@ -476,6 +480,11 @@ zone_color: "#EF6C00"
 
 - Der Verlauf liegt nur in `<config>/whereabouts/history/` – außerhalb von `www/`,
   also **nicht** über `/local/` oder eine andere Web-Adresse erreichbar.
+- Bevor die Datenpflege, ein Import oder das Löschen von Einträgen Tage ändert, bleiben
+  die alten Dateien standardmäßig 30 Tage in `<config>/whereabouts/trash/` (Protokoll:
+  `journal.json`), damit sich die Änderung wiederherstellen lässt. Gelöschte Einträge
+  verschwinden deshalb erst ganz, wenn der Papierkorb geleert wird (Einstellung
+  „Papierkorb leeren nach … Tagen“).
 - Die Karten lesen den Verlauf nur über die angemeldete Home-Assistant-Verbindung;
   jede Anfrage wird gegen den angemeldeten Benutzer geprüft.
 - Adressen kommen zuerst aus der Companion App. Nur wenn sie keine passende hat,

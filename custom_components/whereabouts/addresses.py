@@ -68,6 +68,7 @@ class AddressJob:
         self._resume = asyncio.Event()
         self._resume.set()
         self.waiting_for_osm = False
+        self.journal = None  # 0.7.3: the log; the finished job updates its entry
 
     # --- state --------------------------------------------------------------------------------------------
     async def async_load(self) -> None:
@@ -82,6 +83,9 @@ class AddressJob:
 
     async def _save(self) -> None:
         await self._store.async_save(self.state)
+
+    async def async_save(self) -> None:
+        await self._save()
 
     def status(self) -> dict[str, Any]:
         return {**self.state, "waiting_for_osm": self.waiting_for_osm or self.nominatim.paused}
@@ -140,7 +144,14 @@ class AddressJob:
                 self._task.cancel()
                 self._task = None
             await self.nominatim.flush()
+            await self._log_end()
             self._changed()
+
+    async def async_dismiss(self) -> None:
+        """A finished or cancelled job was clicked away: nothing is shown any more."""
+        if self.state.get("status") in (DONE, CANCELLED):
+            self.state = {"status": IDLE}
+            await self._save()
 
     async def async_stop(self) -> None:
         """Integration unloaded: stop the task, keep the state (it goes on after the reload)."""
@@ -148,6 +159,14 @@ class AddressJob:
             self._task.cancel()
             self._task = None
         await self.nominatim.flush()
+
+    async def _log_end(self) -> None:
+        """The job ended: its entry in the log gets the numbers."""
+        entry_id = self.state.get("journal_id")
+        if self.journal is None or not entry_id:
+            return
+        values = {"rows": self.state.get("found", 0), "done": self.state.get("done", 0), "status": self.state["status"]}
+        await self.hass.async_add_executor_job(self.journal.update, entry_id, values)
 
     def _changed(self) -> None:
         if self._on_change:
@@ -166,6 +185,7 @@ class AddressJob:
             _LOGGER.exception("Looking up missing addresses failed")
             self.state["status"] = CANCELLED
             await self._save()
+            await self._log_end()
             self._changed()
 
     async def _work(self) -> None:
@@ -203,6 +223,7 @@ class AddressJob:
         state["finished"] = dt_util.now().isoformat(timespec="seconds")
         await self._save()
         await self.nominatim.flush()
+        await self._log_end()
         self._changed()
         _LOGGER.info("Missing addresses: %s of %s found", state["found"], state["done"])
 

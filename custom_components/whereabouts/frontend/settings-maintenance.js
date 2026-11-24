@@ -1,6 +1,6 @@
 // Whereabouts – settings page: category "Data maintenance" (administrators only).
 // "Adapt data to the recording rules", "Recalculate zones in the data", "Add
-// time zones", "Complete the edges of days", the question after changed zones
+// time zones", "Complete the edges of days", "Fill in missing coordinates", the question after changed zones
 // and "Fetch missing addresses" (background job).
 // Part of settings-page.js, which loads all parts and puts them together.
 
@@ -31,6 +31,8 @@ export default (ctx, Base) => {
       times.querySelector('.steuer .knopf').addEventListener('click', () => this._timeZonesDialog());
       const edges = row('mdi:calendar-expand-horizontal', t('maint_edges'), t('si_maint_edges'), t('maint_edges_button'));
       edges.querySelector('.steuer .knopf').addEventListener('click', () => this._edgesDialog());
+      const positions = row('mdi:map-marker-question-outline', t('maint_pos'), t('si_maint_pos'), t('maint_pos_button'));
+      positions.querySelector('.steuer .knopf').addEventListener('click', () => this._positionsDialog());
       const addresses = row('mdi:map-search', t('addr_title'), t('si_addr'), t('addr_fetch'),
         '<div class="adressauftrag" style="grid-column:1 / -1"></div>');
       addresses.querySelector('.steuer .knopf').addEventListener('click', () => this._addressDialog());
@@ -151,6 +153,28 @@ export default (ctx, Base) => {
       const { win, ...scope } = answer;
       const done = await this._ws({ type: 'whereabouts/maintenance/day_edges', preview: false, ...scope });
       if (done) this._toast(t('maint_edges_done', { days: done.days_changed }), false, true);
+    }
+
+    // --- rows without coordinates (0.7.2) --------------------------------------------------------------
+    async _positionsDialog() {
+      const t = this._t;
+      const html = `<h3>${esc(t('maint_pos'))}</h3>
+        <div class="text">${esc(t('maint_pos_text'))}</div>
+        ${this._scopeHtml()}
+        <div class="text vorschau" style="margin-top:12px"></div>
+        <div class="warnung" style="margin:8px 0">${esc(t('maint_irreversible'))}</div>`;
+      const answer = await this._liveDialog(html, t('maint_pos_button'), true, async (win, scope, current) => {
+        const preview = await this._ws({ type: 'whereabouts/maintenance/positions', preview: true, ...scope });
+        if (!current() || !preview) return false;
+        win.querySelector('.vorschau').textContent = preview.days_changed
+          ? t('maint_pos_preview', { missing: preview.missing, changed: preview.days_changed, days: preview.days, from_day: preview.from_day, from_zone: preview.from_zone, removed: preview.removed, left: preview.left })
+          : t('maint_pos_nothing', { days: preview.days });
+        return preview.days_changed > 0;
+      });
+      if (!answer) return;
+      const { win, ...scope } = answer;
+      const done = await this._ws({ type: 'whereabouts/maintenance/positions', preview: false, ...scope });
+      if (done) this._toast(t('maint_pos_done', { days: done.days_changed }), false, true);
     }
 
     // --- zones in the stored data --------------------------------------------------------------------------

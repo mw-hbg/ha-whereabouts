@@ -353,6 +353,7 @@ function createBackend(userKey) {
     'whereabouts/maintenance/zones': (msg) => ({ checked: 80, changed: 5, need_address: 2, days: 4, days_changed: 2, transitions: [{ from: 'Office', to: 'not_home', n: 2 }, { from: 'not_home', to: 'Park', n: 3 }], renames: {}, preview: msg.preview }),
     'whereabouts/maintenance/zone_ack': () => null,
     'whereabouts/maintenance/timezones': (msg) => ({ rows: 120, offsets: 110, zones: 6, assumed: 1, days: 4, days_changed: 3, preview: msg.preview }),
+    'whereabouts/maintenance/positions': (msg) => ({ days: 4, days_changed: 2, missing: 5, from_day: 2, from_zone: 1, removed: 1, left: 1, preview: msg.preview }),
     'whereabouts/maintenance/day_edges': (msg) => ({ days: 4, days_changed: 2, starts: 2, ends: 1, preview: msg.preview }),
     'whereabouts/time_zones': (msg) => ({ zones: (msg.points || []).map(([, lon]) => (lon < -30 ? 'America/New_York' : '')), home: 'Europe/Berlin' }),
     'whereabouts/addresses/status': () => clone(db.address_job),

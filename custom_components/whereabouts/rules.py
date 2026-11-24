@@ -187,3 +187,89 @@ def recalculate_zones(
             stats.need_address += 1
         point.state = new
     return points, stats
+
+
+# --- rows without coordinates (0.7.2) -------------------------------------------------------------------
+@dataclass
+class PositionStats:
+    """What filling in missing positions does with one day."""
+
+    missing: int = 0  # rows without coordinates
+    from_day: int = 0  # position taken from the nearest entry at the same place that day
+    from_zone: int = 0  # position of the zone's centre
+    removed: int = 0  # away without position and without any reference
+    left: int = 0  # not solvable (zone no longer exists): left as they are
+
+    def add(self, other: PositionStats) -> None:
+        self.missing += other.missing
+        self.from_day += other.from_day
+        self.from_zone += other.from_zone
+        self.removed += other.removed
+        self.left += other.left
+
+    def as_dict(self) -> dict:
+        return {
+            "missing": self.missing,
+            "from_day": self.from_day,
+            "from_zone": self.from_zone,
+            "removed": self.removed,
+            "left": self.left,
+        }
+
+
+def _has_position(point: Point) -> bool:
+    return point.latitude is not None and point.longitude is not None
+
+
+def fill_positions(points: Iterable[Point], zones: ZoneList) -> tuple[list[Point] | None, PositionStats]:
+    """Give rows without coordinates a position (rows of one day).
+
+    The cards, maps and the export hide such rows (typically from an old
+    archive). For each of them:
+
+    1. At a zone ("home", a zone name): the position of the nearest entry in
+       time at the same place that day, else the centre of the zone.
+    2. Away ("not_home"): the position of an entry with the same address that
+       day; without address or entry the row has no reference and is removed.
+    3. A zone that no longer exists: left as it is.
+
+    Returns (new points or None when nothing changes, statistics).
+    """
+    day = sorted((replace(p) for p in points), key=point_key)
+    stats = PositionStats()
+    located = [p for p in day if _has_position(p)]
+    centres = {name: (lat, lon) for name, lat, lon, _radius in zones}
+    result: list[Point] = []
+    changed = False
+    for point in day:
+        if _has_position(point):
+            result.append(point)
+            continue
+        stats.missing += 1
+        if point.state == STATE_NOT_HOME:
+            match = next(
+                (o for o in located if point.address and o.state == point.state and o.address == point.address), None
+            )
+            if match is None:
+                stats.removed += 1
+                changed = True
+                continue
+            point.latitude, point.longitude = match.latitude, match.longitude
+            stats.from_day += 1
+        else:
+            moment = point_key(point)
+            same = [o for o in located if o.state == point.state]
+            if same:
+                nearest = min(same, key=lambda o: abs(point_key(o) - moment))
+                point.latitude, point.longitude = nearest.latitude, nearest.longitude
+                stats.from_day += 1
+            elif point.state in centres:
+                point.latitude, point.longitude = centres[point.state]
+                stats.from_zone += 1
+            else:
+                stats.left += 1
+                result.append(point)
+                continue
+        changed = True
+        result.append(point)
+    return (result if changed else None), stats

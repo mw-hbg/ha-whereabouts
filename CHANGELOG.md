@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- New action "Fill in missing coordinates" in "Data maintenance" (with preview): old
+  rows without coordinates get a position – at a zone from the nearest entry at the
+  same place that day, else the zone's centre; "away" from an entry with the same
+  address. "Away" rows without address and without any reference are deleted; zones
+  that no longer exist stay unchanged.
 - Fix: "Adapt data to the recording rules" no longer hides time. Old archive rows
   without coordinates (e.g. from the Pyscript archive) are not shown anywhere; a later
   entry with coordinates used to be merged into such a row and vanished with it. Now a
@@ -13,6 +18,11 @@
 
 ---
 
+- Neue Aktion „Fehlende Koordinaten ergänzen“ in der Datenpflege (mit Vorschau): Alte
+  Zeilen ohne Koordinaten bekommen eine Position – an einer Zone vom zeitlich nächsten
+  Eintrag am selben Ort desselben Tages, sonst aus der Zonenmitte; „unterwegs“ von einem
+  Eintrag mit gleicher Adresse. „Unterwegs“-Zeilen ohne Adresse und ohne Bezug werden
+  gelöscht; Zonen, die es nicht mehr gibt, bleiben unverändert.
 - Fehler behoben: „Daten an die Aufzeichnungsregeln anpassen“ lässt keine Zeit mehr
   verschwinden. Alte Archivzeilen ohne Koordinaten (z. B. aus dem Pyscript-Archiv)
   werden nirgends angezeigt; ein späterer Eintrag mit Koordinaten wurde früher in eine

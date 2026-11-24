@@ -7,8 +7,8 @@ from datetime import UTC
 import pytest
 
 from custom_components.whereabouts.importer import read_import
-from custom_components.whereabouts.maintenance import rules_on_days, zone_diff, zones_on_days
-from custom_components.whereabouts.rules import GONE, apply_rules, recalculate_zones, zone_for_point
+from custom_components.whereabouts.maintenance import positions_on_days, rules_on_days, zone_diff, zones_on_days
+from custom_components.whereabouts.rules import GONE, apply_rules, fill_positions, recalculate_zones, zone_for_point
 from custom_components.whereabouts.storage import HistoryStorage, Point
 
 D = "2026-06-24"
@@ -181,3 +181,42 @@ def test_import_gap_ignores_stored_rows_without_position(store):
     assert result  # something was stored
     [stay] = store.read_day("alex", D)
     assert (stay.start, stay.end) == ("08:00:00", "10:00:00")
+
+
+def test_fill_positions_rules():
+    points = [
+        Point(D, "00:00:00", "home", None, None, end="07:30:00"),  # nearest home entry with position
+        Point(D, "08:00:00", "home", 48.0003, 8.0003, end="09:00:00"),
+        Point(D, "10:00:00", "Work", None, None, end="12:00:00"),  # no entry that day -> zone centre
+        Point(D, "13:00:00", "not_home", None, None, "Main St 1", end="13:30:00"),  # same address
+        Point(D, "14:00:00", "not_home", 48.7, 9.0, "Main St 1", end="14:30:00"),
+        Point(D, "15:00:00", "not_home", None, None, "", end="15:10:00"),  # no reference -> removed
+        Point(D, "16:00:00", "Gone", None, None, end="17:00:00"),  # zone no longer exists -> left
+    ]
+    new, stats = fill_positions(points, ZONES)
+    assert stats.as_dict() == {"missing": 5, "from_day": 2, "from_zone": 1, "removed": 1, "left": 1}
+    by_time = {p.time: p for p in new}
+    assert "15:00:00" not in by_time
+    assert (by_time["00:00:00"].latitude, by_time["00:00:00"].longitude) == (48.0003, 8.0003)
+    assert (by_time["10:00:00"].latitude, by_time["10:00:00"].longitude) == (48.1, 8.1)
+    assert (by_time["13:00:00"].latitude, by_time["13:00:00"].longitude) == (48.7, 9.0)
+    assert by_time["16:00:00"].latitude is None
+    assert points[0].latitude is None  # input untouched
+
+
+def test_fill_positions_nothing_to_do():
+    assert fill_positions([Point(D, "08:00:00", "home", 48.0, 8.0)], ZONES) == (None, fill_positions([], ZONES)[1])
+
+
+def test_positions_on_stored_days(store):
+    store._ensure_folder()
+    store._write_points(
+        store.path("alex", D),
+        [Point(D, "00:00:00", "home", None, None, end="07:00:00"), Point(D, "08:00:00", "Work", 48.1, 8.1)],
+    )
+    plan = positions_on_days(store, [("alex", D)], ZONES, write=False)
+    assert (plan["missing"], plan["days_changed"]) == (1, 1)
+    assert [s.state for s in store.read_day("alex", D)] == ["Work"]  # nothing written yet
+    positions_on_days(store, [("alex", D)], ZONES, write=True)
+    assert [(s.start, s.state) for s in store.read_day("alex", D)] == [("00:00:00", "home"), ("08:00:00", "Work")]
+    assert positions_on_days(store, [("alex", D)], ZONES, write=False)["days_changed"] == 0

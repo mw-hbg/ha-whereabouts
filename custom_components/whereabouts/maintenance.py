@@ -7,6 +7,7 @@ WebSocket commands for administrators:
 - whereabouts/maintenance/zone_ack    "don't ask again" for the current zone changes
 - whereabouts/maintenance/timezones   add missing UTC offsets and time zones of places
 - whereabouts/maintenance/day_edges   close the gaps at the start and end of stored days
+- whereabouts/maintenance/positions   give rows without coordinates a position (0.7.2)
 - whereabouts/addresses/status        state of the background job
 - whereabouts/addresses/start         start it (or count what it would do)
 - whereabouts/addresses/control       pause | resume | cancel
@@ -26,7 +27,7 @@ from homeassistant.helpers.storage import Store
 
 from .const import CONF_MIN_INTERVAL, CONF_SAME_PLACE_DISTANCE, DEFAULT_OPTIONS, DOMAIN
 from .geo import zone_snapshot
-from .rules import DayStats, ZoneStats, apply_rules, recalculate_zones
+from .rules import DayStats, PositionStats, ZoneStats, apply_rules, fill_positions, recalculate_zones
 from .storage import HistoryStorage
 
 ZONES_STORE_KEY = "whereabouts.zones_seen"
@@ -49,6 +50,7 @@ def async_register(hass: HomeAssistant) -> None:
         ws_zone_ack,
         ws_time_zones,
         ws_day_edges,
+        ws_positions,
         ws_address_status,
         ws_address_start,
         ws_address_control,
@@ -168,6 +170,42 @@ async def ws_day_edges(hass: HomeAssistant, connection: websocket_api.ActiveConn
         return
     files = await hass.async_add_executor_job(runtime.storage.files_in, _keys(msg["persons"]), msg["from"], msg["to"])
     result = await hass.async_add_executor_job(edges_on_days, runtime.storage, files, not msg["preview"])
+    if not msg["preview"] and result["days_changed"]:
+        runtime.data_changed(hass)
+    connection.send_result(msg["id"], {**result, "preview": msg["preview"]})
+
+
+# --- rows without coordinates ---------------------------------------------------------------------------
+def positions_on_days(
+    storage: HistoryStorage, files: list[tuple[str, str]], zones: list, write: bool
+) -> dict[str, Any]:
+    total = PositionStats()
+    days_changed = 0
+    for person, date in files:
+
+        def change(points):
+            new, stats = fill_positions(points, zones)
+            return new, stats
+
+        stats = storage.transform_day(person, date, change, write)
+        total.add(stats)
+        days_changed += bool(stats.from_day or stats.from_zone or stats.removed)
+    return {**total.as_dict(), "days": len(files), "days_changed": days_changed}
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "whereabouts/maintenance/positions", vol.Optional("preview", default=True): bool, **_SCOPE}
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_positions(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    runtime = _runtime(hass, connection, msg)
+    if runtime is None:
+        return
+    files = await hass.async_add_executor_job(runtime.storage.files_in, _keys(msg["persons"]), msg["from"], msg["to"])
+    result = await hass.async_add_executor_job(
+        positions_on_days, runtime.storage, files, zone_snapshot(hass), not msg["preview"]
+    )
     if not msg["preview"] and result["days_changed"]:
         runtime.data_changed(hass)
     connection.send_result(msg["id"], {**result, "preview": msg["preview"]})

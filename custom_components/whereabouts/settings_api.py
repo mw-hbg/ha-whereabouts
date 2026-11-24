@@ -120,6 +120,10 @@ def _ready(hass, connection, msg, admin: bool = False):
     return runtime
 
 
+def _stored_counts(files: list[tuple[str, str]]) -> dict[str, int]:
+    return {"persons": len({person for person, _ in files}), "days": len(files)}
+
+
 def _changed(hass: HomeAssistant) -> None:
     """Open cards and pages follow at once."""
     async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
@@ -219,6 +223,8 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
             # zones created, changed, renamed or removed since the data was last checked
             "zone_changes": (await runtime.zones.async_changes())[0] if runtime.zones else [],
             "address_job": runtime.addresses.status() if runtime.addresses else {"status": "idle"},
+            # short info for the header of "Diagnostics"
+            "stored": _stored_counts(await hass.async_add_executor_job(runtime.storage.list_files)),
         }
     connection.send_result(msg["id"], result)
 
@@ -737,7 +743,7 @@ class ImportView(HomeAssistantView):
                         return self.json({"error": "too_large"}, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
                     chunks.append(chunk)
                 data = b"".join(chunks)
-            elif part.name in ("person", "replace", "preview", "mode"):
+            elif part.name in ("person", "replace", "preview", "mode", "day_edges"):
                 fields[part.name] = (await part.text())[:120]
             elif part.name == "days":
                 fields["days"] = (await part.text())[:200_000]
@@ -760,6 +766,7 @@ class ImportView(HomeAssistantView):
                 preview=fields.get("preview") == "true",
                 days=days,
                 mode=fields.get("mode"),
+                day_edges=fields.get("day_edges") == "true",
             )
         except ImportError_ as err:
             return self.json({"error": err.key, "detail": err.detail}, HTTPStatus.BAD_REQUEST)

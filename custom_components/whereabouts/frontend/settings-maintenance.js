@@ -1,7 +1,7 @@
 // Whereabouts – settings page: category "Data maintenance" (administrators only).
 // "Adapt data to the recording rules", "Recalculate zones in the data", "Add
-// time zones", the question after changed zones and "Fetch missing addresses"
-// (background job).
+// time zones", "Complete the edges of days", the question after changed zones
+// and "Fetch missing addresses" (background job).
 // Part of settings-page.js, which loads all parts and puts them together.
 
 export default (ctx, Base) => {
@@ -29,6 +29,8 @@ export default (ctx, Base) => {
       zones.querySelector('.steuer .knopf').addEventListener('click', () => this._zonesDialog());
       const times = row('mdi:clock-time-four-outline', t('maint_tz'), t('si_maint_tz'), t('maint_tz_button'));
       times.querySelector('.steuer .knopf').addEventListener('click', () => this._timeZonesDialog());
+      const edges = row('mdi:calendar-expand-horizontal', t('maint_edges'), t('si_maint_edges'), t('maint_edges_button'));
+      edges.querySelector('.steuer .knopf').addEventListener('click', () => this._edgesDialog());
       const addresses = row('mdi:map-search', t('addr_title'), t('si_addr'), t('addr_fetch'),
         '<div class="adressauftrag" style="grid-column:1 / -1"></div>');
       addresses.querySelector('.steuer .knopf').addEventListener('click', () => this._addressDialog());
@@ -127,6 +129,28 @@ export default (ctx, Base) => {
       const { win, ...scope } = answer;
       const done = await this._ws({ type: 'whereabouts/maintenance/timezones', preview: false, ...scope });
       if (done) this._toast(t('maint_tz_done', { days: done.days_changed }), false, true);
+    }
+
+    // --- edges of days (place of the day before from 00:00, last place until 23:59:59) --------------------
+    async _edgesDialog() {
+      const t = this._t;
+      const html = `<h3>${esc(t('maint_edges'))}</h3>
+        <div class="text">${esc(t('maint_edges_text'))}</div>
+        ${this._scopeHtml()}
+        <div class="text vorschau" style="margin-top:12px"></div>
+        <div class="warnung" style="margin:8px 0">${esc(t('maint_irreversible'))}</div>`;
+      const answer = await this._liveDialog(html, t('maint_edges_button'), true, async (win, scope, current) => {
+        const preview = await this._ws({ type: 'whereabouts/maintenance/day_edges', preview: true, ...scope });
+        if (!current() || !preview) return false;
+        win.querySelector('.vorschau').textContent = preview.days_changed
+          ? t('maint_edges_preview', { changed: preview.days_changed, days: preview.days, starts: preview.starts, ends: preview.ends })
+          : t('maint_edges_nothing', { days: preview.days });
+        return preview.days_changed > 0;
+      });
+      if (!answer) return;
+      const { win, ...scope } = answer;
+      const done = await this._ws({ type: 'whereabouts/maintenance/day_edges', preview: false, ...scope });
+      if (done) this._toast(t('maint_edges_done', { days: done.days_changed }), false, true);
     }
 
     // --- zones in the stored data --------------------------------------------------------------------------
@@ -234,6 +258,7 @@ export default (ctx, Base) => {
       const status = await this._ws({ type: 'whereabouts/addresses/start', preview: false, ...scope });
       if (!status) return;
       if (this._data.admin) this._data.admin.address_job = status;
+      this._updateSummary('maintenance');
       const el = this.querySelector('.adressauftrag');
       if (el) this._addressStatus(el, status);
       this._toast(this._t('addr_started'), false, true);
@@ -269,6 +294,7 @@ export default (ctx, Base) => {
           let next;
           try { next = await this._hass.callWS({ type: 'whereabouts/addresses/status' }); } catch (err) { return; }
           if (this._data.admin) this._data.admin.address_job = next;
+          this._updateSummary('maintenance');
           this._addressStatus(el, next);
         }, POLL_MS);
       }

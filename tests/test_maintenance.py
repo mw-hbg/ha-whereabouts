@@ -182,3 +182,48 @@ async def test_time_zones_commands(hass: HomeAssistant, hass_ws_client, hass_adm
 
     await ws.send_json({"id": 3, "type": "whereabouts/time_zones", "points": [[40.7128, -74.006]]})
     assert (await ws.receive_json())["result"]["zones"] == ["America/New_York"]
+
+
+async def test_day_edges_command_and_data_version(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    _person(hass, "alex")
+    await setup_integration(hass)
+    runtime = hass.data["whereabouts"]
+    storage = runtime.storage
+    await hass.async_add_executor_job(storage.add_point, "alex", Point("2026-06-23", "20:00:00", "home", 48.59, 8.86))
+    await hass.async_add_executor_job(storage.add_point, "alex", Point(D, "07:00:00", "not_home", 48.7, 9.1))
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "whereabouts/maintenance/day_edges", "persons": ["person.alex"]})
+    preview = (await ws.receive_json())["result"]
+    assert (preview["days_changed"], preview["starts"], preview["ends"]) == (2, 1, 1)
+    version = runtime.data_version
+    await ws.send_json(
+        {"id": 2, "type": "whereabouts/maintenance/day_edges", "persons": ["person.alex"], "preview": False}
+    )
+    assert (await ws.receive_json())["result"]["days_changed"] == 2
+    assert runtime.data_version == version + 1
+    assert storage.read_day("alex", D)[0].start == "00:00:00"
+    assert storage.read_day("alex", "2026-06-23")[-1].end == "23:59:59"
+
+
+async def test_import_closes_day_edges(hass: HomeAssistant, hass_client, hass_admin_user):
+    _person(hass, "alex")
+    await setup_integration(hass, retention_days=3650)
+    client = await hass_client()
+    csv = (
+        "person,date,start,end,state,latitude,longitude,address\n"
+        "alex,2026-06-23,08:00:00,20:00:00,home,48.59,8.86,\n"
+        f"alex,{D},07:00:00,18:00:00,not_home,48.7,9.1,\n"
+    )
+
+    async def post(preview: bool, edges: bool = True):
+        data = {"file": csv.encode(), "person": "", "mode": "merge", "preview": "true" if preview else "false"}
+        data["day_edges"] = "true" if edges else "false"
+        response = await client.post("/api/whereabouts/import", data=data)
+        return await response.json()
+
+    preview = await post(True)
+    assert (preview["edges"]["starts"], preview["edges"]["ends"]) == (1, 1)
+    result = await post(False)
+    assert result["edges"] == 2
+    storage = hass.data["whereabouts"].storage
+    assert storage.read_day("alex", D)[0].start == "00:00:00"

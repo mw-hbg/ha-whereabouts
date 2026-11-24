@@ -172,6 +172,12 @@ export function defineHistoryCard(S, D) {
       const sig = JSON.stringify([info.available, info.history_card, info.persons, { ...(info.settings || {}), zones_in: null },
         info.panel_shown, info.is_admin, info.locked_keys]);
       if (sig === this._infoSig) {
+        // stored data changed elsewhere (import, data maintenance, deleting): load again
+        if (this._ready && info.data_version !== this._dataVersion) {
+          this._dataVersion = info.data_version;
+          this._loadDays();
+          this._load({ fit: false });
+        }
         // only the zones were switched (e.g. in the legend): no rebuild
         if (this._ready && info.settings && this._info && info.settings.zones_in !== (this._info.settings || {}).zones_in) {
           this._info = info;
@@ -183,6 +189,7 @@ export function defineHistoryCard(S, D) {
       }
       this._infoSig = sig;
       this._info = info;
+      this._dataVersion = info.data_version;
       this._applyConfig();
       this._teardown();
       if (!info.available) { this.innerHTML = S.messageHtml(this._t('not_set_up')); return; }

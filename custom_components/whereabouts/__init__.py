@@ -86,15 +86,25 @@ class Runtime:
     zones: ZoneWatch | None = None
     js_url: str | None = None
     panel: bool = False
+    # Raised whenever stored data changes outside the live recording (import,
+    # data maintenance, deleting, addresses): open cards then load again.
+    data_version: int = 0
     _known: set[str] = field(default_factory=set)
 
     def known_persons(self) -> set[str]:
         """Persons with stored history (also no longer recorded ones)."""
         return set(self._known)
 
-    async def async_refresh_known(self, hass: HomeAssistant) -> None:
+    async def async_refresh_known(self, hass: HomeAssistant, data_changed: bool = False) -> None:
         files = await hass.async_add_executor_job(self.storage.list_files)
         self._known = {f"person.{person}" for person, _ in files}
+        if data_changed:
+            self.data_version += 1
+        async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
+
+    def data_changed(self, hass: HomeAssistant) -> None:
+        """Stored data changed: tell the open cards to load again (event loop only)."""
+        self.data_version += 1
         async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
 
 
@@ -176,7 +186,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         storage,
         nominatim,
         float(options[CONF_SAME_PLACE_DISTANCE]),
-        lambda: async_dispatcher_send(hass, SIGNAL_INFO_CHANGED),
+        lambda: runtime.data_changed(hass),
     )
     await runtime.async_refresh_known(hass)
 

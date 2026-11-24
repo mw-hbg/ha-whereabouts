@@ -296,6 +296,17 @@ export default (ctx, Base) => {
           return n ? t('sum_recording', { n }) : t('sum_recording_none');
         }
         case 'addresses': return o.address_source ? t(`opt_address_${o.address_source}`) : '';
+        case 'data': return t('sum_data');
+        case 'maintenance': {
+          const job = (d.admin && d.admin.address_job) || {};
+          return ['running', 'paused'].includes(job.status)
+            ? t('sum_address_job', { done: job.done || 0, total: job.total || 0 })
+            : t('sum_maintenance');
+        }
+        case 'diagnostics': {
+          const stored = d.admin && d.admin.stored;
+          return stored ? t('sum_stored', { persons: stored.persons, days: stored.days }) : '';
+        }
         default: return '';
       }
     }

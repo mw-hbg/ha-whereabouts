@@ -35,8 +35,9 @@ import os
 import re
 import threading
 from collections.abc import Iterable
-from dataclasses import dataclass, field
-from datetime import tzinfo
+from dataclasses import dataclass, field, replace
+from datetime import date as date_type
+from datetime import timedelta, tzinfo
 
 from .timezones import clean_offset, foreign_zone, moment, offset_at, resolve_offsets, to_zone
 
@@ -297,36 +298,61 @@ def build_stays(
     return stays
 
 
-def _to_home_time(point: Point, zone: tzinfo) -> None:
-    """A time with another UTC offset (e.g. recorded abroad) -> Home Assistant's time and day."""
+DAY_START, DAY_END = "00:00:00", "23:59:59"
+
+
+def _next_date(date: str, days: int = 1) -> str:
+    return (date_type.fromisoformat(date) + timedelta(days=days)).isoformat()
+
+
+def _to_home_time(point: Point, zone: tzinfo) -> list[Point]:
+    """A time with another UTC offset (e.g. recorded abroad) -> Home Assistant's time and day.
+
+    A stay that crosses Home Assistant's midnight after the conversion is
+    split: it ends at 23:59:59 and goes on at 00:00:00 of the next day.
+    """
     end_offset = point.end_offset or point.offset
     date, clock, offset = to_zone(point.date, point.time, point.offset, zone)
-    if point.end and is_valid_time(point.end):
-        end_date, end, end_offset = to_zone(point.date, point.end, end_offset, zone)
-        if end_date != date:  # a stay never crosses midnight
-            end = "23:59:59"
-            end_offset = offset_at(date, end, zone)
-        point.end, point.end_offset = end, (end_offset if end_offset != offset else "")
-    point.date, point.time, point.offset = date, clock, offset
+    if not (point.end and is_valid_time(point.end)):
+        point.date, point.time, point.offset = date, clock, offset
+        return [point]
+    end_date, end, end_offset = to_zone(point.date, point.end, end_offset, zone)
+    spans: list[tuple[str, str, str, str, str]] = []  # date, start, offset, end, end offset
+    while date < end_date and len(spans) < 400:
+        spans.append((date, clock, offset, DAY_END, offset_at(date, DAY_END, zone)))
+        date, clock = _next_date(date), DAY_START
+        offset = offset_at(date, clock, zone)
+    if not (spans and end == DAY_START):  # ended exactly at midnight: nothing left of the last day
+        spans.append((date, clock, offset, end, end_offset))
+    pieces = [point] + [replace(point) for _ in spans[1:]]
+    for piece, (day, start, start_offset, stop, stop_offset) in zip(pieces, spans, strict=True):
+        piece.date, piece.time, piece.offset = day, start, start_offset
+        piece.end, piece.end_offset = stop, (stop_offset if stop_offset != start_offset else "")
+    return pieces
 
 
 def complete_points(points: list[Point], zone: tzinfo | None) -> int:
     """Imported points (in file order): missing offsets and the time zone of the place.
 
-    Times with an offset are converted to Home Assistant's time (and day);
-    offsets missing in the file come from Home Assistant's time zone (the
-    order decides the doubled hour); the time zone always comes from the
+    Times with an offset are converted to Home Assistant's time (and day),
+    stays over Home Assistant's midnight are split (``points`` is changed in
+    place); offsets missing in the file come from Home Assistant's time zone
+    (the order decides the doubled hour); the time zone always comes from the
     coordinates. Returns how many times were assumed to be summer time.
     """
     home = str(getattr(zone, "key", "") or "")
     assumed = 0
+    result: list[Point] = []
     by_day: dict[str, list[Point]] = {}
     for point in points:
         if not (is_valid_date(point.date) and is_valid_time(point.time)):
+            result.append(point)
             continue
-        if zone is not None and point.offset:
-            _to_home_time(point, zone)
-        by_day.setdefault(point.date, []).append(point)
+        pieces = _to_home_time(point, zone) if zone is not None and point.offset else [point]
+        for piece in pieces:
+            result.append(piece)
+            by_day.setdefault(piece.date, []).append(piece)
+    points[:] = result
     for date, day in by_day.items():
         if zone is not None and not all(p.offset for p in day):
             resolved, guessed = resolve_offsets(date, [(p.time, p.end) for p in day], zone)
@@ -339,6 +365,73 @@ def complete_points(points: list[Point], zone: tzinfo | None) -> int:
         for point in day:
             point.tz = foreign_zone(point.latitude, point.longitude, home)
     return assumed
+
+
+def fill_day_edges(
+    date: str,
+    points: list[Point],
+    before: list[Point] | None,
+    after_exists: bool,
+    zone: tzinfo | None,
+    same_place_distance: float,
+) -> tuple[list[Point] | None, int, int]:
+    """Close the gaps at the edges of a day (0.7.1).
+
+    - Start: when the day does not begin at 00:00:00 and the day before is
+      stored, the last place of the day before is added from 00:00:00 until
+      the first entry (the first entry itself starts earlier when it is that
+      same place).
+    - End: when the last stay ends before 23:59:59 and the next day is
+      stored, it is extended to 23:59:59.
+
+    ``points`` is not changed. Returns (new points or None, starts, ends).
+    """
+    if not points:
+        return None, 0, 0
+    day = sorted((replace(p) for p in points), key=point_key)
+    starts = ends = 0
+    usable = [p for p in (before or []) if p.latitude is not None and p.longitude is not None]
+    first = day[0]
+    if usable and first.time != DAY_START:
+        prev = max(usable, key=point_key)
+        offset = offset_at(date, DAY_START, zone) if zone is not None else ""
+        same = same_stay(
+            prev.state, prev.latitude, prev.longitude, first.state, first.latitude, first.longitude, same_place_distance
+        )
+        if same:
+            if not first.end:
+                first.end, first.end_offset = first.time, first.offset
+            first.time, first.offset = DAY_START, offset
+        else:
+            day.insert(
+                0,
+                Point(
+                    date,
+                    DAY_START,
+                    prev.state,
+                    prev.latitude,
+                    prev.longitude,
+                    prev.address if prev.state == STATE_NOT_HOME else "",
+                    end=first.time,
+                    offset=offset,
+                    end_offset=first.offset,
+                    tz=prev.tz,
+                ),
+            )
+        if first.end_offset == first.offset:
+            first.end_offset = ""
+        starts = 1
+    if after_exists:
+        last = day[-1]
+        end_offset = offset_at(date, DAY_END, zone) if zone is not None else ""
+        if max(point_end_key(p) for p in day) < moment(date, DAY_END, end_offset):
+            last.end = DAY_END
+            last.end_offset = end_offset if end_offset != last.offset else ""
+            ends = 1
+    for point in day:
+        if point.end_offset == point.offset:
+            point.end_offset = ""
+    return (day if starts or ends else None), starts, ends
 
 
 class HistoryStorage:
@@ -690,6 +783,77 @@ class HistoryStorage:
                     added += 1
                 self._write_points(path, stored)
         return {"added": added, "skipped": skipped, "days": touched}
+
+    # --- edges of days (0.7.1) ---------------------------------------------
+    def _edges(self, person: str, dates: Iterable[str], days: dict[str, list[Point]] | None, write: bool) -> dict:
+        """Close the gaps at the edges of ``dates`` (see ``fill_day_edges``).
+
+        ``days`` overrides stored days (the preview of an import); with it
+        nothing is ever written. Call with the lock held.
+        """
+        stored = set(self.days(person)) | set(days or {})
+        cache: dict[str, list[Point]] = {}
+
+        def points_of(day: str) -> list[Point]:
+            if days is not None and day in days:
+                return days[day]
+            if day not in cache:
+                if len(cache) > 8:
+                    cache.clear()
+                cache[day] = self.rows_to_points(day, self._read_rows(self.path(person, day)))
+            return cache[day]
+
+        result = {"days": 0, "days_changed": 0, "starts": 0, "ends": 0}
+        for date in sorted(set(dates) & stored):
+            result["days"] += 1
+            prev = _next_date(date, -1)
+            new, starts, ends = fill_day_edges(
+                date,
+                points_of(date),
+                points_of(prev) if prev in stored else None,
+                _next_date(date) in stored,
+                self.zone,
+                self.same_place_distance,
+            )
+            if new is None:
+                continue
+            result["days_changed"] += 1
+            result["starts"] += starts
+            result["ends"] += ends
+            if write and days is None:
+                self._write_points(self.path(person, date), new)
+        return result
+
+    def fill_edges(self, person: str, dates: Iterable[str], write: bool = True) -> dict:
+        """Data maintenance and after an import: close the gaps at the edges of stored days."""
+        with self._lock:
+            return self._edges(person, dates, None, write)
+
+    @staticmethod
+    def edge_dates(dates: Iterable[str]) -> set[str]:
+        """Days whose edges may change when ``dates`` change: they and their neighbours."""
+        return {d for date in dates if is_valid_date(date) for d in (_next_date(date, -1), date, _next_date(date))}
+
+    def edges_plan(
+        self, person: str, points: Iterable[Point], mode: str = "merge", days: Iterable[str] | None = None
+    ) -> dict:
+        """How many edges an import would close (nothing is written)."""
+        wanted = set(days) if days is not None else None
+        result: dict[str, list[Point]] = {}
+        with self._lock:
+            for day, day_points in self._by_day(points).items():
+                if wanted is not None and day not in wanted:
+                    continue
+                rows = self._read_rows(self.path(person, day))
+                if mode == "replace" or not rows:
+                    result[day] = list(day_points)
+                    continue
+                stored = self.rows_to_points(day, rows)
+                if mode != "skip":
+                    existing = {point_key(p) for p in stored}
+                    stored += [p for p in self._gap_points(day, rows, day_points) if point_key(p) not in existing]
+                result[day] = stored
+            return self._edges(person, self.edge_dates(result), result, False)
 
     def export_rows(self, person: str, date_from: str, date_to: str) -> list[tuple[str, Stay]]:
         """All stays of a person between two dates (inclusive)."""

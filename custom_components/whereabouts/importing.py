@@ -25,6 +25,7 @@ async def import_bytes(
     preview: bool = False,
     days: list[str] | None = None,
     mode: str | None = None,
+    day_edges: bool = False,
 ) -> dict:
     """Read a file and store its points (or only plan it with preview=True).
 
@@ -36,7 +37,9 @@ async def import_bytes(
     added), "replace" (imported days replace stored days) or "skip" (days
     that already have data are left alone). Without it, ``replace`` decides
     between "replace" and "merge". ``days`` ("person|YYYY-MM-DD") limits the import
-    to the days ticked in the preview.
+    to the days ticked in the preview. ``day_edges`` (0.7.1): afterwards close
+    the gaps at the edges of the imported days and their neighbours (the place
+    of the day before from 00:00, the last place until 23:59:59).
     """
     runtime = hass.data.get(DOMAIN)
     if runtime is None:
@@ -106,9 +109,16 @@ async def import_bytes(
                         "expired": bool(expired_before and day["date"] < expired_before),
                     }
                 )
+        edges = {"starts": 0, "ends": 0, "days_changed": 0}
+        if day_edges:
+            for dest, points in by_person.items():
+                found = await hass.async_add_executor_job(runtime.storage.edges_plan, dest, points, mode)
+                for key in edges:
+                    edges[key] += found[key]
         return {
             "persons": sorted(by_person),
             "total": total,
+            "edges": edges,
             "days": day_count,
             "first": dates[0] if dates else "",
             "last": dates[-1] if dates else "",
@@ -123,7 +133,7 @@ async def import_bytes(
             "min_interval": min_interval,
         }
 
-    added = skipped = day_total = 0
+    added = skipped = day_total = edges = 0
     for dest, points in by_person.items():
         wanted = None if days is None else [d.split("|", 1)[1] for d in days if d.split("|", 1)[0] == dest]
         outcome = await hass.async_add_executor_job(
@@ -134,7 +144,11 @@ async def import_bytes(
         added += outcome["added"]
         skipped += outcome["skipped"]
         day_total += outcome["days"]
-    await runtime.async_refresh_known(hass)
+        if day_edges:
+            dates = runtime.storage.edge_dates(p.date for p in points if wanted is None or p.date in wanted)
+            found = await hass.async_add_executor_job(runtime.storage.fill_edges, dest, dates)
+            edges += found["starts"] + found["ends"]
+    await runtime.async_refresh_known(hass, data_changed=True)
 
     # Imported stays away without an address: the page offers to look them up.
     chosen = None if days is None else {d for d in days}
@@ -161,6 +175,7 @@ async def import_bytes(
         "days": day_total,
         "total": total,
         "missing_addresses": missing,
+        "edges": edges,
         "first": touched_dates[0] if touched_dates else "",
         "last": touched_dates[-1] if touched_dates else "",
     }

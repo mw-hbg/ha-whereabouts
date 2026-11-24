@@ -249,6 +249,7 @@ function createBackend(userKey) {
         zone_changes: new URLSearchParams(window.location.search).get('zones') === 'changed'
           ? [{ kind: 'renamed', entity_id: 'zone.office', name: 'Office', old_name: 'Work' }, { kind: 'removed', entity_id: 'zone.gym', name: 'Gym' }] : [],
         address_job: clone(db.address_job),
+        stored: { persons: 2, days: 309 },
         address: addressInfo(),
       };
     }
@@ -352,6 +353,7 @@ function createBackend(userKey) {
     'whereabouts/maintenance/zones': (msg) => ({ checked: 80, changed: 5, need_address: 2, days: 4, days_changed: 2, transitions: [{ from: 'Office', to: 'not_home', n: 2 }, { from: 'not_home', to: 'Park', n: 3 }], renames: {}, preview: msg.preview }),
     'whereabouts/maintenance/zone_ack': () => null,
     'whereabouts/maintenance/timezones': (msg) => ({ rows: 120, offsets: 110, zones: 6, assumed: 1, days: 4, days_changed: 3, preview: msg.preview }),
+    'whereabouts/maintenance/day_edges': (msg) => ({ days: 4, days_changed: 2, starts: 2, ends: 1, preview: msg.preview }),
     'whereabouts/time_zones': (msg) => ({ zones: (msg.points || []).map(([, lon]) => (lon < -30 ? 'America/New_York' : '')), home: 'Europe/Berlin' }),
     'whereabouts/addresses/status': () => clone(db.address_job),
     'whereabouts/addresses/start': (msg) => (msg.preview ? { missing: 42, busy: false } : clone(db.address_job)),

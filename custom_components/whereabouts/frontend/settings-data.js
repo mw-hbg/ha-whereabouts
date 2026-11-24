@@ -133,6 +133,8 @@ export default (ctx, Base) => {
       form.append('replace', this._import.mode === 'replace' ? 'true' : 'false');
       form.append('mode', this._import.mode || 'merge');
       form.append('preview', preview ? 'true' : 'false');
+      // the preview always counts the gaps at the edges of days; the import closes them when ticked
+      form.append('day_edges', preview || this._import.edges !== false ? 'true' : 'false');
       if (days) form.append('days', days.join(','));
       const response = await this._hass.fetchWithAuth('/api/whereabouts/import', { method: 'POST', body: form });
       const body = await response.json().catch(() => ({}));
@@ -160,7 +162,7 @@ export default (ctx, Base) => {
         const result = await this._importCall(fileObject, false, days);
         out.innerHTML = `<span class="ok">${esc(t('import_result', {
           added: result.added, skipped: result.skipped, days: result.days, persons: result.persons.map(nameOf).join(', '),
-        }))}</span>${result.missing_addresses && result.added ? `<div class="reihe" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+        }))}${result.edges ? ` ${esc(t('import_result_edges', { n: result.edges }))}` : ''}</span>${result.missing_addresses && result.added ? `<div class="reihe" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
           <span>${esc(t('import_missing_addresses', { n: result.missing_addresses }))}</span>
           <button class="knopf adressen-holen" type="button"><ha-icon icon="mdi:map-search"></ha-icon>${esc(t('addr_fetch'))}</button></div>` : ''}`;
         const fetchButton = out.querySelector('.adressen-holen');
@@ -183,6 +185,7 @@ export default (ctx, Base) => {
       const expired = plan.filter((d) => d.expired).length;
       const rulesText = t('import_rules', { m: preview.same_place_distance, s: preview.min_interval, n: preview.total, stays: preview.stays, merged: preview.merged, dropped: preview.dropped });
       const placeOf = (e) => (e.state === 'not_home' && e.address ? e.address : S.placeText(t, e.state));
+      const edgeCount = ((preview.edges || {}).starts || 0) + ((preview.edges || {}).ends || 0);
       return new Promise((resolve) => {
         const overlay = document.createElement('div');
         overlay.className = 'dialog';
@@ -209,6 +212,8 @@ export default (ctx, Base) => {
                 <tr class="details" data-for="${i}" hidden><td></td><td colspan="7">${d.entries.map((e) => `${esc(e.start.slice(0, 5))}–${esc(e.end.slice(0, 5))} ${esc(placeOf(e))}`).join('<br>')}${d.new > d.entries.length ? '<br>…' : ''}</td></tr>`).join('')}
               </tbody></table></div>
             <div class="text">${esc(t('import_summary', { n: total, days: chosen.size, none: nothing }))}</div>
+            <label class="reihe" style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" class="tagesrand"${this._import.edges !== false ? ' checked' : ''}>
+              <span>${esc(t('import_edges'))}${edgeCount ? `<br><span class="klein">${esc(t('import_edges_count', { n: edgeCount }))}</span>` : ''}</span></label>
             <div class="knoepfe"><button class="knopf" data-wahl="cancel">${esc(t('cancel'))}</button>
               <button class="knopf voll" data-wahl="ok"${chosen.size ? '' : ' disabled'}${replace ? ' style="background:var(--error-color,#db4437);border-color:var(--error-color,#db4437)"' : ''}>${esc(t('import_now'))}</button></div>
           </div>`;
@@ -218,6 +223,7 @@ export default (ctx, Base) => {
             if (box.checked) chosen.add(key); else chosen.delete(key);
             render();
           }));
+          overlay.querySelector('.tagesrand').addEventListener('change', (e) => { this._import.edges = e.target.checked; });
           overlay.querySelector('.alle').addEventListener('change', (e) => {
             plan.forEach((d) => { if (d.new) { if (e.target.checked) chosen.add(`${d.person}|${d.date}`); else chosen.delete(`${d.person}|${d.date}`); } });
             render();

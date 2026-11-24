@@ -24,7 +24,7 @@ alex,2026-06-24,08:41:02,16:58:30,Work,52.509,13.388,,+02:00,,
 | `state` | State of the person: `home`, `not_home` or the name of a zone; empty or `not_home` → on import the Home Assistant zone the point lies in (otherwise `not_home`) |
 | `latitude`, `longitude` | Decimal degrees (WGS84) |
 | `address` | Only for `not_home`, optional |
-| `utc_offset` | Optional: offset of `start` from UTC, e.g. `+01:00`. A time with another offset than Home Assistant's (recorded abroad) is converted to Home Assistant's time and day on import. Empty or missing → Home Assistant's time zone (in the hour that occurs twice in autumn the order of the rows decides) |
+| `utc_offset` | Optional: offset of `start` from UTC, e.g. `+01:00`. A time with another offset than Home Assistant's (recorded abroad) is converted to Home Assistant's time and day on import; a stay that then crosses Home Assistant's midnight is split there. Empty or missing → Home Assistant's time zone (in the hour that occurs twice in autumn the order of the rows decides). Always give it when the source has it: times in UTC (`…Z`, milliseconds) are taken as they are with `+00:00` – never convert them yourself |
 | `end_utc_offset` | Optional: offset of `end`, only when it differs (the clocks changed during the stay) |
 | `time_zone` | Written by the export: time zone of the place when it is not Home Assistant's (e.g. `America/New_York`). On import it is always taken from the coordinates |
 
@@ -81,7 +81,7 @@ alex,2026-06-24,08:41:02,16:58:30,Arbeit,52.509,13.388,,+02:00,,
 | `state` | Zustand der Person: `home`, `not_home` oder der Name einer Zone; leer oder `not_home` → beim Import die Zone aus Home Assistant, in der der Punkt liegt (sonst `not_home`) |
 | `latitude`, `longitude` | Dezimalgrad (WGS84) |
 | `address` | Nur bei `not_home`, optional |
-| `utc_offset` | Optional: Abweichung von `start` von UTC, z. B. `+01:00`. Eine Uhrzeit mit anderer Abweichung als in Home Assistant (im Ausland aufgezeichnet) wird beim Import in Uhrzeit und Tag von Home Assistant umgerechnet. Leer oder fehlt → Zeitzone von Home Assistant (in der Stunde, die es im Herbst zweimal gibt, entscheidet die Reihenfolge der Zeilen) |
+| `utc_offset` | Optional: Abweichung von `start` von UTC, z. B. `+01:00`. Eine Uhrzeit mit anderer Abweichung als in Home Assistant (im Ausland aufgezeichnet) wird beim Import in Uhrzeit und Tag von Home Assistant umgerechnet; geht ein Aufenthalt danach über Mitternacht von Home Assistant, wird er dort geteilt. Leer oder fehlt → Zeitzone von Home Assistant (in der Stunde, die es im Herbst zweimal gibt, entscheidet die Reihenfolge der Zeilen). Immer angeben, wenn die Quelle sie enthält: Zeiten in UTC (`…Z`, Millisekunden) werden so übernommen, mit `+00:00` – nie selbst umrechnen |
 | `end_utc_offset` | Optional: Abweichung von `end`, nur wenn sie anders ist (Zeitumstellung während des Aufenthalts) |
 | `time_zone` | Schreibt der Export: Zeitzone des Orts, wenn es nicht die von Home Assistant ist (z. B. `America/New_York`). Beim Import wird sie immer aus den Koordinaten bestimmt |
 

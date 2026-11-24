@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased
+
+- Import fix: a stay that crosses Home Assistant's midnight after converting its time
+  zone (e.g. a night in Bangkok) is now split at midnight and goes on at 00:00 of the
+  next day. Before, it was cut off at 23:59:59 and the rest was lost – please import
+  affected journeys again.
+- New "Close the gaps at the edges of days": a day begins at 00:00 at the last place of
+  the day before, the last stay lasts until 23:59:59 – only when the neighbouring day is
+  stored. As a tick in the import preview (on by default, with the number of gaps) and
+  as a new action in "Data maintenance".
+- After an import, a data maintenance action or deleting, open cards ("Location
+  history" with its date picker) and the diagnostics load again by themselves – no more
+  browser reload needed.
+- Prompt for an AI assistant: the offset from UTC is always written into `utc_offset`
+  when the data has it, for every source; Google "Semantic Location History" and
+  "Records.json" are taken in UTC with `+00:00` instead of converted by the assistant.
+- Settings: "Import and export", "Data maintenance" and "Diagnostics" now also show a
+  short summary under their title.
+
+---
+
+- Fehler beim Import behoben: Ein Aufenthalt, der nach der Umrechnung der Zeitzone über
+  Mitternacht von Home Assistant geht (z. B. eine Nacht in Bangkok), wird jetzt an
+  Mitternacht geteilt und am nächsten Tag ab 00:00 fortgesetzt. Bisher wurde er um
+  23:59:59 abgeschnitten und der Rest ging verloren – betroffene Reisen bitte erneut
+  importieren.
+- Neu „Lücken am Tagesrand schließen“: Ein Tag beginnt um 00:00 am letzten Ort des
+  Vortags, der letzte Aufenthalt reicht bis 23:59:59 – nur, wenn der Nachbartag
+  gespeichert ist. Als Haken in der Import-Vorschau (standardmäßig an, mit Anzahl der
+  Lücken) und als neue Aktion „Tagesrand ergänzen“ in der „Datenpflege“.
+- Nach einem Import, einer Aktion der Datenpflege oder dem Löschen laden offene Karten
+  („Standortverlauf“ mit Tageswähler) und die Diagnose selbst neu – kein Neuladen des
+  Browsers mehr nötig.
+- Text für einen KI-Assistenten: Die Abweichung von UTC wird immer in `utc_offset`
+  geschrieben, wenn sie in den Daten steht, für jede Quelle; Google „Semantic Location
+  History“ und „Records.json“ werden in UTC mit `+00:00` übernommen statt vom Assistenten
+  umgerechnet.
+- Einstellungen: „Import und Export“, „Datenpflege“ und „Diagnose“ zeigen jetzt auch eine
+  kurze Zusammenfassung unter dem Titel.
+
 ## 0.7.0
 
 - Time zones: every time is now stored with its offset from UTC. The hour from 2 to 3

@@ -146,6 +146,7 @@ def build_info(hass: HomeAssistant, user: User | None) -> dict[str, Any]:
         "panel_shown": bool(runtime.options.get(CONF_PANEL, True)),
         "panel_url": "/" + PANEL_URL,
         "today": dt_util.now().strftime("%Y-%m-%d"),
+        "data_version": runtime.data_version,
     }
 
 
@@ -237,6 +238,8 @@ async def ws_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnect
         runtime.storage.delete_times, person_key(person), msg["date"], msg["times"]
     )
     connection.send_result(msg["id"], {"deleted": deleted})
+    if deleted:
+        await runtime.async_refresh_known(hass, data_changed=True)
 
 
 @websocket_api.websocket_command(

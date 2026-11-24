@@ -151,7 +151,7 @@ export async function defineSettingsPage(S, D) {
       this._pending = new Map(); // unsaved text/number fields: id -> { label, draft, save, discard }
       this._savables = new Map(); // id -> { api, row }
       this._showTechnical = false;
-      this._import = { person: '', mode: 'merge' };
+      this._import = { person: '', mode: 'merge', edges: true };
       this._lastAnchor = null; // where the page was last seen (kept while scrolling)
       // "Restore" for 30 s after going back to the standard: one setting / a whole category
       this._undo = new Map(); // `${scope}:${user}:${category}:${key}` -> { restore(), until }
@@ -191,7 +191,16 @@ export async function defineSettingsPage(S, D) {
       window.addEventListener('beforeunload', this._beforeUnload);
       document.addEventListener('scroll', this._onScroll, { capture: true, passive: true });
       if (this._hass && !this._unsub && this._data) {
-        this._unsub = S.subscribeInfo(this._hass, (info) => { this._info = info; this._refreshSoon(); });
+        this._unsub = S.subscribeInfo(this._hass, (info) => {
+        // stored data changed (import, data maintenance, deleting): the diagnostics are out of date
+        const dataChanged = this._info && info.data_version !== this._info.data_version;
+        this._info = info;
+        if (dataChanged && this._diag) {
+          this._diag = null;
+          if (this._open && this._open.has('diagnostics')) this._loadDiagnostics();
+        }
+        this._refreshSoon();
+      });
         this._render();
       }
     }
@@ -202,7 +211,16 @@ export async function defineSettingsPage(S, D) {
       this._haSelector = await ensureSelector();
       this._restoreView();
       await this._load();
-      this._unsub = S.subscribeInfo(this._hass, (info) => { this._info = info; this._refreshSoon(); });
+      this._unsub = S.subscribeInfo(this._hass, (info) => {
+        // stored data changed (import, data maintenance, deleting): the diagnostics are out of date
+        const dataChanged = this._info && info.data_version !== this._info.data_version;
+        this._info = info;
+        if (dataChanged && this._diag) {
+          this._diag = null;
+          if (this._open && this._open.has('diagnostics')) this._loadDiagnostics();
+        }
+        this._refreshSoon();
+      });
     }
 
     async _load() {

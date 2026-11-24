@@ -173,3 +173,70 @@ def test_export_writes_offsets_and_exact_gpx_times(store):
 
 def test_moment_orders_across_offsets():
     assert moment(AUTUMN, "02:30:00", "+02:00") < moment(AUTUMN, "02:10:00", "+01:00")
+
+
+BANGKOK = (13.7563, 100.5018)
+
+
+def test_import_splits_a_stay_over_home_midnight():
+    # 00:00-08:00 in Bangkok (+07:00) is 18:00-02:00 in Berlin: split at Berlin's midnight
+    points = [Point("2026-11-20", "00:00:00", "not_home", *BANGKOK, end="08:00:00", offset="+07:00")]
+    complete_points(points, BERLIN)
+    assert [(p.date, p.time, p.end, p.offset, p.end_offset) for p in points] == [
+        ("2026-11-19", "18:00:00", "23:59:59", "+01:00", ""),
+        ("2026-11-20", "00:00:00", "02:00:00", "+01:00", ""),
+    ]
+    assert {p.tz for p in points} == {"Asia/Bangkok"}
+
+
+def test_import_split_ending_at_midnight_leaves_no_empty_piece():
+    points = [Point("2026-11-20", "00:00:00", "not_home", *BANGKOK, end="06:00:00", offset="+07:00")]
+    complete_points(points, BERLIN)
+    assert [(p.date, p.time, p.end) for p in points] == [("2026-11-19", "18:00:00", "23:59:59")]
+
+
+def test_import_split_over_the_clock_change_keeps_both_offsets():
+    # 20:00-23:00 in New York (-04:00) on 24.10. = 02:00 (+02:00) to 04:00 (+01:00) in Berlin on 25.10.
+    points = [Point("2026-10-24", "20:00:00", "not_home", *NEW_YORK, end="23:00:00", offset="-04:00")]
+    complete_points(points, BERLIN)
+    assert [(p.date, p.time, p.end, p.offset, p.end_offset) for p in points] == [
+        ("2026-10-25", "02:00:00", "04:00:00", "+02:00", "+01:00"),
+    ]
+
+
+def test_edges_of_days(store):
+    day1, day2, day3 = "2026-11-01", "2026-11-02", "2026-11-03"
+    store.add_point("alex", Point(day1, "08:00:00", "home", *HOME, end="20:00:00"))
+    store.add_point("alex", Point(day1, "21:00:00", "not_home", 48.7, 9.0, "Street 1", end="22:30:00"))
+    store.add_point("alex", Point(day2, "07:00:00", "home", *HOME, end="18:00:00"))
+    store.add_point("alex", Point("2026-11-05", "07:00:00", "home", *HOME, end="18:00:00"))  # no neighbour
+    plan = store.fill_edges("alex", [day1, day2, day3, "2026-11-05"], write=False)
+    # day 1: no day before, but the next day exists -> end; day 2: day before exists -> start
+    assert plan == {"days": 3, "days_changed": 2, "starts": 1, "ends": 1}
+    store.fill_edges("alex", [day1, day2, "2026-11-05"])
+    stays1 = store.read_day("alex", day1)
+    assert (stays1[-1].state, stays1[-1].end) == ("not_home", "23:59:59")
+    stays2 = store.read_day("alex", day2)
+    assert [(s.start, s.end, s.state, s.address) for s in stays2] == [
+        ("00:00:00", "07:00:00", "not_home", "Street 1"),
+        ("07:00:00", "18:00:00", "home", ""),
+    ]
+    assert stays2[0].offset == "+01:00"
+    # second run: nothing left to do
+    assert store.fill_edges("alex", [day1, day2], write=False)["days_changed"] == 0
+
+
+def test_edge_at_the_same_place_moves_the_start(store):
+    store.add_point("alex", Point("2026-11-01", "20:00:00", "home", *HOME, end="23:59:59"))
+    store.add_point("alex", Point("2026-11-02", "06:30:00", "home", *HOME, end="09:00:00"))
+    store.fill_edges("alex", ["2026-11-02"])
+    [stay] = store.read_day("alex", "2026-11-02")
+    assert (stay.start, stay.end) == ("00:00:00", "09:00:00")
+
+
+def test_import_plan_counts_edges(store):
+    store.add_point("alex", Point("2026-11-01", "20:00:00", "home", *HOME, end="23:59:59"))
+    new = [Point("2026-11-02", "06:30:00", "not_home", 48.7, 9.0, end="09:00:00")]
+    plan = store.edges_plan("alex", new, "merge")
+    assert (plan["starts"], plan["ends"]) == (1, 0)
+    assert store.days("alex") == ["2026-11-01"]  # nothing written

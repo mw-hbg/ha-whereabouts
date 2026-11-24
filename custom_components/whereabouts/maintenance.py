@@ -6,6 +6,7 @@ WebSocket commands for administrators:
 - whereabouts/maintenance/zones       recalculate the zones of stored entries
 - whereabouts/maintenance/zone_ack    "don't ask again" for the current zone changes
 - whereabouts/maintenance/timezones   add missing UTC offsets and time zones of places
+- whereabouts/maintenance/day_edges   close the gaps at the start and end of stored days
 - whereabouts/addresses/status        state of the background job
 - whereabouts/addresses/start         start it (or count what it would do)
 - whereabouts/addresses/control       pause | resume | cancel
@@ -21,10 +22,9 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 
-from .const import CONF_MIN_INTERVAL, CONF_SAME_PLACE_DISTANCE, DEFAULT_OPTIONS, DOMAIN, SIGNAL_INFO_CHANGED
+from .const import CONF_MIN_INTERVAL, CONF_SAME_PLACE_DISTANCE, DEFAULT_OPTIONS, DOMAIN
 from .geo import zone_snapshot
 from .rules import DayStats, ZoneStats, apply_rules, recalculate_zones
 from .storage import HistoryStorage
@@ -48,6 +48,7 @@ def async_register(hass: HomeAssistant) -> None:
         ws_zones,
         ws_zone_ack,
         ws_time_zones,
+        ws_day_edges,
         ws_address_status,
         ws_address_start,
         ws_address_control,
@@ -109,7 +110,7 @@ async def ws_rules(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
         rules_on_days, runtime.storage, files, distance, interval, not msg["preview"]
     )
     if not msg["preview"] and result["days_changed"]:
-        async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
+        runtime.data_changed(hass)
     connection.send_result(
         msg["id"], {**result, "same_place_distance": distance, "min_interval": interval, "preview": msg["preview"]}
     )
@@ -139,7 +140,36 @@ async def ws_time_zones(hass: HomeAssistant, connection: websocket_api.ActiveCon
     files = await hass.async_add_executor_job(runtime.storage.files_in, _keys(msg["persons"]), msg["from"], msg["to"])
     result = await hass.async_add_executor_job(time_zones_on_days, runtime.storage, files, not msg["preview"])
     if not msg["preview"] and result["days_changed"]:
-        async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
+        runtime.data_changed(hass)
+    connection.send_result(msg["id"], {**result, "preview": msg["preview"]})
+
+
+# --- edges of days -------------------------------------------------------------------------------------
+def edges_on_days(storage: HistoryStorage, files: list[tuple[str, str]], write: bool) -> dict[str, Any]:
+    by_person: dict[str, list[str]] = {}
+    for person, date in files:
+        by_person.setdefault(person, []).append(date)
+    total = {"days": 0, "days_changed": 0, "starts": 0, "ends": 0}
+    for person, dates in by_person.items():
+        found = storage.fill_edges(person, dates, write)
+        for key in total:
+            total[key] += found[key]
+    return total
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "whereabouts/maintenance/day_edges", vol.Optional("preview", default=True): bool, **_SCOPE}
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_day_edges(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    runtime = _runtime(hass, connection, msg)
+    if runtime is None:
+        return
+    files = await hass.async_add_executor_job(runtime.storage.files_in, _keys(msg["persons"]), msg["from"], msg["to"])
+    result = await hass.async_add_executor_job(edges_on_days, runtime.storage, files, not msg["preview"])
+    if not msg["preview"] and result["days_changed"]:
+        runtime.data_changed(hass)
     connection.send_result(msg["id"], {**result, "preview": msg["preview"]})
 
 
@@ -263,7 +293,7 @@ async def ws_zones(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
         if msg["ack"]:
             await runtime.zones.async_ack()
         if result["days_changed"]:
-            async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
+            runtime.data_changed(hass)
     connection.send_result(msg["id"], {**result, "renames": renames, "preview": msg["preview"]})
 
 

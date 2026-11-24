@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.3
 
 - New "Log and trash" at the bottom of "Data maintenance" (administrators only): every
   change of stored data – recording rules, zones, time zones, edges of days, missing

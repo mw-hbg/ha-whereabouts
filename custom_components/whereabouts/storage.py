@@ -389,9 +389,13 @@ def fill_day_edges(
     if not points:
         return None, 0, 0
     day = sorted((replace(p) for p in points), key=point_key)
+    # Rows without coordinates are hidden everywhere (0.7.2): they neither block nor count here
+    visible = [p for p in day if p.latitude is not None and p.longitude is not None]
+    if not visible:
+        return None, 0, 0
     starts = ends = 0
     usable = [p for p in (before or []) if p.latitude is not None and p.longitude is not None]
-    first = day[0]
+    first = visible[0]
     if usable and first.time != DAY_START:
         prev = max(usable, key=point_key)
         offset = offset_at(date, DAY_START, zone) if zone is not None else ""
@@ -422,9 +426,9 @@ def fill_day_edges(
             first.end_offset = ""
         starts = 1
     if after_exists:
-        last = day[-1]
+        last = visible[-1]
         end_offset = offset_at(date, DAY_END, zone) if zone is not None else ""
-        if max(point_end_key(p) for p in day) < moment(date, DAY_END, end_offset):
+        if max(point_end_key(p) for p in visible) < moment(date, DAY_END, end_offset):
             last.end = DAY_END
             last.end_offset = end_offset if end_offset != last.offset else ""
             ends = 1

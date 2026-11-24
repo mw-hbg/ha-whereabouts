@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- Fix: "Adapt data to the recording rules" no longer hides time. Old archive rows
+  without coordinates (e.g. from the Pyscript archive) are not shown anywhere; a later
+  entry with coordinates used to be merged into such a row and vanished with it. Now a
+  stay without a position takes the position of the entry and becomes visible.
+- "Close the gaps at the edges of days" ignores rows without coordinates: a 00:00 row
+  without a position no longer prevents closing the gap.
+- Import preview: ticking or unticking single days no longer jumps the table back to
+  the top; scroll position, opened details and focus are kept.
+
+---
+
+- Fehler behoben: „Daten an die Aufzeichnungsregeln anpassen“ lässt keine Zeit mehr
+  verschwinden. Alte Archivzeilen ohne Koordinaten (z. B. aus dem Pyscript-Archiv)
+  werden nirgends angezeigt; ein späterer Eintrag mit Koordinaten wurde früher in eine
+  solche Zeile hineingefasst und verschwand mit ihr. Jetzt übernimmt ein Aufenthalt
+  ohne Position die Position des Eintrags und wird sichtbar.
+- „Lücken am Tagesrand schließen“ ignoriert Zeilen ohne Koordinaten: Eine 00:00-Zeile
+  ohne Position verhindert das Schließen der Lücke nicht mehr.
+- Import-Vorschau: Beim An- und Abhaken einzelner Tage springt die Tabelle nicht mehr
+  nach oben; Scrollposition, aufgeklappte Details und Fokus bleiben erhalten.
+
 ## 0.7.1
 
 - Import fix: a stay that crosses Home Assistant's midnight after converting its time

@@ -189,7 +189,15 @@ export default (ctx, Base) => {
       return new Promise((resolve) => {
         const overlay = document.createElement('div');
         overlay.className = 'dialog';
+        const opened = new Set(); // rows whose details are shown (survive a re-render)
         const render = () => {
+          // 0.7.2: ticking a day rebuilds the window - keep scroll positions, open details and focus
+          const oldTable = overlay.querySelector('.vorschau-tabelle');
+          const oldWindow = overlay.querySelector('.fenster');
+          const tableTop = oldTable ? oldTable.scrollTop : 0;
+          const windowTop = oldWindow ? oldWindow.scrollTop : 0;
+          const focused = overlay.contains(document.activeElement) ? document.activeElement : null;
+          const focusKey = focused && focused.dataset && focused.dataset.i !== undefined ? `i${focused.dataset.i}` : focused && focused.classList.contains('alle') ? 'alle' : '';
           const total = plan.filter((d) => chosen.has(`${d.person}|${d.date}`)).reduce((n, d) => n + d.new, 0);
           const nothing = plan.filter((d) => d.new === 0).length;
           overlay.innerHTML = `<div class="fenster breit" role="dialog" aria-modal="true">
@@ -208,8 +216,8 @@ export default (ctx, Base) => {
                 <td>${esc(d.date)}</td><td>${esc(nameOf(d.person))}</td><td>${d.existing}</td>
                 <td title="${esc(t('import_day_rules', { merged: d.merged || 0, dropped: d.dropped || 0 }))}">${d.points ?? d.new} → ${d.stays ?? d.new}${d.dropped ? ` <span class="klein">(−${d.dropped})</span>` : ''}</td><td>${d.new}</td>
                 <td>${esc(t(`import_status_${d.status}`))}${d.expired ? `<br><span class="schlecht">${esc(t('import_status_expired'))}</span>` : ''}</td>
-                <td>${d.new ? `<button class="auf" type="button" data-i="${i}">${esc(t('import_show'))}</button>` : ''}</td></tr>
-                <tr class="details" data-for="${i}" hidden><td></td><td colspan="7">${d.entries.map((e) => `${esc(e.start.slice(0, 5))}–${esc(e.end.slice(0, 5))} ${esc(placeOf(e))}`).join('<br>')}${d.new > d.entries.length ? '<br>…' : ''}</td></tr>`).join('')}
+                <td>${d.new ? `<button class="auf" type="button" data-i="${i}">${esc(t(opened.has(i) ? 'import_hide' : 'import_show'))}</button>` : ''}</td></tr>
+                <tr class="details" data-for="${i}"${opened.has(i) ? '' : ' hidden'}><td></td><td colspan="7">${d.entries.map((e) => `${esc(e.start.slice(0, 5))}–${esc(e.end.slice(0, 5))} ${esc(placeOf(e))}`).join('<br>')}${d.new > d.entries.length ? '<br>…' : ''}</td></tr>`).join('')}
               </tbody></table></div>
             <div class="text">${esc(t('import_summary', { n: total, days: chosen.size, none: nothing }))}</div>
             <label class="reihe" style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" class="tagesrand"${this._import.edges !== false ? ' checked' : ''}>
@@ -231,10 +239,19 @@ export default (ctx, Base) => {
           overlay.querySelectorAll('button.auf').forEach((b) => b.addEventListener('click', () => {
             const row = overlay.querySelector(`tr.details[data-for="${b.dataset.i}"]`);
             row.hidden = !row.hidden;
+            if (row.hidden) opened.delete(Number(b.dataset.i)); else opened.add(Number(b.dataset.i));
             b.textContent = t(row.hidden ? 'import_show' : 'import_hide');
           }));
           overlay.querySelector('[data-wahl="cancel"]').addEventListener('click', () => close(null));
           overlay.querySelector('[data-wahl="ok"]').addEventListener('click', () => close([...chosen]));
+          const newTable = overlay.querySelector('.vorschau-tabelle');
+          const newWindow = overlay.querySelector('.fenster');
+          if (newTable) newTable.scrollTop = tableTop;
+          if (newWindow) newWindow.scrollTop = windowTop;
+          if (focusKey) {
+            const target = focusKey === 'alle' ? overlay.querySelector('.alle') : overlay.querySelector(`tbody input[data-i="${focusKey.slice(1)}"]`);
+            if (target) target.focus({ preventScroll: true });
+          }
         };
         const close = (value) => { document.removeEventListener('keydown', key); overlay.remove(); resolve(value); };
         const key = (e) => { if (e.key === 'Escape') close(null); };

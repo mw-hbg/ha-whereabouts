@@ -136,3 +136,48 @@ def test_set_addresses_only_fills_empty_away_rows(store):
     )
     assert store.set_addresses("alex", D, {"08:00:00": "New 1", "09:00:00": "Other"}) == 1
     assert [p.address for p in store.read_points("alex", D)] == ["New 1", "Kept"]
+
+
+def test_rules_entry_with_position_is_not_swallowed_by_stay_without_position():
+    """0.7.2: pyscript archive rows have no coordinates; a later entry with them must stay visible."""
+    points = [
+        Point(D, "00:00:00", "home", None, None, end="07:32:12"),
+        Point(D, "07:40:00", "home", 48.0, 8.0, end="12:00:00"),
+    ]
+    result, _ = apply_rules(points, 50, 60)
+    assert len(result) == 1
+    assert (result[0].latitude, result[0].longitude) == (48.0, 8.0)
+    assert (result[0].time, result[0].end) == ("00:00:00", "12:00:00")
+
+
+def test_rules_on_stored_day_keeps_stay_visible(store):
+    store._ensure_folder()  # add_point would already extend the first row; write the archive state directly
+    store._write_points(
+        store.path("alex", D),
+        [
+            Point(D, "00:00:00", "home", None, None, end="07:32:12"),
+            Point(D, "07:40:00", "home", 48.0, 8.0, end="12:00:00"),
+        ],
+    )
+    rules_on_days(store, [("alex", D)], 50, 60, write=True)
+    [stay] = store.read_day("alex", D)
+    assert (stay.start, stay.end, stay.state) == ("00:00:00", "12:00:00", "home")
+
+
+def test_day_edges_ignore_rows_without_position(store):
+    day1, day2 = "2026-11-01", "2026-11-02"
+    store.add_point("alex", Point(day1, "20:00:00", "home", 48.0, 8.0, end="23:00:00"))
+    store.add_point("alex", Point(day2, "00:00:00", "home", None, None, end="01:00:00"))
+    store.add_point("alex", Point(day2, "07:00:00", "not_home", 48.5, 8.5, "Street", end="09:00:00"))
+    plan = store.fill_edges("alex", [day2], write=False)
+    assert plan["starts"] == 1
+    store.fill_edges("alex", [day2])
+    assert [(s.start, s.end, s.state) for s in store.read_day("alex", day2)][0] == ("00:00:00", "07:00:00", "home")
+
+
+def test_import_gap_ignores_stored_rows_without_position(store):
+    store.add_point("alex", Point(D, "00:00:00", "home", None, None, end="12:00:00"))
+    result = store.import_points("alex", [Point(D, "08:00:00", "home", 48.0, 8.0, end="10:00:00")])
+    assert result  # something was stored
+    [stay] = store.read_day("alex", D)
+    assert (stay.start, stay.end) == ("08:00:00", "10:00:00")

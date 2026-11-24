@@ -73,6 +73,14 @@ def apply_rules(
                 last.tz = point.tz
             if not last.address and point.address:
                 last.address = point.address
+            if (
+                (last.latitude is None or last.longitude is None)
+                and point.latitude is not None
+                and point.longitude is not None
+            ):
+                # 0.7.2: a stay without position (old archive rows) takes the position of the entry,
+                # so the time stays visible instead of vanishing into a row the cards hide
+                last.latitude, last.longitude = point.latitude, point.longitude
             if moment - last_kept >= min_interval:
                 last_kept = moment
             day.merged += 1

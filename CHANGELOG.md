@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.1
 
 - Import fix: a stay that crosses Home Assistant's midnight after converting its time
   zone (e.g. a night in Bangkok) is now split at midnight and goes on at 00:00 of the

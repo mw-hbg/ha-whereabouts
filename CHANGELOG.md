@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.5
 
 - New: positions with a GPS accuracy worse than 100 m are no longer recorded (setting "Maximum GPS inaccuracy", 0–1000 m, 0 = off). A change of state (home / away / zone) is always recorded.
 - Improved: after a deletion or a data change the cards reload only the changed days instead of the whole period; the live card asks for the "since" time of all persons in one request and corrects it after a restart of Home Assistant.

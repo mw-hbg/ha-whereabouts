@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: the heatmap stayed empty since 0.7.5 – an error stopped it from being drawn.
+
+---
+
+- Behoben: Die Heatmap blieb seit 0.7.5 leer – ein Fehler verhinderte das Zeichnen.
+
 ## 0.7.6
 
 - Fixed: the heatmap stayed almost empty since 0.7.5 – the scale did not take the zoom level into account.

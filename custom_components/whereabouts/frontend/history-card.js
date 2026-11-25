@@ -1047,6 +1047,7 @@ export function defineHistoryCard(S, D) {
         const max = sums.length ? Math.max(sums[Math.min(sums.length - 1, Math.floor(sums.length * 0.95))], 0.05) : 1;
         const heat = L.heatLayer(data, { radius: 22, blur: 13, max, minOpacity: 0.2 });
         heat._wRadiusM = 75;
+        const bounds = data.length ? L.latLngBounds(data.map((d) => [d[0], d[1]])) : null;
         return { heat, bounds };
       }
       const route = L.featureGroup();

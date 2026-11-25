@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: the "Restore" button in the log had its icon on top of the text.
+- Fixed: the log (intro, buttons, entries and dividers) now has the same side spacing as
+  the other rows instead of running to the edge.
+
+---
+
+- Behoben: Der Knopf „Wiederherstellen“ im Protokoll hatte das Symbol über dem Text.
+- Behoben: Das Protokoll (Einleitung, Knöpfe, Einträge und Trennlinien) hat jetzt den
+  gleichen seitlichen Abstand wie die übrigen Zeilen und läuft nicht mehr bis zum Rand.
+
 ## 0.7.3
 
 - New "Log and trash" at the bottom of "Data maintenance" (administrators only): every

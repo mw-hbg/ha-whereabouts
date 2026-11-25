@@ -275,6 +275,8 @@ export const CSS = `
   @keyframes wa-ablauf { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 56.55; } }
   .wa-set .knopf.wiederherstellen { height: auto; padding: 7px 14px 7px 8px; border-radius: 18px; font-size: 14px; border: 1px solid var(--primary-color); }
   .wa-set .knopf.wiederherstellen ha-icon { left: 12px; top: 50%; margin-top: -7px; }
+  /* Activity log: same side spacing as the rows */
+  .wa-set .protokoll { padding: 0 16px; }
   /* Sub-areas that open and close (CARTO styles, zone list, accuracy, address sensors) */
   .wa-set details.unter { grid-column: 1 / -1; border-top: 1px solid var(--divider-color); }
   .wa-set details.unter > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 10px 16px; }

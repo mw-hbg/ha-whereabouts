@@ -69,7 +69,7 @@ export default (ctx, Base) => {
       this._journalPart = part;
       const intro = document.createElement('div');
       intro.className = 'hinweis';
-      intro.style.margin = '4px 0 8px';
+      intro.style.margin = '4px 16px 8px';
       intro.textContent = t('journal_intro');
       part.inner.appendChild(intro);
       (c.options || []).filter((f) => f.late).forEach((f) => part.inner.appendChild(this._adminOptionRow(c, f)));
@@ -153,13 +153,13 @@ export default (ctx, Base) => {
             ${e.restored ? `<div class="klein">${esc(t('journal_was_restored'))}</div>` : ''}
             ${e.expired ? `<div class="klein">${esc(t('journal_expired'))}</div>` : ''}
           </div>
-          ${e.trash ? `<button class="knopf wiederherstellen" type="button" style="width:auto"><ha-icon icon="mdi:backup-restore"></ha-icon>${esc(t('journal_restore'))}</button>` : ''}
+          ${e.trash ? `<button class="knopf journal-wieder" type="button" style="width:auto"><ha-icon icon="mdi:backup-restore"></ha-icon>${esc(t('journal_restore'))}</button>` : ''}
           <button class="knopf loeschen" type="button" style="width:auto" aria-label="${esc(t('journal_delete'))}" title="${esc(t('journal_delete'))}"><ha-icon icon="mdi:delete-outline"></ha-icon></button>
         </div>`).join('')}</div>
         ${items.length > shown.length ? `<button class="knopf mehr" type="button" style="width:auto;margin-top:8px">${esc(t('journal_more', { n: items.length - shown.length }))}</button>` : ''}`;
       el.querySelectorAll('.eintrag').forEach((row) => {
         const entry = items.find((e) => e.id === row.dataset.id);
-        const restore = row.querySelector('.wiederherstellen');
+        const restore = row.querySelector('.journal-wieder');
         if (restore) restore.addEventListener('click', () => this._journalRestore(entry));
         row.querySelector('.loeschen').addEventListener('click', () => this._journalDelete(entry));
       });

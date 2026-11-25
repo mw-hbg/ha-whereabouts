@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.7
 
 - Fixed: the heatmap stayed empty since 0.7.5 – an error stopped it from being drawn.
 

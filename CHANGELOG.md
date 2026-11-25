@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.6
 
 - Fixed: the heatmap stayed almost empty since 0.7.5 – the scale did not take the zoom level into account.
 

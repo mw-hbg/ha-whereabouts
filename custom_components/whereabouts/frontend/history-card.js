@@ -1018,10 +1018,24 @@ export function defineHistoryCard(S, D) {
     // so the 95th-percentile scale from _buildLayers fits at every zoom.
     _fitHeatRadius(layer = this._heatLayer, map = this._map) {
       if (!layer || !map) return;
+      const zoom = map.getZoom();
       const lat = map.getCenter().lat;
-      const mPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / 2 ** map.getZoom();
+      const mPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / 2 ** zoom;
       const radius = Math.max(8, Math.min(40, (layer._wRadiusM || 75) / mPerPx));
-      layer.setOptions({ radius, blur: radius * 0.6, maxZoom: map.getZoom() });
+      const blur = radius * 0.6;
+      // Scale = 95th percentile of the summed weight per cell, on the same pixel grid the plugin
+      // sums on at this zoom: zoomed out, one cell holds a whole region, so the scale grows with it
+      // and home stays stronger than a holiday.
+      const cell = (radius + blur) / 2;
+      const sums = new Map();
+      (layer._wData || []).forEach((d) => {
+        const pt = map.project([d[0], d[1]], zoom);
+        const key = `${Math.floor(pt.x / cell)}|${Math.floor(pt.y / cell)}`;
+        sums.set(key, (sums.get(key) || 0) + d[2]);
+      });
+      const sorted = [...sums.values()].sort((x, y) => x - y);
+      const max = sorted.length ? Math.max(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))], 0.05) : 1;
+      layer.setOptions({ radius, blur, max, maxZoom: zoom });
     }
 
     // Layers of the route (or heatmap) for a map; used for the shown map and the picture.
@@ -1037,15 +1051,9 @@ export function defineHistoryCard(S, D) {
           const weight = byVisits ? 1 : (min < 5 ? 0.03 : Math.min(1, 0.03 + (min - 5) / 115 * 0.97));
           return [p.lat, p.lon, weight];
         });
-        // Scale to the 95th percentile of the summed weight per ~75 m cell, so one place (home) does not outshine the rest.
-        const cells = new Map();
-        data.forEach((d) => {
-          const key = `${Math.round(d[0] / 0.0007)}|${Math.round(d[1] / 0.001)}`;
-          cells.set(key, (cells.get(key) || 0) + d[2]);
-        });
-        const sums = [...cells.values()].sort((a, b) => a - b);
-        const max = sums.length ? Math.max(sums[Math.min(sums.length - 1, Math.floor(sums.length * 0.95))], 0.05) : 1;
-        const heat = L.heatLayer(data, { radius: 22, blur: 13, max, minOpacity: 0.2 });
+        // The scale (max) is set per zoom in _fitHeatRadius.
+        const heat = L.heatLayer(data, { radius: 22, blur: 13, max: 1, minOpacity: 0.2 });
+        heat._wData = data;
         heat._wRadiusM = 75;
         const bounds = data.length ? L.latLngBounds(data.map((d) => [d[0], d[1]])) : null;
         return { heat, bounds };

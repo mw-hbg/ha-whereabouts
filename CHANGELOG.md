@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: zoomed out, the heatmap was red everywhere – the scale is now worked out for every zoom level, so home stays stronger than a short holiday.
+
+---
+
+- Behoben: Weit herausgezoomt war die Heatmap überall rot – die Skalierung wird jetzt für jede Zoomstufe neu berechnet, Zuhause bleibt dadurch stärker als ein kurzer Urlaub.
+
 ## 0.7.7
 
 - Fixed: the heatmap stayed empty since 0.7.5 – an error stopped it from being drawn.

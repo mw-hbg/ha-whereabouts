@@ -195,3 +195,27 @@ async def test_address_lookup_is_only_logged_and_can_be_dismissed(hass: HomeAssi
 
     done = (await _call(ws, 3, type="whereabouts/addresses/control", action="dismiss"))["result"]
     assert done["status"] == "idle"
+
+
+async def test_automatic_retention_is_logged_and_restorable(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    """0.7.5: the nightly deletion goes through log and trash like every other change."""
+    from custom_components.whereabouts import async_apply_retention
+
+    _person(hass, "alex")
+    await setup_integration(hass, retention_days=30)
+    runtime = hass.data["whereabouts"]
+    runtime.storage.import_points("alex", [Point("2020-01-01", "08:00:00", "home", 48.1, 8.1)])
+    _two_close_points(runtime.storage, "2999-01-01")
+    old_file = runtime.storage.path("alex", "2020-01-01")
+    before = _text(old_file)
+
+    assert await async_apply_retention(hass, runtime) == 1
+    assert not _exists(old_file) and _exists(runtime.storage.path("alex", "2999-01-01"))
+
+    ws = await hass_ws_client(hass)
+    entry = (await _call(ws, 1, type="whereabouts/journal/list"))["result"]["items"][0]
+    assert entry["action"] == "retention" and entry["persons"] == ["alex"] and entry["trash"] is True
+    assert (entry["from"], entry["to"], entry["rows"]) == ("2020-01-01", "2020-01-01", 1)
+
+    await _call(ws, 2, type="whereabouts/journal/restore", entry=entry["id"], preview=False)
+    assert _text(old_file) == before

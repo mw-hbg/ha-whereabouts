@@ -505,10 +505,60 @@ export function defineLiveCard(S) {
     // "since 14:05" - for a place in another time zone also (or only) its local time
     _sinceLine(d) {
       const t = this._t;
-      const text = t('since', { time: S.sinceText(this._hass, t, d.st.last_changed) });
+      const iso = this._sinceIso(d);
+      const text = t('since', { time: S.sinceText(this._hass, t, iso) });
       const zone = this._zoneOf(d);
       if (!zone) return text;
-      return S.withLocalTime(this._hass, t, this._config.time_display, text, [Date.parse(d.st.last_changed)], zone);
+      return S.withLocalTime(this._hass, t, this._config.time_display, text, [Date.parse(iso)], zone);
+    }
+
+    // 0.7.5: the start of the stay from the stored history. Home Assistant's "last changed"
+    // jumps to the start time after a restart; until the history answers (or without it) it is used.
+    _sinceIso(d) {
+      if (!this._since) { this._since = new Map(); this._sinceAsked = new Map(); this._sinceWanted = new Map(); }
+      const id = d.st.entity_id;
+      const key = `${d.st.state}|${d.st.last_changed}`;
+      const known = this._since.get(id);
+      if (known && known.key === key) return known.iso || d.st.last_changed;
+      const asked = this._sinceAsked.get(id);
+      if (!asked || asked.key !== key) {
+        this._sinceAsked.set(id, { key, changed: d.st.last_changed, tries: 0 });
+        this._wantSince(id, key);
+      }
+      return d.st.last_changed;
+    }
+
+    _wantSince(id, key) {
+      this._sinceWanted.set(id, key);
+      clearTimeout(this._sinceTimer);
+      this._sinceTimer = setTimeout(() => this._fetchSince(), 50);
+    }
+
+    async _fetchSince() {
+      const wanted = [...this._sinceWanted.entries()];
+      this._sinceWanted.clear();
+      if (!wanted.length) return;
+      let result = null;
+      try {
+        result = await this._hass.callWS({ type: 'whereabouts/since', persons: wanted.map(([id]) => id) });
+      } catch (err) {
+        result = null; // older server or error: "last changed" stays
+      }
+      let changed = false;
+      wanted.forEach(([id, key]) => {
+        const asked = this._sinceAsked.get(id);
+        if (!asked || asked.key !== key) return; // another state meanwhile
+        const iso = result && result.since ? (result.since[id] || '') : '';
+        // a state that just changed: the recording may be a moment behind, ask again
+        if (!iso && result && asked.tries < 2 && Date.now() - Date.parse(asked.changed) < 120000) {
+          asked.tries += 1;
+          setTimeout(() => { if (this._sinceAsked.get(id) === asked) this._wantSince(id, key); }, 15000);
+          return;
+        }
+        this._since.set(id, { key, iso });
+        if (iso) changed = true;
+      });
+      if (changed) { this._renderBar(); this._renderPanel(); }
     }
 
     // Time zone of a person's position ("" = Home Assistant's), asked from the server once per area

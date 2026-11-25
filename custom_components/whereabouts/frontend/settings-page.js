@@ -56,10 +56,11 @@ const ADMIN = [
     { key: 'panel_title', sel: { text: {} }, text: true, placeholder: 'panel_title' },
     { key: 'panel_icon', sel: { icon: {} }, text: true, emptyIs: 'mdi:map-marker-radius' },
   ] },
-  { id: 'recording', icon: 'mdi:record-rec', reset: ['min_interval', 'same_place_distance', 'retention_days'], options: [
+  { id: 'recording', icon: 'mdi:record-rec', reset: ['min_interval', 'same_place_distance', 'max_gps_accuracy', 'retention_days'], options: [
     { key: 'record_persons', persons: true },
     { key: 'min_interval', sel: num(10, 3600, 10, 's'), group: 'precision' },
     { key: 'same_place_distance', sel: num(10, 1000, 10, 'm'), group: 'precision' },
+    { key: 'max_gps_accuracy', sel: num(0, 1000, 10, 'm'), group: 'precision' },
     { key: 'retention_days', sel: num(0, 36500, 1, 'd'), confirm: 'retention', group: 'precision', note: 'history_size' },
   ] },
   { id: 'addresses', icon: 'mdi:map-search', reset: ['address_source', 'address_max_distance', 'address_sensors'], options: [

@@ -49,13 +49,15 @@
           "record_persons": "Verlauf dieser Personen aufzeichnen",
           "min_interval": "Positions-Updates am selben Ort höchstens speichern alle",
           "same_place_distance": "Unterwegs als derselbe Ort zählen im Umkreis von",
-          "retention_days": "Verlauf löschen, der älter ist als (0 = nie)"
+          "retention_days": "Verlauf löschen, der älter ist als (0 = nie)",
+          "max_gps_accuracy": "Positions-Updates ignorieren, die ungenauer sind als (0 = aus)"
         },
         "data_description": {
           "record_persons": "Aufgezeichnet wird erst, wenn du hier Personen auswählst. Der Verlauf liegt nur auf diesem Home Assistant (Ordner whereabouts im Konfigurationsordner) und bleibt erhalten, bis du ihn löschst.",
           "min_interval": "Ein Ortswechsel (z. B. Zone betreten) wird immer gespeichert.",
           "same_place_distance": "In einer Zone spielt die genaue Position keine Rolle.",
-          "retention_days": "Standard 0: Es wird nie automatisch etwas gelöscht."
+          "retention_days": "Standard 0: Es wird nie automatisch etwas gelöscht.",
+          "max_gps_accuracy": "Ein Ortswechsel wird immer gespeichert. Nur Updates unterwegs werden übersprungen."
         }
       },
       "addresses": {

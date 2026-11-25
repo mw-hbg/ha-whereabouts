@@ -227,3 +227,14 @@ async def test_import_closes_day_edges(hass: HomeAssistant, hass_client, hass_ad
     assert result["edges"] == 2
     storage = hass.data["whereabouts"].storage
     assert storage.read_day("alex", D)[0].start == "00:00:00"
+
+
+def test_retry_after_header():
+    """0.7.5: after a 429 OpenStreetMap's Retry-After counts (1 minute to 1 hour), else one hour."""
+    from custom_components.whereabouts.nominatim import retry_after
+
+    assert retry_after("120") == 120.0
+    assert retry_after("5") == 60.0
+    assert retry_after("99999") == 3600.0
+    assert retry_after(None) == 3600.0
+    assert retry_after("Wed, 21 Oct 2026 07:28:00 GMT") == 3600.0

@@ -420,12 +420,8 @@ async def ws_address_start(hass: HomeAssistant, connection: websocket_api.Active
         missing = await hass.async_add_executor_job(count_missing, runtime.storage, files)
         connection.send_result(msg["id"], {"missing": missing, "busy": runtime.addresses.busy})
         return
-    try:
-        status = await runtime.addresses.async_start(keys, msg["from"], msg["to"])
-    except RuntimeError:
-        connection.send_error(msg["id"], "busy", "A lookup is already running")
-        return
-    if runtime.journal is not None:
+
+    async def log(state: dict[str, Any]) -> str:
         # only logged, no backup: the job only fills empty addresses
         entry = await async_finish(
             hass,
@@ -437,13 +433,19 @@ async def ws_address_start(hass: HomeAssistant, connection: websocket_api.Active
             msg["persons"],
             msg["from"],
             msg["to"],
-            status.get("found", 0),
-            total=status.get("total", 0),
-            status=status.get("status", ""),
+            state.get("found", 0),
+            total=state.get("total", 0),
+            status=state.get("status", ""),
         )
-        if entry and runtime.addresses.busy:
-            runtime.addresses.state["journal_id"] = entry["id"]
-            await runtime.addresses.async_save()
+        return entry["id"] if entry else ""
+
+    try:
+        status = await runtime.addresses.async_start(
+            keys, msg["from"], msg["to"], log if runtime.journal is not None else None
+        )
+    except RuntimeError:
+        connection.send_error(msg["id"], "busy", "A lookup is already running")
+        return
     connection.send_result(msg["id"], status)
 
 

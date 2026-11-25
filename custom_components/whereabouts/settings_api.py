@@ -30,6 +30,7 @@ from .const import (
     CONF_ADDRESS_SENSORS,
     CONF_ADDRESS_SOURCE,
     CONF_CARTO_KEY,
+    CONF_MAX_GPS_ACCURACY,
     CONF_MIN_INTERVAL,
     CONF_PANEL,
     CONF_PANEL_ICON,
@@ -68,6 +69,7 @@ OPTIONS_SCHEMA = vol.Schema(
         vol.Optional(CONF_RECORD_PERSONS): _PERSONS,
         vol.Optional(CONF_MIN_INTERVAL): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
         vol.Optional(CONF_SAME_PLACE_DISTANCE): vol.All(vol.Coerce(int), vol.Range(min=10, max=1000)),
+        vol.Optional(CONF_MAX_GPS_ACCURACY): vol.All(vol.Coerce(int), vol.Range(min=0, max=1000)),
         vol.Optional(CONF_RETENTION_DAYS): vol.All(vol.Coerce(int), vol.Range(min=0, max=36500)),
         vol.Optional(CONF_TRASH_DAYS): vol.All(vol.Coerce(int), vol.Range(min=0, max=36500)),
         vol.Optional(CONF_ADDRESS_SOURCE): vol.In(ADDRESS_SOURCES),
@@ -808,7 +810,7 @@ def _public_host(host: str) -> bool:
 
 class FetchImageView(HomeAssistantView):
     """GET /api/whereabouts/image?url=... - loads a picture from the internet once,
-    so the page can crop it. Only images, at most 10 MB, only public addresses."""
+    so the page can crop it. Admins only. Only images, at most 10 MB, only public addresses."""
 
     url = "/api/whereabouts/image"
     name = "api:whereabouts:image"
@@ -820,6 +822,9 @@ class FetchImageView(HomeAssistantView):
         hass: HomeAssistant = request.app["hass"]
         if _runtime(hass) is None:
             return self.json_message("Whereabouts is not set up", HTTPStatus.NOT_FOUND)
+        user = request.get("hass_user")
+        if user is None or not user.is_admin:
+            return self.json({"error": "admin_only"}, HTTPStatus.FORBIDDEN)
         target = request.query.get("url", "")[:2000]
         parsed = urlparse(target)
         if parsed.scheme not in ("http", "https") or not parsed.hostname:

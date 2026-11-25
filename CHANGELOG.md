@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- New: positions with a GPS accuracy worse than 100 m are no longer recorded (setting "Maximum GPS inaccuracy", 0–1000 m, 0 = off). A change of state (home / away / zone) is always recorded.
+- Improved: after a deletion or a data change the cards reload only the changed days instead of the whole period; the live card asks for the "since" time of all persons in one request and corrects it after a restart of Home Assistant.
+- Improved: the automatic deletion of old days (retention) now goes to the trash and appears in the log, and runs once a night.
+- Improved: Nominatim: a pause requested by the server (Retry-After) is respected; the address cache is saved when Home Assistant stops.
+- Improved: heatmap: short stays count little, from 2 hours fully; the radius is about 75 m at every zoom; the strongest place (home) no longer outshines the rest; new switch "By number of visits instead of duration".
+- Improved: stored text can no longer break the CSV files (semicolons and quotation marks are cleaned).
+- Changed: loading a picture from the internet (crop for the panel icon) is for administrators only.
+- New: "Download diagnostics" (counts and settings only; persons, sensors and keys are redacted).
+- Changed: the prompt for converting location data no longer asks to define a home.
+
+---
+
+- Neu: Positionen mit einer GPS-Genauigkeit schlechter als 100 m werden nicht mehr aufgezeichnet (Einstellung „Maximale GPS-Ungenauigkeit“, 0–1000 m, 0 = aus). Ein Wechsel des Zustands (Zuhause / unterwegs / Zone) wird immer gespeichert.
+- Verbessert: Nach einem Löschen oder einer Datenänderung laden die Karten nur die geänderten Tage neu statt den ganzen Zeitraum; die Live-Karte fragt das „seit“ aller Personen in einer Anfrage ab und korrigiert es nach einem Neustart von Home Assistant.
+- Verbessert: Das automatische Löschen alter Tage (Aufbewahrung) landet jetzt im Papierkorb, steht im Protokoll und läuft einmal pro Nacht.
+- Verbessert: Nominatim: eine vom Server verlangte Pause (Retry-After) wird eingehalten; der Adress-Zwischenspeicher wird beim Beenden von Home Assistant gesichert.
+- Verbessert: Heatmap: kurze Aufenthalte zählen wenig, ab 2 Stunden voll; der Radius beträgt bei jeder Zoomstufe etwa 75 m; der stärkste Ort (Zuhause) überstrahlt den Rest nicht mehr; neuer Schalter „Nach Besuchen statt nach Dauer“.
+- Verbessert: Gespeicherter Text kann die CSV-Dateien nicht mehr durcheinanderbringen (Semikolon und Anführungszeichen werden bereinigt).
+- Geändert: Das Laden eines Bildes aus dem Internet (Zuschnitt des Seitenleisten-Symbols) ist nur noch für Administratoren möglich.
+- Neu: „Diagnose herunterladen“ (nur Zahlen und Einstellungen; Personen, Sensoren und Schlüssel sind geschwärzt).
+- Geändert: Der Prompt zum Umwandeln von Standortdaten verlangt nicht mehr, ein Zuhause festzulegen.
+
 ## 0.7.4
 
 - Fixed: the "Restore" button in the log had its icon on top of the text.

@@ -5,12 +5,14 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.frontend import add_extra_js_url, remove_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_change
@@ -25,6 +27,7 @@ from .const import (
     CONF_PANEL,
     CONF_PANEL_ICON,
     CONF_PANEL_TITLE,
+    CONF_RETENTION_DAYS,
     CONF_SAME_PLACE_DISTANCE,
     DEFAULT_OPTIONS,
     DOMAIN,
@@ -92,22 +95,32 @@ class Runtime:
     # Raised whenever stored data changes outside the live recording (import,
     # data maintenance, deleting, addresses): open cards then load again.
     data_version: int = 0
+    # 0.7.5: which days of which persons the last change touched ({"person.alex": ["2026-06-24"]});
+    # None = unknown or many, the cards then load everything again.
+    data_days: dict[str, list[str]] | None = None
     _known: set[str] = field(default_factory=set)
 
     def known_persons(self) -> set[str]:
         """Persons with stored history (also no longer recorded ones)."""
         return set(self._known)
 
-    async def async_refresh_known(self, hass: HomeAssistant, data_changed: bool = False) -> None:
+    async def async_refresh_known(
+        self, hass: HomeAssistant, data_changed: bool = False, days: dict[str, list[str]] | None = None
+    ) -> None:
         files = await hass.async_add_executor_job(self.storage.list_files)
         self._known = {f"person.{person}" for person, _ in files}
         if data_changed:
             self.data_version += 1
+            self.data_days = days
         async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
 
-    def data_changed(self, hass: HomeAssistant) -> None:
-        """Stored data changed: tell the open cards to load again (event loop only)."""
+    def data_changed(self, hass: HomeAssistant, days: dict[str, list[str]] | None = None) -> None:
+        """Stored data changed: tell the open cards to load again (event loop only).
+
+        ``days``: when only a few days changed, the cards reload just those.
+        """
         self.data_version += 1
+        self.data_days = days
         async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)
 
 
@@ -207,15 +220,59 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await runtime.addresses.async_load()  # a job that was running goes on
     entry.async_on_unload(entry.add_update_listener(_options_updated))
 
+    async def _flush_cache(_event: Event) -> None:
+        """Home Assistant stops: the address cache of the last 30 s is saved, too (0.7.5)."""
+        await nominatim.flush()
+
+    entry.async_on_unload(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _flush_cache))
+
     async def _expire_trash(_now=None) -> None:
         limit = journal_api.expire_limit(runtime.options)
         if limit:
             await hass.async_add_executor_job(runtime.journal.expire, limit)
 
+    async def _retention(_now=None) -> None:
+        await async_apply_retention(hass, runtime)
+
     await _expire_trash()
     entry.async_on_unload(async_track_time_change(hass, _expire_trash, hour=3, minute=27, second=0))
+    if options.get(CONF_RETENTION_DAYS):
+        entry.async_on_unload(async_track_time_change(hass, _retention, hour=3, minute=17, second=0))
     async_dispatcher_send(hass, SIGNAL_INFO_CHANGED)  # open cards follow the new options
     return True
+
+
+async def async_apply_retention(hass: HomeAssistant, runtime: Runtime) -> int:
+    """Delete the days older than "Delete history automatically after … days" (0.7.5).
+
+    Like every other change of stored data this is logged and the files go to the
+    trash first, so a deletion can be undone for the trash period.
+    """
+    days = int(runtime.options.get(CONF_RETENTION_DAYS) or 0)
+    if days <= 0:
+        return 0
+    limit = (dt_util.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    storage = runtime.storage
+
+    def work() -> tuple[list[tuple[str, str]], int]:
+        old = [(person, day) for person, day in storage.list_files() if day < limit]
+        return old, storage.delete_before(limit)
+
+    entry_id, backup = journal_api.async_begin(runtime)
+
+    def run() -> tuple[list[tuple[str, str]], int]:
+        return storage.with_backup(backup, work) if backup is not None else work()
+
+    old, removed = await hass.async_add_executor_job(run)
+    if removed:
+        persons = sorted({person for person, _ in old})
+        dates = sorted(day for _, day in old)
+        await journal_api.async_finish(
+            hass, runtime, entry_id, backup, "retention", None, persons, dates[0], dates[-1], removed
+        )
+        await runtime.async_refresh_known(hass, data_changed=True)
+        _LOGGER.info("Removed %s day files older than %s days (kept in the trash)", removed, days)
+    return removed
 
 
 async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:

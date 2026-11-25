@@ -47,6 +47,7 @@ export function defineHistoryCard(S, D) {
       this._unit = 'day'; // day | days | week | month | year (how the arrows move)
       this._mode = 'route'; // route | heat
       this._withHome = true; // heatmap: include home
+      this._heatBy = 'duration'; // heatmap: 'duration' or 'visits'
       this._points = [];
       this._map = null;
       this._tiles = [];
@@ -174,9 +175,13 @@ export function defineHistoryCard(S, D) {
       if (sig === this._infoSig) {
         // stored data changed elsewhere (import, data maintenance, deleting): load again
         if (this._ready && info.data_version !== this._dataVersion) {
+          // 0.7.5: when the server says which days changed (and nothing was missed), load only those
+          const change = info.data_change;
+          const only = change && change.days && change.version === info.data_version && this._dataVersion + 1 === info.data_version
+            ? Object.entries(change.days).flatMap(([id, days]) => days.map((d) => [id, d])) : null;
           this._dataVersion = info.data_version;
           this._loadDays();
-          this._load({ fit: false });
+          this._load(only ? { fit: false, onlyIfChanged: true, days: only } : { fit: false });
         }
         // only the zones were switched (e.g. in the legend): no rebuild
         if (this._ready && info.settings && this._info && info.settings.zones_in !== (this._info.settings || {}).zones_in) {
@@ -307,7 +312,12 @@ export function defineHistoryCard(S, D) {
       if (this._to < this._todayStr()) return;
       if (this._selectMode) return;
       if (this._map && this._map._popup && this._map.hasLayer(this._map._popup)) return;
-      this._load({ fit: false, onlyIfChanged: true });
+      // 0.7.5: only today is loaded again (after midnight also the day before), not the whole period
+      const today = this._todayStr();
+      const days = [today];
+      if (this._autoDay && this._autoDay !== today) days.push(this._autoDay);
+      this._autoDay = today;
+      this._load({ fit: false, onlyIfChanged: true, days: this._persons.flatMap((p) => days.map((d) => [p.id, d])) });
     }
 
     _key(e) {
@@ -767,7 +777,7 @@ export function defineHistoryCard(S, D) {
         S.compactAttribution(this._map);
         this._setTiles(S.mapDark(this._hass, this._config));
         S.watchZoneNames(this._map, mapDiv, this._config);
-        this._map.on('zoomend', () => this._simplify());
+        this._map.on('zoomend', () => { this._simplify(); this._fitHeatRadius(); });
         this._drawZones();
       } catch (err) {
         // Without a map the table still works.
@@ -823,7 +833,9 @@ export function defineHistoryCard(S, D) {
     }
 
     // --- data ---------------------------------------------------------------------------
-    // options.fit: zoom the map to the route; options.onlyIfChanged: do not redraw unchanged data.
+    // options.fit: zoom the map to the route; options.onlyIfChanged: do not redraw unchanged data;
+    // options.days (0.7.5): [[person id, 'YYYY-MM-DD'], …] - only these days are loaded again (deleting, the
+    // automatic refresh, a change reported by the server) instead of the whole period.
     async _load(options = {}) {
       const t = this._t;
       const P = await pickerModule;
@@ -839,9 +851,16 @@ export function defineHistoryCard(S, D) {
       const persons = this._persons;
       const first = this._date;
       const last = this._to;
+      let partial = null;
+      if (options.days && this._points && !(this._failed && this._failed.length)) {
+        partial = options.days.filter(([id, day]) => day >= first && day <= last && persons.some((p) => p.id === id));
+        if (!partial.length) { this._renderStatusText(); return; } // nothing of it is shown
+      }
       // Long periods: month by month, one request after the other (spares Home Assistant).
       const chunks = [];
-      if (P.daysBetween(first, last) > P.LARGE_DAYS) {
+      if (partial) {
+        // only the changed days: everything else stays as it is
+      } else if (P.daysBetween(first, last) > P.LARGE_DAYS) {
         let start = first;
         while (start <= last) {
           const d = P.parseDate(start);
@@ -853,6 +872,26 @@ export function defineHistoryCard(S, D) {
       this._loading = true;
       const points = [];
       const failed = new Set();
+      const addStays = (person, stays, day) => (stays || []).forEach((s) => points.push({
+        person, date: s.date || day, time: s.start, end: s.end, state: s.state,
+        lat: s.latitude, lon: s.longitude, address: s.address, times: s.times,
+        offset: s.offset || '', end_offset: s.end_offset || s.offset || '', tz: s.tz || '',
+      }));
+      if (partial) {
+        points.push(...this._points.filter((p) => !partial.some(([id, day]) => id === p.person && day === p.date)));
+        const results = await Promise.allSettled(partial.map(([id, day]) => this._hass.callWS({ type: 'whereabouts/history', person: id, date: day })));
+        if (number !== this._loadNo) { this._loading = false; return; }
+        results.forEach((result, k) => {
+          const [id, day] = partial[k];
+          if (result.status === 'rejected') {
+            failed.add(this._personById(id).name);
+            console.error('Whereabouts: loading failed for', id, result.reason);
+            points.push(...this._points.filter((p) => p.person === id && p.date === day)); // keep what was shown
+            return;
+          }
+          addStays(id, result.value.stays, day);
+        });
+      }
       for (let i = 0; i < chunks.length; i += 1) {
         const [a, b] = chunks[i];
         if (chunks.length > 1) status.textContent = t('loading_month', { n: i + 1, total: chunks.length });
@@ -867,11 +906,7 @@ export function defineHistoryCard(S, D) {
             console.error('Whereabouts: loading failed for', persons[k].id, result.reason);
             return;
           }
-          (result.value.stays || []).forEach((s) => points.push({
-            person: persons[k].id, date: s.date || a, time: s.start, end: s.end, state: s.state,
-            lat: s.latitude, lon: s.longitude, address: s.address, times: s.times,
-            offset: s.offset || '', end_offset: s.end_offset || s.offset || '', tz: s.tz || '',
-          }));
+          addStays(persons[k].id, result.value.stays, a);
         });
       }
       this._loading = false;
@@ -978,17 +1013,40 @@ export function defineHistoryCard(S, D) {
       return this._mode === 'heat';
     }
 
+    // Heat radius in metres (about 75 m), converted to pixels for the current zoom (8-40 px).
+    _fitHeatRadius() {
+      const layer = this._heatLayer;
+      if (!layer || !this._map) return;
+      const map = this._map;
+      const lat = map.getCenter().lat;
+      const mPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / 2 ** map.getZoom();
+      const radius = Math.max(8, Math.min(40, (layer._wRadiusM || 75) / mPerPx));
+      layer.setOptions({ radius, blur: radius * 0.6 });
+    }
+
     // Layers of the route (or heatmap) for a map; used for the shown map and the picture.
     _buildLayers(forPicture) {
       const L = window.L;
       const visible = this._visiblePersons();
       const points = this._visiblePoints();
       if (this._heat()) {
-        // Weighted by the time spent there (capped, so home does not outshine everything).
-        const data = points.filter((p) => this._withHome || p.state !== 'home')
-          .map((p) => [p.lat, p.lon, Math.max(0.08, Math.min(this._minutes(p), 240) / 240)]);
-        const heat = L.heatLayer(data, { radius: 22, blur: 18, max: 1, minOpacity: 0.25 });
-        const bounds = data.length ? L.latLngBounds(data.map((d) => [d[0], d[1]])) : null;
+        // Weighted by the time spent there (short stays count little, 2 h and more fully) or by the number of visits.
+        const byVisits = this._heatBy === 'visits';
+        const data = points.filter((p) => this._withHome || p.state !== 'home').map((p) => {
+          const min = this._minutes(p);
+          const weight = byVisits ? 1 : (min < 5 ? 0.03 : Math.min(1, 0.03 + (min - 5) / 115 * 0.97));
+          return [p.lat, p.lon, weight];
+        });
+        // Scale to the 95th percentile of the summed weight per ~75 m cell, so one place (home) does not outshine the rest.
+        const cells = new Map();
+        data.forEach((d) => {
+          const key = `${Math.round(d[0] / 0.0007)}|${Math.round(d[1] / 0.001)}`;
+          cells.set(key, (cells.get(key) || 0) + d[2]);
+        });
+        const sums = [...cells.values()].sort((a, b) => a - b);
+        const max = sums.length ? Math.max(sums[Math.min(sums.length - 1, Math.floor(sums.length * 0.95))], 0.05) : 1;
+        const heat = L.heatLayer(data, { radius: 22, blur: 13, max, minOpacity: 0.2 });
+        heat._wRadiusM = 75;
         return { heat, bounds };
       }
       const route = L.featureGroup();
@@ -1055,6 +1113,7 @@ export function defineHistoryCard(S, D) {
       this._bounds = layers.bounds;
       if (layers.heat) {
         this._heatLayer = layers.heat.addTo(this._map);
+        this._fitHeatRadius();
       } else {
         this._routeLayer = layers.route.addTo(this._map);
         this._markerLayer = layers.markers;
@@ -1095,7 +1154,8 @@ export function defineHistoryCard(S, D) {
       const zones = this._zoneSwitchHtml();
       if (this._heat()) {
         return `<div class="verlauf"></div><div class="skala"><span>${esc(t('heat_little'))}</span><span>${esc(t('heat_much'))}</span></div>
-          <label><input type="checkbox" class="mitZuhause"${this._withHome ? ' checked' : ''}>${esc(t('heat_with_home'))}</label>${zones}`;
+          <label><input type="checkbox" class="mitZuhause"${this._withHome ? ' checked' : ''}>${esc(t('heat_with_home'))}</label>
+          <label><input type="checkbox" class="nachBesuchen"${this._heatBy === 'visits' ? ' checked' : ''}>${esc(t('heat_by_visits'))}</label>${zones}`;
       }
       const grey = this._dark ? '#d0d0d0' : '#666';
       return this._visiblePersons().map((p) => `<div class="eintrag"><span class="linie" style="background:${p.color}"></span>${esc(p.name)}</div>`).join('')
@@ -1146,6 +1206,8 @@ export function defineHistoryCard(S, D) {
         window.L.DomEvent.disableClickPropagation(div);
         const box = div.querySelector('.mitZuhause');
         if (box) box.addEventListener('change', () => { this._withHome = box.checked; this._drawMap(false); });
+        const byBox = div.querySelector('.nachBesuchen');
+        if (byBox) byBox.addEventListener('change', () => { this._heatBy = byBox.checked ? 'visits' : 'duration'; this._drawMap(false); });
         const zones = div.querySelector('.zonenZeigen');
         if (zones) zones.addEventListener('change', () => this._toggleZones(zones.checked));
         return div;
@@ -1494,9 +1556,9 @@ export function defineHistoryCard(S, D) {
       if (!confirm(keys.length === 1 ? t('confirm_delete_one') : t('confirm_delete_many', { n: keys.length }))) return;
       const original = button ? button.innerHTML : '';
       if (button) { button.disabled = true; if (!button.querySelector('svg')) button.textContent = t('deleting'); }
+      const groups = new Map();
       try {
         // One request per person and day.
-        const groups = new Map();
         keys.forEach((k) => {
           const p = byKey.get(k);
           if (!p) return;
@@ -1519,7 +1581,8 @@ export function defineHistoryCard(S, D) {
       if (button) button.innerHTML = original;
       if (this._map) this._map.closePopup();
       if (this._selectMode) this._setSelectMode(false);
-      await this._load({ fit: false });
+      // 0.7.5: only the days that changed, not the whole period
+      await this._load({ fit: false, days: [...groups.values()].map((g) => [g.person, g.date]) });
     }
 
     // --- layout of the control bar: one line or three centred lines ---------------------------

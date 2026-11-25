@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import CALLBACK_TYPE, Event, EventStateChangedData, HomeAssistant, State, callback
@@ -19,14 +19,14 @@ from .const import (
     CONF_ADDRESS_MAX_DISTANCE,
     CONF_ADDRESS_SENSORS,
     CONF_ADDRESS_SOURCE,
+    CONF_MAX_GPS_ACCURACY,
     CONF_MIN_INTERVAL,
     CONF_RECORD_PERSONS,
-    CONF_RETENTION_DAYS,
     GEOCODE_WAIT_SECONDS,
 )
 from .geo import find_address_sensor, phone_address, position_for
 from .nominatim import Nominatim
-from .storage import HistoryStorage, Point
+from .storage import HistoryStorage, Point, to_float
 from .timezones import foreign_zone, format_offset
 
 _LOGGER = logging.getLogger(__name__)
@@ -62,8 +62,6 @@ class LocationLogger:
             self._unsubs.append(async_track_state_change_event(self.hass, self.persons, self._state_changed))
             self._unsubs.append(async_track_time_change(self.hass, self._day_end, hour=23, minute=59, second=59))
             self._unsubs.append(async_track_time_change(self.hass, self._day_start, hour=0, minute=0, second=0))
-        if self.options.get(CONF_RETENTION_DAYS):
-            self._unsubs.append(async_track_time_change(self.hass, self._retention, hour=3, minute=17, second=0))
 
     @callback
     def stop(self) -> None:
@@ -79,11 +77,20 @@ class LocationLogger:
         entity_id = new.entity_id
         now = time.monotonic()
         moved = old is None or old.state != new.state
+        if not moved and self._too_inaccurate(new):
+            return  # 0.7.5: a poor fix on the way would only draw jumps (a change of place is always kept)
         last = self._last_write.get(entity_id)
         if not moved and last is not None and now - last < self.options[CONF_MIN_INTERVAL]:
             return
         self._last_write[entity_id] = now
         self.hass.async_create_task(self.async_record(new, dt_util.now()), f"whereabouts record {entity_id}")
+
+    def _too_inaccurate(self, state: State) -> bool:
+        limit = float(self.options.get(CONF_MAX_GPS_ACCURACY) or 0)
+        if limit <= 0:
+            return False
+        accuracy = to_float(state.attributes.get("gps_accuracy"))
+        return accuracy is not None and accuracy > limit
 
     async def _day_end(self, now: datetime) -> None:
         await self._record_all(now)
@@ -96,15 +103,6 @@ class LocationLogger:
             state = self.hass.states.get(entity_id)
             if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
                 await self.async_record(state, now)
-
-    async def _retention(self, now: datetime) -> None:
-        days = int(self.options.get(CONF_RETENTION_DAYS) or 0)
-        if days <= 0:
-            return
-        limit = (now - timedelta(days=days)).strftime("%Y-%m-%d")
-        removed = await self.hass.async_add_executor_job(self.storage.delete_before, limit)
-        if removed:
-            _LOGGER.info("Removed %s day files older than %s days", removed, days)
 
     # --- storing -------------------------------------------------------------
     async def async_record(self, person: State, when: datetime) -> None:

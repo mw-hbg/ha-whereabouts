@@ -46,6 +46,15 @@ def format_address(answer: object, home_country: str) -> str:
     return clean_text(", ".join(parts))
 
 
+def retry_after(value: str | None) -> float:
+    """Seconds to wait after a 429: the ``Retry-After`` header (between 1 minute and 1 hour), else 1 hour."""
+    try:
+        seconds = float(str(value).strip())
+    except (TypeError, ValueError):
+        return float(NOMINATIM_PAUSE_SECONDS)
+    return min(float(NOMINATIM_PAUSE_SECONDS), max(60.0, seconds))
+
+
 class Nominatim:
     """Throttled, cached reverse geocoding."""
 
@@ -57,6 +66,7 @@ class Nominatim:
         self._lock = asyncio.Lock()
         self._last_request = 0.0
         self._paused_at = 0.0
+        self._pause_seconds = float(NOMINATIM_PAUSE_SECONDS)
         self._dirty = False
         self._saved_at = 0.0
 
@@ -81,7 +91,7 @@ class Nominatim:
 
     @property
     def paused(self) -> bool:
-        return bool(self._paused_at) and time.monotonic() - self._paused_at < NOMINATIM_PAUSE_SECONDS
+        return bool(self._paused_at) and time.monotonic() - self._paused_at < self._pause_seconds
 
     async def reverse(self, lat: float, lon: float, min_gap: float = NOMINATIM_MIN_GAP_SECONDS) -> str:
         """Address for a position ("" if unknown or not reachable). Never raises.
@@ -144,7 +154,17 @@ class Nominatim:
             ) as response:
                 if response.status in (403, 429):
                     self._paused_at = time.monotonic()
-                    _LOGGER.warning("OpenStreetMap refused the request (%s), pausing for one hour", response.status)
+                    # 0.7.5: after a 429 the server says how long to wait; a 403 (blocked) stays an hour
+                    self._pause_seconds = (
+                        retry_after(response.headers.get("Retry-After"))
+                        if response.status == 429
+                        else float(NOMINATIM_PAUSE_SECONDS)
+                    )
+                    _LOGGER.warning(
+                        "OpenStreetMap refused the request (%s), pausing for %d minutes",
+                        response.status,
+                        round(self._pause_seconds / 60),
+                    )
                     return None
                 if response.status != 200:
                     return None

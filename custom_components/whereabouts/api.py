@@ -80,6 +80,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_days)
     websocket_api.async_register_command(hass, ws_delete)
     websocket_api.async_register_command(hass, ws_time_zones)
+    websocket_api.async_register_command(hass, ws_since)
     hass.http.register_view(ExportView())
 
 
@@ -148,6 +149,15 @@ def build_info(hass: HomeAssistant, user: User | None) -> dict[str, Any]:
         "panel_url": "/" + PANEL_URL,
         "today": dt_util.now().strftime("%Y-%m-%d"),
         "data_version": runtime.data_version,
+        # 0.7.5: the days the last change touched - only for persons this user may see (None = reload everything)
+        "data_change": {
+            "version": runtime.data_version,
+            "days": (
+                None
+                if runtime.data_days is None
+                else {p: d for p, d in runtime.data_days.items() if p in history_allowed}
+            ),
+        },
     }
 
 
@@ -248,7 +258,7 @@ async def ws_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     )
     connection.send_result(msg["id"], {"deleted": deleted})
     if deleted:
-        await runtime.async_refresh_known(hass, data_changed=True)
+        await runtime.async_refresh_known(hass, data_changed=True, days={person: [msg["date"]]})
 
 
 @websocket_api.websocket_command(
@@ -269,6 +279,42 @@ async def ws_time_zones(hass: HomeAssistant, connection: websocket_api.ActiveCon
     home = runtime.storage.zone_name
     zones = await hass.async_add_executor_job(lambda: [foreign_zone(lat, lon, home) for lat, lon in msg["points"]])
     connection.send_result(msg["id"], {"zones": zones, "home": home})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "whereabouts/since",
+        vol.Required("persons"): vol.All([str], vol.Length(min=1, max=50)),
+    }
+)
+@websocket_api.async_response
+async def ws_since(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Since when each person is where they are, from the stored history (0.7.5).
+
+    Home Assistant's own "last changed" jumps to the start time after a restart; the history
+    knows the real beginning of the stay. Only persons this user may see live and that are
+    recorded; a person without a result (no data, recording behind) simply is left out.
+    """
+    runtime = _runtime(hass)
+    if runtime is None:
+        connection.send_error(msg["id"], ERR_NOT_SET_UP, "Whereabouts is not set up")
+        return
+    allowed = set(runtime.settings.allowed(connection.user, "live"))
+    recorded = set(runtime.options[CONF_RECORD_PERSONS])
+    today = dt_util.now().strftime("%Y-%m-%d")
+    wanted = []
+    for person in msg["persons"]:
+        state = hass.states.get(person)
+        if person in allowed and person in recorded and state is not None and is_valid_key(person_key(person)):
+            wanted.append((person, state.state))
+
+    def work() -> dict[str, str]:
+        found = {
+            person: runtime.storage.current_stay_since(person_key(person), state, today) for person, state in wanted
+        }
+        return {person: since for person, since in found.items() if since}
+
+    connection.send_result(msg["id"], {"since": await hass.async_add_executor_job(work)})
 
 
 class ExportView(HomeAssistantView):

@@ -66,9 +66,13 @@ def is_valid_time(value: str) -> bool:
 
 
 def clean_text(value: object) -> str:
-    """Remove what would break a row: separator and line breaks."""
+    """Remove what would break a row: separator, quotation marks and line breaks.
+
+    Quotation marks go because a row is written by hand (``;`` joined) but read
+    like CSV: an unclosed ``"`` at the start of a cell would swallow the rest of the file.
+    """
     text = "" if value is None else str(value)
-    return text.replace(";", ",").replace("\r", " ").replace("\n", " ").strip()
+    return text.replace(";", ",").replace('"', "").replace("\r", " ").replace("\n", " ").strip()
 
 
 def format_coordinate(value: float | None) -> str:
@@ -468,7 +472,8 @@ class HistoryStorage:
     def _read_rows(path: str) -> list[list[str]]:
         try:
             with open(path, encoding="utf-8", newline="") as file:
-                return [row for row in csv.reader(file, delimiter=";") if row]
+                # QUOTE_NONE: a quotation mark in an old row must not swallow the rest of the file
+                return [row for row in csv.reader(file, delimiter=";", quoting=csv.QUOTE_NONE) if row]
         except FileNotFoundError:
             return []
 
@@ -579,6 +584,38 @@ class HistoryStorage:
             rows = self._read_rows(self.path(person, date))
         return build_stays(rows, self.same_place_distance, date, self.zone)
 
+    def current_stay_since(self, person: str, state: str, today: str, max_days: int = 60) -> str:
+        """Start of the stay somebody is in right now, as time with UTC offset ("" = not known) - 0.7.5.
+
+        Days are closed at 23:59:59 and go on at 00:00:00, so the start is searched
+        backwards over the day limits as long as the same place goes on. Only when
+        the last stored stay is the current state (the recording may be a moment behind).
+        """
+        stays = self.read_day(person, today)
+        if not stays or stays[-1].state != state:
+            return ""
+        day, start = today, stays[-1]
+        for _ in range(max_days):
+            if start is not stays[0] or start.start != DAY_START:
+                break
+            before = _next_date(day, -1)
+            earlier = self.read_day(person, before)
+            if not earlier:
+                break
+            last = earlier[-1]
+            if not same_stay(
+                last.state,
+                last.latitude,
+                last.longitude,
+                start.state,
+                start.latitude,
+                start.longitude,
+                self.same_place_distance,
+            ):
+                break
+            day, start, stays = before, last, earlier
+        return f"{day}T{start.start}{start.offset}" if start.offset else ""
+
     def list_files(self) -> list[tuple[str, str]]:
         """All (person, date) pairs that have a file, sorted."""
         try:
@@ -614,10 +651,14 @@ class HistoryStorage:
     def delete_before(self, date: str) -> int:
         """Remove all files of days before ``date`` (retention). Returns the number of files."""
         removed = 0
+        backup = getattr(self._local, "backup", None)
         with self._lock:
             for person, day in self.list_files():
                 if day < date:
-                    os.remove(self.path(person, day))
+                    path = self.path(person, day)
+                    if backup is not None:
+                        backup.save(path)  # 0.7.5: the automatic deletion goes to the trash, too
+                    os.remove(path)
                     removed += 1
         return removed
 

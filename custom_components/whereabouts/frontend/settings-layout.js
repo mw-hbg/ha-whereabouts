@@ -489,6 +489,7 @@ export default (ctx, Base) => {
       if (group === 'precision') {
         const size = this._data.admin && this._data.admin.history_size;
         return [t('sum_interval', { n: o.min_interval }), t('sum_same_place', { n: o.same_place_distance }),
+          Number(o.max_gps_accuracy) > 0 ? t('sum_accuracy', { n: o.max_gps_accuracy }) : '',
           Number(o.retention_days) > 0 ? t('sum_keep_days', { n: o.retention_days }) : t('sum_keep_forever'),
           size && this._bytes ? this._bytes(size.bytes) : ''].filter(Boolean).join(' · ');
       }

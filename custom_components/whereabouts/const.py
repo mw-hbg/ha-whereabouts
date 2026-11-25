@@ -19,6 +19,7 @@ CONF_ADDRESS_SOURCE = "address_source"
 CONF_ADDRESS_SENSORS = "address_sensors"  # {person entity_id: sensor entity_id}
 CONF_MIN_INTERVAL = "min_interval"
 CONF_SAME_PLACE_DISTANCE = "same_place_distance"
+CONF_MAX_GPS_ACCURACY = "max_gps_accuracy"  # 0.7.5: ignore position updates less accurate than this (m, 0 = off)
 CONF_ADDRESS_MAX_DISTANCE = "address_max_distance"
 CONF_HISTORY_ACCESS = "history_access"
 CONF_DELETE_ACCESS = "delete_access"
@@ -60,6 +61,7 @@ DEFAULT_OPTIONS: dict = {
     CONF_ADDRESS_SENSORS: {},
     CONF_MIN_INTERVAL: 60,
     CONF_SAME_PLACE_DISTANCE: 50,
+    CONF_MAX_GPS_ACCURACY: 100,
     CONF_ADDRESS_MAX_DISTANCE: 150,
     # 0 = keep forever. Nothing is ever deleted automatically by default.
     CONF_RETENTION_DAYS: 0,

@@ -381,3 +381,67 @@ async def test_options_dashboard_and_open_settings(hass: HomeAssistant):
     assert entry.options["panel"] is False
     assert entry.options["panel_title"] == "Family"
     assert entry.options["panel_icon"] == "mdi:map-marker-radius"
+
+
+async def test_poor_gps_fix_on_the_way_is_ignored_but_a_change_of_place_is_kept(hass: HomeAssistant):
+    """0.7.5: updates less accurate than "max_gps_accuracy" (100 m) are skipped; a change of place never."""
+    _person(hass, "alex", "home", latitude=HOME[0], longitude=HOME[1])
+    entry = await setup_integration(hass, record_persons=["person.alex"], min_interval=10)
+    runtime = entry.runtime_data
+    _person(hass, "alex", "not_home", latitude=48.0, longitude=8.0, gps_accuracy=500)  # change of place: kept
+    await hass.async_block_till_done()
+    runtime.logger._last_write.clear()
+    _person(hass, "alex", "not_home", latitude=48.1, longitude=8.1, gps_accuracy=500)  # poor fix: ignored
+    await hass.async_block_till_done()
+    _person(hass, "alex", "not_home", latitude=48.1, longitude=8.1, gps_accuracy=20)  # good fix: stored
+    await hass.async_block_till_done()
+    today = dt_util.now().strftime("%Y-%m-%d")
+    stays = await hass.async_add_executor_job(runtime.storage.read_day, "alex", today)
+    assert [(s.state, round(s.latitude, 1)) for s in stays] == [("not_home", 48.0), ("not_home", 48.1)]
+
+
+async def test_since_comes_from_the_history(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    """0.7.5: "since" in "Where is…?" is the start of the stay in the history, not Home Assistant's last change."""
+    _person(hass, "alex", "home", latitude=HOME[0], longitude=HOME[1])
+    _person(hass, "sam", "home", latitude=HOME[0], longitude=HOME[1])
+    entry = await setup_integration(hass, record_persons=["person.alex"])
+    runtime = entry.runtime_data
+    today = dt_util.now().strftime("%Y-%m-%d")
+    await hass.async_add_executor_job(
+        runtime.storage.add_point, "alex", Point(today, "00:00:00", "home", HOME[0], HOME[1], offset="+01:00")
+    )
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "whereabouts/since", "persons": ["person.alex", "person.sam"]})
+    result = (await ws.receive_json())["result"]
+    assert result == {"since": {"person.alex": f"{today}T00:00:00+01:00"}}  # sam is not recorded
+
+
+async def test_delete_tells_the_cards_which_days_changed(hass: HomeAssistant, hass_ws_client, hass_admin_user):
+    """0.7.5: after deleting, the cards load only the changed days; after other changes everything."""
+    _person(hass, "alex", "home", latitude=HOME[0], longitude=HOME[1])
+    entry = await setup_integration(hass, record_persons=["person.alex"])
+    runtime = entry.runtime_data
+    await hass.async_add_executor_job(
+        runtime.storage.add_point, "alex", Point("2026-06-24", "08:00:00", "home", HOME[0], HOME[1], offset="+02:00")
+    )
+    ws = await hass_ws_client(hass)
+    await ws.send_json(
+        {"id": 1, "type": "whereabouts/delete", "person": "person.alex", "date": "2026-06-24", "times": ["08:00:00"]}
+    )
+    assert (await ws.receive_json())["result"] == {"deleted": 1}
+    await ws.send_json({"id": 2, "type": "whereabouts/info"})
+    change = (await ws.receive_json())["result"]["data_change"]
+    assert change == {"version": runtime.data_version, "days": {"person.alex": ["2026-06-24"]}}
+    runtime.data_changed(hass)  # e.g. an import: no list of days, everything is loaded again
+    await ws.send_json({"id": 3, "type": "whereabouts/info"})
+    assert (await ws.receive_json())["result"]["data_change"]["days"] is None
+
+
+async def test_diagnostics_hide_persons_and_keys(hass: HomeAssistant, hass_admin_user):
+    from custom_components.whereabouts.diagnostics import async_get_config_entry_diagnostics
+
+    entry = await setup_integration(hass, carto_api_key="SECRET", record_persons=["person.alex"])
+    data = await async_get_config_entry_diagnostics(hass, entry)
+    text = str(data)
+    assert "SECRET" not in text and "person.alex" not in text
+    assert data["running"] and data["storage"]["files"] == 0

@@ -17,6 +17,7 @@ from .const import (
     CONF_ADDRESS_MAX_DISTANCE,
     CONF_ADDRESS_SENSORS,
     CONF_ADDRESS_SOURCE,
+    CONF_MAX_GPS_ACCURACY,
     CONF_MIN_INTERVAL,
     CONF_PANEL,
     CONF_PANEL_ICON,
@@ -178,6 +179,7 @@ class WhereaboutsOptionsFlow(OptionsFlow):
                 vol.Required(CONF_SAME_PLACE_DISTANCE, default=values[CONF_SAME_PLACE_DISTANCE]): _number(
                     10, 1000, "m"
                 ),
+                vol.Required(CONF_MAX_GPS_ACCURACY, default=values[CONF_MAX_GPS_ACCURACY]): _number(0, 1000, "m"),
                 vol.Required(CONF_RETENTION_DAYS, default=values[CONF_RETENTION_DAYS]): _number(0, 36500, "d"),
             }
         )

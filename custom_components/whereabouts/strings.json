@@ -49,13 +49,15 @@
           "record_persons": "Record the history of these persons",
           "min_interval": "Store position updates at the same place at most every",
           "same_place_distance": "On the way, count as the same place within",
-          "retention_days": "Delete history older than (0 = never)"
+          "retention_days": "Delete history older than (0 = never)",
+          "max_gps_accuracy": "Ignore position updates less accurate than (0 = off)"
         },
         "data_description": {
           "record_persons": "Nothing is recorded until you choose persons here. The history is stored only on this Home Assistant (folder whereabouts in the configuration directory) and is kept until you delete it.",
           "min_interval": "A change of place (e.g. entering a zone) is always stored.",
           "same_place_distance": "Inside a zone the exact position does not matter.",
-          "retention_days": "Default 0: nothing is ever deleted automatically."
+          "retention_days": "Default 0: nothing is ever deleted automatically.",
+          "max_gps_accuracy": "A change of place is always stored. Only updates on the way are skipped."
         }
       },
       "addresses": {

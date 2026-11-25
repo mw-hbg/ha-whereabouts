@@ -84,7 +84,7 @@ const FACTORY = {
 const CATEGORIES = Object.keys(FACTORY);
 
 const OPTION_DEFAULTS = {
-  persons: [], record_persons: [], min_interval: 60, same_place_distance: 50, retention_days: 0, trash_days: 30,
+  persons: [], record_persons: [], min_interval: 60, same_place_distance: 50, max_gps_accuracy: 100, retention_days: 0, trash_days: 30,
   address_source: 'phone_osm', address_max_distance: 150, address_sensors: {}, panel: true, panel_title: '',
   panel_icon: 'mdi:map-marker-radius', carto_api_key: '',
 };
@@ -370,6 +370,7 @@ function createBackend(userKey) {
     'whereabouts/maintenance/timezones': (msg) => ({ rows: 120, offsets: 110, zones: 6, assumed: 1, days: 4, days_changed: 3, preview: msg.preview }),
     'whereabouts/maintenance/positions': (msg) => ({ days: 4, days_changed: 2, missing: 5, from_day: 2, from_zone: 1, removed: 1, left: 1, preview: msg.preview }),
     'whereabouts/maintenance/day_edges': (msg) => ({ days: 4, days_changed: 2, starts: 2, ends: 1, preview: msg.preview }),
+    'whereabouts/since': () => ({ since: {} }),
     'whereabouts/time_zones': (msg) => ({ zones: (msg.points || []).map(([, lon]) => (lon < -30 ? 'America/New_York' : '')), home: 'Europe/Berlin' }),
     'whereabouts/addresses/status': () => clone(db.address_job),
     'whereabouts/addresses/start': (msg) => (msg.preview ? { missing: 42, busy: false } : clone(db.address_job)),

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -95,8 +95,18 @@ class AddressJob:
         return self.state.get("status") in (RUNNING, PAUSED)
 
     # --- control ------------------------------------------------------------------------------------------
-    async def async_start(self, persons: list[str], date_from: str, date_to: str) -> dict[str, Any]:
-        """Start a job for these persons (keys) and days; False when one is already running."""
+    async def async_start(
+        self,
+        persons: list[str],
+        date_from: str,
+        date_to: str,
+        log: Callable[[dict[str, Any]], Awaitable[str]] | None = None,
+    ) -> dict[str, Any]:
+        """Start a job for these persons (keys) and days; raises RuntimeError when one is already running.
+
+        ``log`` (0.7.5) creates the entry in the log and returns its id. It is called
+        before the task starts, so even a job that ends at once can update its entry.
+        """
         if self.busy:
             raise RuntimeError("busy")
         files = await self.hass.async_add_executor_job(self.storage.files_in, persons, date_from, date_to)
@@ -113,6 +123,10 @@ class AddressJob:
             "started": dt_util.now().isoformat(timespec="seconds"),
             "finished": "" if total else dt_util.now().isoformat(timespec="seconds"),
         }
+        if log is not None:
+            entry_id = await log(self.state)
+            if entry_id:
+                self.state["journal_id"] = entry_id
         await self._save()
         self._resume.set()
         if total:

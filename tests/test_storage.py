@@ -180,3 +180,37 @@ def test_export_quotes_formulas_and_import_restores_them(store, tmp_path):
     assert ",'=HYPERLINK(1)" in text
     parsed = read_import("e.csv", text.encode(), timezone=UTC, zone_for=lambda a, b: "", same_place_distance=50)
     assert parsed["alex"][0].address == "=HYPERLINK(1)"
+
+
+def test_quotation_mark_in_an_old_row_does_not_swallow_the_file(store):
+    """0.7.5: an unclosed " at the start of a cell must not merge the following rows."""
+    store._ensure_folder()
+    with open(store.path("alex", D), "w", encoding="utf-8", newline="") as file:
+        file.write(
+            '08:00:00;home;48.1;8.1\n10:00:00;not_home;48.0;8.0;"Zur Linde, Town;10:30:00\n12:00:00;home;48.1;8.1\n'
+        )
+    assert [s.start for s in store.read_day("alex", D)] == ["08:00:00", "10:00:00", "12:00:00"]
+    # a new point rewrites the file: nothing is lost and the quotation mark is gone
+    store.add_point("alex", Point(D, "13:00:00", "not_home", 47.0, 7.0, 'Cafe "Mitte"'))
+    stays = store.read_day("alex", D)
+    assert [s.start for s in stays] == ["08:00:00", "10:00:00", "12:00:00", "13:00:00"]
+    assert stays[1].address == "Zur Linde, Town"
+    assert stays[3].address == "Cafe Mitte"
+
+
+def test_current_stay_since_goes_back_over_the_day_limits(store):
+    """0.7.5: days are cut at midnight, "since" still is the real start of the stay."""
+    store.add_point("alex", Point("2026-06-22", "09:00:00", "not_home", 48.0, 8.0, offset="+02:00"))
+    store.add_point("alex", Point("2026-06-22", "18:00:00", "home", 48.1, 8.1, offset="+02:00"))
+    store.add_point("alex", Point("2026-06-22", "23:59:59", "home", 48.1, 8.1, offset="+02:00"))
+    store.add_point("alex", Point("2026-06-23", "00:00:00", "home", 48.1, 8.1, offset="+02:00"))
+    store.add_point("alex", Point("2026-06-23", "23:59:59", "home", 48.1, 8.1, offset="+02:00"))
+    store.add_point("alex", Point(D, "00:00:00", "home", 48.1, 8.1, offset="+02:00"))
+    store.add_point("alex", Point(D, "07:00:00", "home", 48.1, 8.1, offset="+02:00"))
+    assert store.current_stay_since("alex", "home", D) == "2026-06-22T18:00:00+02:00"
+    # the recording is behind (another state stored last): no answer
+    assert store.current_stay_since("alex", "not_home", D) == ""
+    # a day without data, or a stay that began after midnight
+    assert store.current_stay_since("alex", "home", "2026-07-05") == ""
+    store.add_point("alex", Point(D, "08:30:00", "Work", 48.7, 9.0, offset="+02:00"))
+    assert store.current_stay_since("alex", "Work", D) == f"{D}T08:30:00+02:00"

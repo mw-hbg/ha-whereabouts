@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.4
 
 - Fixed: the "Restore" button in the log had its icon on top of the text.
 - Fixed: the log (intro, buttons, entries and dividers) now has the same side spacing as

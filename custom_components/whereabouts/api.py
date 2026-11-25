@@ -256,9 +256,9 @@ async def ws_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnect
         lambda: runtime.storage.delete_times(person_key(person), msg["date"], msg["times"]),
         lambda n: n,
     )
-    connection.send_result(msg["id"], {"deleted": deleted})
     if deleted:
         await runtime.async_refresh_known(hass, data_changed=True, days={person: [msg["date"]]})
+    connection.send_result(msg["id"], {"deleted": deleted})
 
 
 @websocket_api.websocket_command(

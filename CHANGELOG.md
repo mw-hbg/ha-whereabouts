@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: the heatmap stayed almost empty since 0.7.5 – the scale did not take the zoom level into account.
+
+---
+
+- Behoben: Die Heatmap blieb seit 0.7.5 fast leer – die Skalierung berücksichtigte die Zoomstufe nicht.
+
 ## 0.7.5
 
 - New: positions with a GPS accuracy worse than 100 m are no longer recorded (setting "Maximum GPS inaccuracy", 0–1000 m, 0 = off). A change of state (home / away / zone) is always recorded.

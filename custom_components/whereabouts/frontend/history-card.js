@@ -1013,15 +1013,15 @@ export function defineHistoryCard(S, D) {
       return this._mode === 'heat';
     }
 
-    // Heat radius in metres (about 75 m), converted to pixels for the current zoom (8-40 px).
-    _fitHeatRadius() {
-      const layer = this._heatLayer;
-      if (!layer || !this._map) return;
-      const map = this._map;
+    // Heat radius in metres (about 75 m), converted to pixels for the zoom of the map (8-40 px).
+    // maxZoom = current zoom: the plugin then sums the weights without its own zoom scaling,
+    // so the 95th-percentile scale from _buildLayers fits at every zoom.
+    _fitHeatRadius(layer = this._heatLayer, map = this._map) {
+      if (!layer || !map) return;
       const lat = map.getCenter().lat;
       const mPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / 2 ** map.getZoom();
       const radius = Math.max(8, Math.min(40, (layer._wRadiusM || 75) / mPerPx));
-      layer.setOptions({ radius, blur: radius * 0.6 });
+      layer.setOptions({ radius, blur: radius * 0.6, maxZoom: map.getZoom() });
     }
 
     // Layers of the route (or heatmap) for a map; used for the shown map and the picture.
@@ -1298,7 +1298,7 @@ export function defineHistoryCard(S, D) {
         if (this._config.show_zones) S.drawZones(map, null, this._hass, this._config, t);
         if (this._visiblePoints().length) {
           const layers = this._buildLayers(true);
-          if (layers.heat) layers.heat.addTo(map);
+          if (layers.heat) { layers.heat.addTo(map); this._fitHeatRadius(layers.heat, map); }
           else { layers.route.addTo(map); layers.markers.addTo(map); layers.ends.addTo(map); }
         }
         await new Promise((resolve) => {

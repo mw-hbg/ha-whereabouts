@@ -479,6 +479,7 @@
   "heat_much": "viel Zeit",
   "heat_with_home": "Zuhause einbeziehen",
   "heat_by_visits": "Nach Besuchen statt nach Dauer",
+  "heat_log": "Farben nach Gesamtzeit pro Ort abstufen",
   "select_entries": "Einträge auswählen",
   "export_selected": "{format} exportieren",
   "selection_file": "auswahl",

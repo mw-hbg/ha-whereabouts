@@ -48,6 +48,7 @@ export function defineHistoryCard(S, D) {
       this._mode = 'route'; // route | heat
       this._withHome = true; // heatmap: include home
       this._heatBy = 'duration'; // heatmap: 'duration' or 'visits'
+      this._heatLog = true; // heatmap: colour by the logarithm of the total per place (false: sum of the stays, linear)
       this._points = [];
       this._map = null;
       this._tiles = [];
@@ -777,7 +778,7 @@ export function defineHistoryCard(S, D) {
         S.compactAttribution(this._map);
         this._setTiles(S.mapDark(this._hass, this._config));
         S.watchZoneNames(this._map, mapDiv, this._config);
-        this._map.on('zoomend', () => this._simplify());
+        this._map.on('zoomend', () => { this._simplify(); this._heatAggregate(); });
         this._drawZones();
       } catch (err) {
         // Without a map the table still works.
@@ -1013,17 +1014,52 @@ export function defineHistoryCard(S, D) {
       return this._mode === 'heat';
     }
 
+    // Logarithmic heatmap: sum the raw values on a 16 px grid of this zoom level (one point per cell),
+    // colour = log(1 + total) / log(1 + largest total). maxZoom = zoom: the plugin does not scale them again.
+    _heatAggregate(layer = this._heatLayer, map = this._map) {
+      if (!layer || !map || !layer._raw) return;
+      const zoom = map.getZoom();
+      const size = 16;
+      const cells = new Map();
+      layer._raw.forEach((d) => {
+        const pt = map.project([d[0], d[1]], zoom);
+        const key = `${Math.floor(pt.x / size)}|${Math.floor(pt.y / size)}`;
+        const cell = cells.get(key);
+        if (cell) { cell.x += pt.x * d[2]; cell.y += pt.y * d[2]; cell.w += d[2]; } else cells.set(key, { x: pt.x * d[2], y: pt.y * d[2], w: d[2] });
+      });
+      let top = 0;
+      cells.forEach((c) => { if (c.w > top) top = c.w; });
+      const scale = Math.log1p(Math.max(top, 1));
+      const list = [];
+      cells.forEach((c) => {
+        const ll = map.unproject([c.x / c.w, c.y / c.w], zoom);
+        list.push([ll.lat, ll.lng, Math.max(0.12, Math.log1p(c.w) / scale)]);
+      });
+      layer.setOptions({ maxZoom: zoom });
+      layer.setLatLngs(list);
+    }
+
     // Layers of the route (or heatmap) for a map; used for the shown map and the picture.
     _buildLayers(forPicture) {
       const L = window.L;
       const visible = this._visiblePersons();
       const points = this._visiblePoints();
       if (this._heat()) {
-        // Weighted by the time spent there (capped, so home does not outshine everything) or by the number of visits.
         const byVisits = this._heatBy === 'visits';
-        const data = points.filter((p) => this._withHome || p.state !== 'home')
-          .map((p) => [p.lat, p.lon, byVisits ? 1 : Math.max(0.08, Math.min(this._minutes(p), 240) / 240)]);
-        const heat = L.heatLayer(data, { radius: 22, blur: 18, max: 1, minOpacity: 0.25 });
+        const shown = points.filter((p) => this._withHome || p.state !== 'home');
+        let heat;
+        let data;
+        if (this._heatLog) {
+          // Total time (or number of visits) per place, coloured on a logarithmic scale: 10 min blue,
+          // a day green, weeks red. The places are summed per zoom level in _heatAggregate.
+          data = shown.map((p) => [p.lat, p.lon, byVisits ? 1 : Math.max(1, this._minutes(p))]);
+          heat = L.heatLayer([], { radius: 10, blur: 8, max: 1, minOpacity: 0.05 });
+          heat._raw = data;
+        } else {
+          // Every stay weighted by its time (capped at 4 h, or 1 per visit), the colours add up.
+          data = shown.map((p) => [p.lat, p.lon, byVisits ? 1 : Math.max(0.08, Math.min(this._minutes(p), 240) / 240)]);
+          heat = L.heatLayer(data, { radius: 22, blur: 18, max: 1, minOpacity: 0.25 });
+        }
         const bounds = data.length ? L.latLngBounds(data.map((d) => [d[0], d[1]])) : null;
         return { heat, bounds };
       }
@@ -1091,6 +1127,7 @@ export function defineHistoryCard(S, D) {
       this._bounds = layers.bounds;
       if (layers.heat) {
         this._heatLayer = layers.heat.addTo(this._map);
+        this._heatAggregate();
       } else {
         this._routeLayer = layers.route.addTo(this._map);
         this._markerLayer = layers.markers;
@@ -1132,7 +1169,8 @@ export function defineHistoryCard(S, D) {
       if (this._heat()) {
         return `<div class="verlauf"></div><div class="skala"><span>${esc(t('heat_little'))}</span><span>${esc(t('heat_much'))}</span></div>
           <label><input type="checkbox" class="mitZuhause"${this._withHome ? ' checked' : ''}>${esc(t('heat_with_home'))}</label>
-          <label><input type="checkbox" class="nachBesuchen"${this._heatBy === 'visits' ? ' checked' : ''}>${esc(t('heat_by_visits'))}</label>${zones}`;
+          <label><input type="checkbox" class="nachBesuchen"${this._heatBy === 'visits' ? ' checked' : ''}>${esc(t('heat_by_visits'))}</label>
+          <label><input type="checkbox" class="heatLog"${this._heatLog ? ' checked' : ''}>${esc(t('heat_log'))}</label>${zones}`;
       }
       const grey = this._dark ? '#d0d0d0' : '#666';
       return this._visiblePersons().map((p) => `<div class="eintrag"><span class="linie" style="background:${p.color}"></span>${esc(p.name)}</div>`).join('')
@@ -1185,6 +1223,8 @@ export function defineHistoryCard(S, D) {
         if (box) box.addEventListener('change', () => { this._withHome = box.checked; this._drawMap(false); });
         const byBox = div.querySelector('.nachBesuchen');
         if (byBox) byBox.addEventListener('change', () => { this._heatBy = byBox.checked ? 'visits' : 'duration'; this._drawMap(false); });
+        const logBox = div.querySelector('.heatLog');
+        if (logBox) logBox.addEventListener('change', () => { this._heatLog = logBox.checked; this._drawMap(false); });
         const zones = div.querySelector('.zonenZeigen');
         if (zones) zones.addEventListener('change', () => this._toggleZones(zones.checked));
         return div;
@@ -1275,7 +1315,7 @@ export function defineHistoryCard(S, D) {
         if (this._config.show_zones) S.drawZones(map, null, this._hass, this._config, t);
         if (this._visiblePoints().length) {
           const layers = this._buildLayers(true);
-          if (layers.heat) layers.heat.addTo(map);
+          if (layers.heat) { layers.heat.addTo(map); this._heatAggregate(layers.heat, map); }
           else { layers.route.addTo(map); layers.markers.addTo(map); layers.ends.addTo(map); }
         }
         await new Promise((resolve) => {

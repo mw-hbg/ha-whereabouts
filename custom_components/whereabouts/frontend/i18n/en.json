@@ -479,6 +479,7 @@
   "heat_much": "much time",
   "heat_with_home": "Include home",
   "heat_by_visits": "By number of visits instead of duration",
+  "heat_log": "Grade colours by total time per place",
   "select_entries": "Select entries",
   "export_selected": "Export {format}",
   "selection_file": "selection",

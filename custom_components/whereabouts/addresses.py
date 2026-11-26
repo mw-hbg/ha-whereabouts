@@ -69,6 +69,7 @@ class AddressJob:
         self._resume.set()
         self.waiting_for_osm = False
         self.journal = None  # 0.7.3: the log; the finished job updates its entry
+        self.on_finished: Callable[[dict[str, Any]], None] | None = None  # 0.7.10: tells the open tasks
 
     # --- state --------------------------------------------------------------------------------------------
     async def async_load(self) -> None:
@@ -185,6 +186,11 @@ class AddressJob:
     def _changed(self) -> None:
         if self._on_change:
             self._on_change()
+        if self._on_finished_due():
+            self.on_finished(dict(self.state))
+
+    def _on_finished_due(self) -> bool:
+        return self.on_finished is not None and self.state.get("status") in (DONE, CANCELLED)
 
     def _start_task(self) -> None:
         self._task = self.hass.async_create_background_task(self._run(), "whereabouts missing addresses")

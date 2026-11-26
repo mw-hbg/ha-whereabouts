@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from custom_components.whereabouts.journal import HINT_ENTRIES, Journal, history_size
 from custom_components.whereabouts.storage import HistoryStorage, Point
 
-from .conftest import setup_integration
+from .conftest import setup_integration, wait_job
 
 pytestmark = pytest.mark.usefixtures("zones")
 D = "2026-06-24"
@@ -55,6 +55,7 @@ async def test_rules_are_logged_and_restored(hass: HomeAssistant, hass_ws_client
     assert (await _call(ws, 2, type="whereabouts/journal/list"))["result"]["items"] == []
 
     await _call(ws, 3, type="whereabouts/maintenance/rules", persons=["person.alex"], preview=False)
+    await wait_job(hass)
     listing = (await _call(ws, 4, type="whereabouts/journal/list"))["result"]
     entry = listing["items"][0]
     assert entry["action"] == "rules" and entry["persons"] == ["alex"] and entry["trash"] is True
@@ -89,6 +90,7 @@ async def test_restore_warns_about_later_changes_and_removes_new_days(
     _two_close_points(runtime.storage)
     ws = await hass_ws_client(hass)
     await _call(ws, 1, type="whereabouts/maintenance/rules", persons=["person.alex"], preview=False)
+    await wait_job(hass)
     entry = (await _call(ws, 2, type="whereabouts/journal/list"))["result"]["items"][0]
 
     runtime.storage.import_points("alex", [Point(D, "12:00:00", "home", 52.5, 13.4)])
@@ -135,8 +137,10 @@ async def test_delete_entries_and_expire(hass: HomeAssistant, hass_ws_client, ha
     _two_close_points(runtime.storage)
     ws = await hass_ws_client(hass)
     await _call(ws, 1, type="whereabouts/maintenance/rules", persons=["person.alex"], preview=False)
+    await wait_job(hass)
     _two_close_points(runtime.storage, D2)
     await _call(ws, 2, type="whereabouts/maintenance/rules", persons=["person.alex"], preview=False)
+    await wait_job(hass)
     first, second = (await _call(ws, 3, type="whereabouts/journal/list"))["result"]["items"]
 
     assert (await _call(ws, 4, type="whereabouts/journal/delete", ids=[first["id"]]))["result"]["deleted"] == 1

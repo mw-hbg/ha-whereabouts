@@ -93,6 +93,15 @@ export default (ctx, Base) => {
         info.setAttribute('aria-expanded', text.hidden ? 'false' : 'true');
       }));
       box.appendChild(area);
+      // 0.7.10: the history of Home Assistant itself (recorder) as a second source
+      if (((this._hass.config || {}).components || []).includes('recorder')) {
+        const recorder = document.createElement('div');
+        recorder.className = 'zeile';
+        recorder.innerHTML = `<div class="beschriftung"><span>${esc(t('rec_title'))}</span></div>
+          <div class="steuer"><button class="knopf" type="button" style="width:auto"><ha-icon icon="mdi:database-import-outline"></ha-icon>${esc(t('data_recorder_button'))}</button></div>`;
+        recorder.querySelector('.knopf').addEventListener('click', () => this._recorderDialog());
+        box.appendChild(recorder);
+      }
     }
 
     // "What must the file look like?" and a prompt for an AI assistant.

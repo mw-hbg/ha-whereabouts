@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
@@ -41,3 +43,14 @@ async def setup_integration(hass: HomeAssistant, **options) -> MockConfigEntry:
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     return entry
+
+
+async def wait_job(hass: HomeAssistant) -> dict:
+    """Wait until the background job (0.7.10) has ended; returns its state."""
+    runtime = hass.data[DOMAIN]
+    for _ in range(1000):
+        if not runtime.jobs.busy:
+            break
+        await asyncio.sleep(0.01)
+    await hass.async_block_till_done()
+    return runtime.jobs.status()

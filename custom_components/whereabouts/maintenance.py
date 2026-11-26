@@ -73,6 +73,23 @@ async def _run(hass: HomeAssistant, connection, runtime, msg: dict, action: str,
     )
 
 
+async def _start_job(hass: HomeAssistant, connection, runtime, msg: dict, action: str, **params: Any) -> None:
+    """The real run (0.7.10): a background job with progress, cancel and log; the answer is the job."""
+    try:
+        status = await runtime.jobs.async_start(
+            "maintenance",
+            _keys(msg["persons"]),
+            msg["from"],
+            msg["to"],
+            {"action": action, **params},
+            str(getattr(connection.user, "name", "") or ""),
+        )
+    except RuntimeError:
+        connection.send_error(msg["id"], "busy", "Another task is running")
+        return
+    connection.send_result(msg["id"], {"job": status, "preview": False})
+
+
 def _runtime(hass: HomeAssistant, connection, msg):
     runtime = hass.data.get(DOMAIN)
     if runtime is None:
@@ -115,6 +132,9 @@ async def ws_rules(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
     runtime = _runtime(hass, connection, msg)
     if runtime is None:
         return
+    if not msg["preview"]:
+        await _start_job(hass, connection, runtime, msg, "rules")
+        return
     options = runtime.options
     distance = float(options.get(CONF_SAME_PLACE_DISTANCE) or DEFAULT_OPTIONS[CONF_SAME_PLACE_DISTANCE])
     interval = float(options.get(CONF_MIN_INTERVAL) or DEFAULT_OPTIONS[CONF_MIN_INTERVAL])
@@ -156,6 +176,9 @@ async def ws_time_zones(hass: HomeAssistant, connection: websocket_api.ActiveCon
     runtime = _runtime(hass, connection, msg)
     if runtime is None:
         return
+    if not msg["preview"]:
+        await _start_job(hass, connection, runtime, msg, "timezones")
+        return
     files = await hass.async_add_executor_job(runtime.storage.files_in, _keys(msg["persons"]), msg["from"], msg["to"])
     result = await _run(
         hass,
@@ -192,6 +215,9 @@ def edges_on_days(storage: HistoryStorage, files: list[tuple[str, str]], write: 
 async def ws_day_edges(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     runtime = _runtime(hass, connection, msg)
     if runtime is None:
+        return
+    if not msg["preview"]:
+        await _start_job(hass, connection, runtime, msg, "day_edges")
         return
     files = await hass.async_add_executor_job(runtime.storage.files_in, _keys(msg["persons"]), msg["from"], msg["to"])
     result = await _run(
@@ -234,6 +260,9 @@ def positions_on_days(
 async def ws_positions(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     runtime = _runtime(hass, connection, msg)
     if runtime is None:
+        return
+    if not msg["preview"]:
+        await _start_job(hass, connection, runtime, msg, "positions")
         return
     files = await hass.async_add_executor_job(runtime.storage.files_in, _keys(msg["persons"]), msg["from"], msg["to"])
     zones = zone_snapshot(hass)
@@ -343,6 +372,13 @@ def zones_on_days(
     return {**total.as_dict(), "days": len(files), "days_changed": days_changed}
 
 
+def _zone_params(msg: dict) -> dict[str, Any]:
+    params: dict[str, Any] = {"ack": bool(msg.get("ack")), "addresses": bool(msg.get("addresses"))}
+    if "zones" in msg:
+        params["zones"] = list(msg["zones"])
+    return params
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "whereabouts/maintenance/zones",
@@ -351,6 +387,8 @@ def zones_on_days(
         vol.Optional("zones"): vol.All([vol.All(str, vol.Length(max=200))], vol.Length(max=500)),
         # after "Recalculate" in the question about changed zones: remember today's zones
         vol.Optional("ack", default=False): bool,
+        # afterwards look up the addresses of stays that need one (0.7.10: the job starts that itself)
+        vol.Optional("addresses", default=False): bool,
         **_SCOPE,
     }
 )
@@ -359,6 +397,9 @@ def zones_on_days(
 async def ws_zones(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     runtime = _runtime(hass, connection, msg)
     if runtime is None:
+        return
+    if not msg["preview"]:
+        await _start_job(hass, connection, runtime, msg, "zones", **_zone_params(msg))
         return
     _, renames = await runtime.zones.async_changes()
     zones = zone_snapshot(hass)
@@ -418,7 +459,8 @@ async def ws_address_start(hass: HomeAssistant, connection: websocket_api.Active
     if msg["preview"]:
         files = await hass.async_add_executor_job(runtime.storage.files_in, keys, msg["from"], msg["to"])
         missing = await hass.async_add_executor_job(count_missing, runtime.storage, files)
-        connection.send_result(msg["id"], {"missing": missing, "busy": runtime.addresses.busy})
+        busy = runtime.addresses.busy or bool(runtime.jobs and runtime.jobs.busy)
+        connection.send_result(msg["id"], {"missing": missing, "busy": busy})
         return
 
     async def log(state: dict[str, Any]) -> str:
@@ -440,6 +482,8 @@ async def ws_address_start(hass: HomeAssistant, connection: websocket_api.Active
         return entry["id"] if entry else ""
 
     try:
+        if runtime.jobs and runtime.jobs.busy:
+            raise RuntimeError("busy")
         status = await runtime.addresses.async_start(
             keys, msg["from"], msg["to"], log if runtime.journal is not None else None
         )

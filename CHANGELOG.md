@@ -4,12 +4,20 @@
 
 - Changed: heatmap: the switch "Grade colours by total time per place" is off by default again (the stays add up as before 0.7.5). The switch stays in the legend.
 - Improved: switching between route and heatmap keeps zoom and map position.
+- New: group "Open tasks" in the settings (administrators): a running job with progress bar and "Cancel", the progress of "Fetch missing addresses", and what is still open (changed zones, missing addresses, the offer to import from the Home Assistant history).
+- Changed: the long actions of the data maintenance (recording rules, zones, time zones, edges of days, coordinates) run as one background job with progress. It stops after the current day when cancelled, goes on after a restart of Home Assistant, and is logged with its trash as before. Only one job runs at a time (also not together with "Fetch missing addresses"). After "Recalculate zones" the job looks up the addresses itself, when asked for.
+- New: export of a long period (more than about three months, administrators) as a background job: month by month into a ZIP file with one file per person and year (GPX: per month), then "Download". The limit of 10 years does not apply to it; the file stays for 24 hours. In the Home Assistant apps the file is handed out through a signed link ("Download", on iOS "Open").
+- New: import from the Home Assistant history (recorder) as a second source in "Import and export" and as an offer after the installation (Import / Do not offer again / Later): one person and day per step, only gaps are filled, with a preview. Home Assistant keeps its history for ten days by default.
 - Tests: the UI check now switches to the heatmap (both colour modes, by visits), checks that it is drawn and that zoom and position stay.
 
 ---
 
 - Geändert: Heatmap: Der Schalter „Farben nach Gesamtzeit pro Ort abstufen“ ist wieder standardmäßig aus (die Aufenthalte addieren sich wie vor 0.7.5). Der Schalter bleibt in der Legende.
 - Verbessert: Beim Umschalten zwischen Route und Heatmap bleiben Zoomstufe und Kartenausschnitt erhalten.
+- Neu: Gruppe „Offene Aufgaben“ in den Einstellungen (Administratoren): ein laufender Auftrag mit Fortschrittsbalken und „Abbrechen“, der Fortschritt von „Fehlende Adressen nachladen“ und alles, was noch offen ist (geänderte Zonen, fehlende Adressen, das Angebot zum Import aus dem Verlauf von Home Assistant).
+- Geändert: Die langen Aktionen der Datenpflege (Aufzeichnungsregeln, Zonen, Zeitzonen, Tagesränder, Koordinaten) laufen als ein Hintergrundauftrag mit Fortschritt. Beim Abbrechen stoppt er nach dem aktuellen Tag, er macht nach einem Neustart von Home Assistant weiter und steht wie bisher mit Papierkorb im Protokoll. Es läuft immer nur ein Auftrag (auch nicht zusammen mit „Fehlende Adressen nachladen“). Nach „Zonen neu berechnen“ holt der Auftrag die Adressen selbst, wenn gewünscht.
+- Neu: Export eines langen Zeitraums (mehr als etwa drei Monate, Administratoren) als Hintergrundauftrag: Monat für Monat in eine ZIP-Datei mit einer Datei pro Person und Jahr (GPX: pro Monat), danach „Herunterladen“. Die Grenze von 10 Jahren gilt dafür nicht; die Datei bleibt 24 Stunden bereit. In den Home-Assistant-Apps wird die Datei über einen signierten Link angeboten („Herunterladen“, auf iOS „Öffnen“).
+- Neu: Import aus dem Verlauf von Home Assistant (Recorder) als zweite Quelle unter „Import und Export“ und als Angebot nach der Installation (Importieren / Nicht mehr anbieten / Später): ein Tag und eine Person pro Schritt, es werden nur Lücken gefüllt, mit Vorschau. Home Assistant behält seinen Verlauf standardmäßig zehn Tage.
 - Tests: Die UI-Prüfung schaltet jetzt auf die Heatmap (beide Farbmodi, nach Besuchen), prüft, dass sie gezeichnet wird und dass Zoom und Position erhalten bleiben.
 
 ## 0.7.9

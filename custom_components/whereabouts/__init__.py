@@ -15,12 +15,12 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
-from . import api, journal_api, maintenance, settings_api
+from . import api, downloads, jobs_api, journal_api, maintenance, settings_api
 from .addresses import AddressJob
 from .const import (
     CARDS_FILE,
@@ -40,6 +40,7 @@ from .const import (
     SIGNAL_INFO_CHANGED,
     STORAGE_FOLDER,
 )
+from .jobs import JobManager
 from .journal import Journal
 from .logger import LocationLogger
 from .maintenance import ZoneWatch
@@ -90,6 +91,7 @@ class Runtime:
     addresses: AddressJob | None = None
     zones: ZoneWatch | None = None
     journal: Journal | None = None  # 0.7.3: log and trash of the data maintenance
+    jobs: JobManager | None = None  # 0.7.10: background jobs (maintenance, export, import from the recorder)
     js_url: str | None = None
     panel: bool = False
     # Raised whenever stored data changes outside the live recording (import,
@@ -130,6 +132,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     settings_api.async_register(hass)
     maintenance.async_register(hass)
     journal_api.async_register(hass)
+    jobs_api.async_register(hass)
+    hass.http.register_view(downloads.DownloadView())
     return True
 
 
@@ -207,6 +211,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         lambda: runtime.data_changed(hass),
     )
     runtime.addresses.journal = runtime.journal
+    runtime.jobs = JobManager(hass, runtime)
+    runtime.addresses.on_finished = lambda state: hass.async_create_task(runtime.jobs.async_address_finished(state))
     await runtime.async_refresh_known(hass)
 
     # The card files are always loaded: the sidebar page uses them, too.
@@ -218,6 +224,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.runtime_data = runtime
     logger.start()
     await runtime.addresses.async_load()  # a job that was running goes on
+    await runtime.jobs.async_load()
     entry.async_on_unload(entry.add_update_listener(_options_updated))
 
     async def _flush_cache(_event: Event) -> None:
@@ -234,6 +241,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def _retention(_now=None) -> None:
         await async_apply_retention(hass, runtime)
 
+    async def _clean_exports(_now=None) -> None:
+        await hass.async_add_executor_job(downloads.cleanup, downloads.exports_folder(hass))
+
+    await _clean_exports()
+    entry.async_on_unload(async_track_time_interval(hass, _clean_exports, timedelta(hours=1)))
     await _expire_trash()
     entry.async_on_unload(async_track_time_change(hass, _expire_trash, hour=3, minute=27, second=0))
     if options.get(CONF_RETENTION_DAYS):
@@ -284,6 +296,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     runtime.logger.stop()
     if runtime.addresses:
         await runtime.addresses.async_stop()
+    if runtime.jobs:
+        await runtime.jobs.async_stop()
     if runtime.js_url:
         remove_extra_js_url(hass, runtime.js_url)
     # The sidebar page stays (see _register_panel); it is removed with the entry.

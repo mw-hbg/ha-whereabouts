@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from custom_components.whereabouts import addresses as addresses_module
 from custom_components.whereabouts.storage import Point
 
-from .conftest import setup_integration
+from .conftest import setup_integration, wait_job
 
 pytestmark = pytest.mark.usefixtures("zones")
 D = "2026-06-24"
@@ -82,7 +82,8 @@ async def test_zone_changes_and_recalculation(hass: HomeAssistant, hass_ws_clien
     await ws.send_json(
         {"id": 4, "type": "whereabouts/maintenance/zones", "persons": ["person.alex"], "preview": False, "ack": True}
     )
-    assert (await ws.receive_json())["result"]["changed"] == 1
+    assert (await ws.receive_json())["result"]["job"]["status"] == "running"
+    assert (await wait_job(hass))["result"]["changed"] == 1
     assert runtime.storage.read_points("alex", D)[0].state == "Office"
     await ws.send_json({"id": 5, "type": "whereabouts/settings"})
     assert (await ws.receive_json())["result"]["admin"]["zone_changes"] == []
@@ -100,6 +101,8 @@ async def test_rules_command_and_admin_only(hass: HomeAssistant, hass_ws_client,
     assert (await ws.receive_json())["result"]["dropped"] == 1
     await ws.send_json({"id": 2, "type": "whereabouts/maintenance/rules", "persons": ["person.alex"], "preview": False})
     assert (await ws.receive_json())["success"]
+    status = await wait_job(hass)
+    assert status["status"] == "done" and status["result"]["dropped"] == 1 and status["done"] == status["total"] == 1
     assert len(runtime.storage.read_points("alex", D)) == 1
 
     hass_admin_user.groups = []
@@ -176,7 +179,8 @@ async def test_time_zones_commands(hass: HomeAssistant, hass_ws_client, hass_adm
     await ws.send_json(
         {"id": 2, "type": "whereabouts/maintenance/timezones", "persons": ["person.alex"], "preview": False}
     )
-    assert (await ws.receive_json())["result"]["days_changed"] == 1
+    assert (await ws.receive_json())["success"]
+    assert (await wait_job(hass))["result"]["days_changed"] == 1
     [stay] = runtime.storage.read_day("alex", D)
     assert stay.tz == "America/New_York" and stay.offset
 
@@ -199,7 +203,8 @@ async def test_day_edges_command_and_data_version(hass: HomeAssistant, hass_ws_c
     await ws.send_json(
         {"id": 2, "type": "whereabouts/maintenance/day_edges", "persons": ["person.alex"], "preview": False}
     )
-    assert (await ws.receive_json())["result"]["days_changed"] == 2
+    assert (await ws.receive_json())["success"]
+    assert (await wait_job(hass))["result"]["days_changed"] == 2
     assert runtime.data_version == version + 1
     assert storage.read_day("alex", D)[0].start == "00:00:00"
     assert storage.read_day("alex", "2026-06-23")[-1].end == "23:59:59"

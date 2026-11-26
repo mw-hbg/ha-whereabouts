@@ -128,9 +128,9 @@ class Shooter:
         context.route("**/*", lambda route: route.continue_() if is_local(route.request.url) else route.abort())
         return context
 
-    def _load(self, page, view: str, theme: str) -> None:
+    def _load(self, page, view: str, theme: str, extra: str = "") -> None:
         page.clock.set_fixed_time(FIXED_TIME)
-        page.goto(f"{self.base}?view={view}&theme={theme}&lang={self.lang}", wait_until="load")
+        page.goto(f"{self.base}?view={view}&theme={theme}&lang={self.lang}{extra}", wait_until="load")
         page.add_style_tag(content=NO_MOTION_CSS)
         page.wait_for_function("window.__waReady === true", timeout=20000)
         # the settings page waits ~3 s for <ha-selector> (not there) before it draws
@@ -256,6 +256,55 @@ class Shooter:
         if self._heat_pixels(page):
             fail("the heatmap is still drawn in route mode")
 
+    def _check_tasks(self, device: str, theme: str) -> None:
+        """Group "Open tasks" (0.7.10): a running job with progress and "Cancel", the offer to import
+        from the recorder, the open points."""
+        name = f"settings-tasks_{device}_{theme}"
+        self.current = name
+        context = self._context(device, theme)
+        page = context.new_page()
+        self._wire(page)
+
+        def fail(text: str) -> None:
+            self._note("taskscheck", f"{name}: {text}")
+
+        try:
+            self._load(page, "settings", theme, "&tasks=job")
+            root = "whereabouts-settings .aufgaben"
+            try:
+                page.wait_for_selector(f"{root} .job-lauf progress", state="visible", timeout=10000)
+            except PlaywrightError:
+                fail("no running job with a progress bar under 'Open tasks'")
+                return
+            if not page.query_selector(f"{root} .aufgabe-offen"):
+                fail("no open point listed (missing addresses)")
+            if not page.query_selector(f"{root} .adressauftrag progress"):
+                fail("the progress of the address lookup is not shown under 'Open tasks'")
+            page.evaluate("() => document.querySelector('whereabouts-settings #kat-tasks').scrollIntoView()")
+            self._settle(page)
+            self._shot(page, name)
+            page.click(f"{root} .job-lauf .abbrechen")
+            try:
+                page.wait_for_selector(f"{root} .job-fertig", state="visible", timeout=10000)
+            except PlaywrightError:
+                fail("cancelling the job did not show the end of the job")
+            # the offer to import from the recorder comes once per opening of the page
+            self._load(page, "settings", theme, "&tasks=offer")
+            try:
+                page.wait_for_selector("whereabouts-settings .dialog", state="visible", timeout=10000)
+            except PlaywrightError:
+                fail("the offer to import from the recorder did not appear")
+                return
+            page.click("whereabouts-settings .dialog [data-wahl=cancel]")
+            page.wait_for_selector("whereabouts-settings .dialog", state="detached", timeout=10000)
+            if not page.query_selector(f"{root} [data-aufgabe=recorder]"):
+                fail("the offer is not listed under 'Open tasks' after 'Later'")
+        except PlaywrightError as err:
+            self._note("harness", f"{name}: {str(err).splitlines()[0]}")
+        finally:
+            context.close()
+        print(f"  {name}", flush=True)
+
     def run(self, only: str | None = None) -> int:
         count = 0
         for device in DEVICES:
@@ -290,6 +339,10 @@ class Shooter:
                     finally:
                         context.close()
                     print(f"  {name}", flush=True)
+        for device, theme in (("pc", "light"), ("phone", "dark")):
+            if not only or only == f"settings-tasks_{device}_{theme}":
+                self._check_tasks(device, theme)
+                count += 1
         return count
 
 

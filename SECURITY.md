@@ -23,6 +23,14 @@ do and how to reproduce it.
 * `whereabouts/info` only lists the persons whose history the user may see.
 * The export endpoint validates person and dates and is limited to 10 years per
   request; text cells that a spreadsheet would run as a formula are quoted.
+* Long exports (administrators) run as a background job and end as a ZIP file in
+  `<config>/whereabouts/exports/`, deleted after 24 hours. The download endpoint
+  (`/api/whereabouts/download/<file>`) needs a login or a signed link, only hands
+  out files of the form `<12 hex>_<name>.zip|pdf|xlsx` made by the integration
+  (no path, no other file) and always as an attachment.
+* The background jobs and the import from the Home Assistant recorder are for
+  administrators only. The recorder is read through its own interface (never its
+  database file), one person and day per step.
 * The cards insert names, addresses and zone names only as text (escaped);
   colours from the card configuration are only accepted as `#rrggbb`.
 * The card files (`/whereabouts_static/`) are served without login, like all

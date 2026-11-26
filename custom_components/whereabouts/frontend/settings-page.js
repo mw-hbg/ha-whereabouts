@@ -48,6 +48,8 @@ const PERSONAL = [
 
 // Administration: integration options, rights, data
 const ADMIN = [
+  // 0.7.10: its own group "Open tasks" at the top (running job, open points)
+  { id: 'tasks', icon: 'mdi:clipboard-clock-outline', custom: 'tasks', tasks: true },
   { id: 'base', icon: 'mdi:account-group', custom: 'base' },
   { id: 'rights', icon: 'mdi:account-key', custom: 'rights' },
   // "Dashboard": the entry in the sidebar (shown as "hide in the sidebar", stored as "panel")
@@ -132,7 +134,7 @@ async function ensureSelector() {
 
 // The page is put together from these parts (settings-<name>.js), each a class
 // extending the one before. Loaded with the same "?v=<version>" as this file.
-const PARTS = ['values', 'layout', 'fields', 'persons', 'map', 'zones', 'admin', 'users', 'data', 'maintenance', 'journal', 'diagnostics', 'dialogs'];
+const PARTS = ['values', 'layout', 'fields', 'persons', 'map', 'zones', 'admin', 'users', 'data', 'maintenance', 'tasks', 'journal', 'diagnostics', 'dialogs'];
 
 export async function defineSettingsPage(S, D) {
   if (customElements.get('whereabouts-settings')) return;

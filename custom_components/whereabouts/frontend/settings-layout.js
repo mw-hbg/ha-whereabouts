@@ -9,9 +9,10 @@ export default (ctx, Base) => {
     _groups() {
       const t = this._t;
       return [
+        { title: t('grp_tasks'), items: ADMIN.filter((c) => c.tasks && this._showAdminCategory(c)) },
         { title: t('grp_main'), items: PERSONAL.filter((c) => c.weight === 'main') },
         { title: t('grp_more'), items: PERSONAL.filter((c) => c.weight === 'more') },
-        { title: t('grp_admin'), items: ADMIN.filter((c) => this._showAdminCategory(c)) },
+        { title: t('grp_admin'), items: ADMIN.filter((c) => !c.tasks && this._showAdminCategory(c)) },
       ].filter((g) => g.items.length);
     }
 
@@ -33,7 +34,11 @@ export default (ctx, Base) => {
           <ha-icon icon="mdi:account-lock"></ha-icon>${esc(t('settings_managed'))}</div></main></div>`;
         return;
       }
-      if (!this._open) this._open = new Set(PERSONAL.filter((c) => c.weight === 'main').map((c) => c.id));
+      if (!this._open) {
+        this._open = new Set(PERSONAL.filter((c) => c.weight === 'main').map((c) => c.id));
+        // something running or open: the tasks are shown right away
+        if (this._admin && (this._job.status !== 'idle' || this._openTaskCount() > 0)) this._open.add('tasks');
+      }
       const groups = this._groups();
       const lockIcon = (id) => (PERSONAL.some((c) => c.id === id) && d.locked.includes(id) && this._scope === 'own'
         ? '<ha-icon class="schloss" icon="mdi:lock"></ha-icon>' : '');
@@ -67,8 +72,9 @@ export default (ctx, Base) => {
               ${this._admin && !this._hasOtherUsers() ? `<p class="hinweis">${esc(t('single_user_hint'))}</p>` : ''}
             </div>
             ${!this._admin && (d.locked.length || Object.keys(d.field_locks || {}).length) ? `<div class="banner"><ha-icon icon="mdi:lock"></ha-icon><span class="text">${esc(t('locked_hint'))}</span></div>` : ''}
+            ${ADMIN.filter((c) => c.tasks && this._showAdminCategory(c)).map((c) => this._categoryHtml(c, false)).join('')}
             ${PERSONAL.map((c) => this._categoryHtml(c, true)).join('')}
-            ${ADMIN.filter((c) => this._showAdminCategory(c)).map((c) => this._categoryHtml(c, false)).join('')}
+            ${ADMIN.filter((c) => !c.tasks && this._showAdminCategory(c)).map((c) => this._categoryHtml(c, false)).join('')}
             ${this._scope === 'own' ? `<div class="fuss"><button class="knopf gefahr alles-zurueck"><ha-icon icon="mdi:restore"></ha-icon>${esc(t('reset_all'))}</button></div>` : ''}
             <p class="hinweis klein">Whereabouts ${esc(d.version)}</p>
           </main>
@@ -76,7 +82,7 @@ export default (ctx, Base) => {
       this._wire();
       this._showDrafts();
       this._showSuccess();
-      this._askNewUsers().then(() => this._askZoneChanges());
+      this._askNewUsers().then(() => this._askZoneChanges()).then(() => this._askRecorderOffer());
       requestAnimationFrame(() => { this._restoreAnchor(anchor); this._noteAnchor(); });
     }
 
@@ -297,6 +303,7 @@ export default (ctx, Base) => {
         }
         case 'addresses': return o.address_source ? t(`opt_address_${o.address_source}`) : '';
         case 'data': return t('sum_data');
+        case 'tasks': return this._tasksSummary();
         case 'maintenance': {
           const job = (d.admin && d.admin.address_job) || {};
           return ['running', 'paused'].includes(job.status)
@@ -414,6 +421,7 @@ export default (ctx, Base) => {
       if (c.custom === 'sensors' && this._admin) this._sensors(box);
       if (c.custom === 'data') this._dataSection(box);
       if (c.custom === 'maintenance' && this._admin) this._maintenanceSection(box);
+      if (c.custom === 'tasks' && this._admin) this._tasksSection(box);
       if (c.custom === 'journal' && this._admin && this._journalSection) this._journalSection(box);
       if (c.custom === 'diagnostics' && this._open.has('diagnostics')) {
         if (this._diag) this._showDiagnostics(); else this._loadDiagnostics();

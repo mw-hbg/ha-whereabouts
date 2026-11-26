@@ -176,6 +176,8 @@ async def import_bytes(
         and (chosen is None or f"{dest}|{p.date}" in chosen)
     )
     touched_dates = sorted({d for _, d in touched})
+    if missing and getattr(runtime, "jobs", None) is not None:
+        await runtime.jobs.async_set_open_addresses(runtime.jobs.open_addresses + missing)
     await async_finish(
         hass,
         runtime,

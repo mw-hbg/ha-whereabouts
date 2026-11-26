@@ -19,6 +19,8 @@ export const USERS = {
   service: { id: 'c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3', name: 'Service', is_admin: false, is_owner: false, active: true },
 };
 
+const TASKS = new URLSearchParams(window.location.search).get('tasks') || '';
+
 const PLACES = {
   home: { state: 'home', lat: 48.7784, lon: 9.1800, address: 'Schlossplatz, Stuttgart' },
   office: { state: 'Office', lat: 48.7838, lon: 9.1817, address: 'Arnulf-Klett-Platz, Stuttgart' },
@@ -115,6 +117,11 @@ function createBackend(userKey) {
     user_flags: {},
     field_locks: { [USERS.normal.id]: { map: ['tiles'] } },
     pending_users: {},
+    // 0.7.10: the one background job and what is open. ?tasks=job: a job runs; ?tasks=offer: the offer to import from the recorder
+    job: TASKS === 'job'
+      ? { status: 'running', id: 'abc123abc123', kind: 'maintenance', action: 'rules', persons: ['alex'], from: '2026-06-01', to: '2026-06-30', total: 30, done: 12, result: {}, params: { action: 'rules' }, started: '2026-11-15T11:50:00+01:00', finished: '' }
+      : { status: 'idle' },
+    open_tasks: { hint: TASKS === 'offer' ? 'open' : 'done', addresses: 12, recorder: TASKS === 'offer', persons: ['person.alex', 'person.sam'] },
     // a paused lookup of missing addresses (shows the progress line)
     address_job: { status: 'paused', total: 42, done: 17, found: 15, persons: ['alex'], from: '', to: '', waiting_for_osm: false },
     // 0.7.3: log and trash of the data maintenance
@@ -256,6 +263,8 @@ function createBackend(userKey) {
         zone_changes: new URLSearchParams(window.location.search).get('zones') === 'changed'
           ? [{ kind: 'renamed', entity_id: 'zone.office', name: 'Office', old_name: 'Work' }, { kind: 'removed', entity_id: 'zone.gym', name: 'Gym' }] : [],
         address_job: clone(db.address_job),
+        job: clone(db.job),
+        open_tasks: clone(db.open_tasks),
         stored: { persons: 2, days: 309 },
         history_size: { bytes: 4980736, days: 309, persons: { alex: { bytes: 3040870, days: 190 }, sam: { bytes: 1939866, days: 119 } } },
         journal: journalSummary(),
@@ -307,6 +316,15 @@ function createBackend(userKey) {
     return null;
   };
   const historyDays = () => [3, 2, 1, 0].map((n) => isoDate(new Date(Date.now() - n * DAY_MS)));
+
+  const jobAnswer = () => ({ job: clone(db.job), open: { hint: db.open_tasks.hint, addresses: db.open_tasks.addresses } });
+  const startJob = (kind, action, msg, params = {}) => {
+    if (db.job.status === 'running') throw { code: 'busy', message: 'Another task is running' };
+    const total = kind === 'export' ? 6 : 30;
+    db.job = { status: 'running', id: 'job000job000', kind, action, persons: (msg.persons || []).map((p) => p.split('.')[1]), from: msg.from || '', to: msg.to || '',
+      total, done: 0, result: {}, params: { action, ...params }, started: new Date().toISOString(), finished: '' };
+    return { job: clone(db.job), preview: false };
+  };
 
   // type -> handler(msg) returning the result (or throwing {code, message})
   const handlers = {
@@ -365,14 +383,26 @@ function createBackend(userKey) {
     'whereabouts/settings/diagnostics': () => diagnostics(),
     'whereabouts/settings/retention_preview': (msg) => ({ files: 0, before: isoDate(new Date(Date.now() - msg.days * DAY_MS)) }),
     'whereabouts/settings/image_in_use': () => ({ in_use: false }),
-    'whereabouts/maintenance/rules': (msg) => ({ points: 120, stays: 80, merged: 30, dropped: 10, days: 4, days_changed: 3, same_place_distance: 50, min_interval: 60, preview: msg.preview }),
-    'whereabouts/maintenance/zones': (msg) => ({ checked: 80, changed: 5, need_address: 2, days: 4, days_changed: 2, transitions: [{ from: 'Office', to: 'not_home', n: 2 }, { from: 'not_home', to: 'Park', n: 3 }], renames: {}, preview: msg.preview }),
+    'whereabouts/maintenance/rules': (msg) => (!msg.preview ? startJob('maintenance', 'rules', msg) : { points: 120, stays: 80, merged: 30, dropped: 10, days: 4, days_changed: 3, same_place_distance: 50, min_interval: 60, preview: msg.preview }),
+    'whereabouts/maintenance/zones': (msg) => (!msg.preview ? startJob('maintenance', 'zones', msg) : { checked: 80, changed: 5, need_address: 2, days: 4, days_changed: 2, transitions: [{ from: 'Office', to: 'not_home', n: 2 }, { from: 'not_home', to: 'Park', n: 3 }], renames: {}, preview: msg.preview }),
     'whereabouts/maintenance/zone_ack': () => null,
-    'whereabouts/maintenance/timezones': (msg) => ({ rows: 120, offsets: 110, zones: 6, assumed: 1, days: 4, days_changed: 3, preview: msg.preview }),
-    'whereabouts/maintenance/positions': (msg) => ({ days: 4, days_changed: 2, missing: 5, from_day: 2, from_zone: 1, removed: 1, left: 1, preview: msg.preview }),
-    'whereabouts/maintenance/day_edges': (msg) => ({ days: 4, days_changed: 2, starts: 2, ends: 1, preview: msg.preview }),
+    'whereabouts/maintenance/timezones': (msg) => (!msg.preview ? startJob('maintenance', 'timezones', msg) : { rows: 120, offsets: 110, zones: 6, assumed: 1, days: 4, days_changed: 3, preview: msg.preview }),
+    'whereabouts/maintenance/positions': (msg) => (!msg.preview ? startJob('maintenance', 'positions', msg) : { days: 4, days_changed: 2, missing: 5, from_day: 2, from_zone: 1, removed: 1, left: 1, preview: msg.preview }),
+    'whereabouts/maintenance/day_edges': (msg) => (!msg.preview ? startJob('maintenance', 'day_edges', msg) : { days: 4, days_changed: 2, starts: 2, ends: 1, preview: msg.preview }),
     'whereabouts/since': () => ({ since: {} }),
     'whereabouts/time_zones': (msg) => ({ zones: (msg.points || []).map(([, lon]) => (lon < -30 ? 'America/New_York' : '')), home: 'Europe/Berlin' }),
+    'whereabouts/jobs/status': () => jobAnswer(),
+    'whereabouts/jobs/control': (msg) => {
+      if (msg.action === 'cancel' && db.job.status === 'running') { db.job.status = 'cancelled'; db.job.finished = new Date().toISOString(); }
+      if (msg.action === 'dismiss') db.job = { status: 'idle' };
+      return jobAnswer();
+    },
+    'whereabouts/jobs/export': (msg) => startJob('export', 'export', msg, { format: msg.format }),
+    'whereabouts/jobs/addresses_clear': () => { db.open_tasks.addresses = 0; return jobAnswer(); },
+    'whereabouts/recorder/preview': () => ({ days: 3, added: 14, days_new: 1, days_add: 2, busy: false }),
+    'whereabouts/recorder/start': (msg) => startJob('recorder', 'recorder', msg),
+    'whereabouts/recorder/hint': (msg) => { db.open_tasks.hint = msg.hint; return jobAnswer(); },
+    'auth/sign_path': (msg) => ({ path: `${msg.path}?authSig=mock` }),
     'whereabouts/addresses/status': () => clone(db.address_job),
     'whereabouts/addresses/start': (msg) => (msg.preview ? { missing: 42, busy: false } : clone(db.address_job)),
     'whereabouts/addresses/control': (msg) => {
@@ -548,7 +578,7 @@ export function createHass({ dark = false, lang = 'de', user = 'admin', version 
     services: {},
     config: {
       latitude: PLACES.home.lat, longitude: PLACES.home.lon, elevation: 245, unit_system: { length: 'km', mass: 'kg', temperature: '°C', volume: 'L' },
-      location_name: 'Home', time_zone: 'Europe/Berlin', components: ['person', 'zone', 'whereabouts'], version: '2026.11.0',
+      location_name: 'Home', time_zone: 'Europe/Berlin', components: ['person', 'zone', 'recorder', 'whereabouts'], version: '2026.11.0',
       country: 'DE', language: lang, currency: 'EUR', state: 'RUNNING',
     },
     themes: { default_theme: 'default', default_dark_theme: null, themes: {}, darkMode: dark, theme: 'default' },

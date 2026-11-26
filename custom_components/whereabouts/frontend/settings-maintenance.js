@@ -34,10 +34,8 @@ export default (ctx, Base) => {
       edges.querySelector('.steuer .knopf').addEventListener('click', () => this._edgesDialog());
       const positions = row('mdi:map-marker-question-outline', t('maint_pos'), t('si_maint_pos'), t('maint_pos_button'));
       positions.querySelector('.steuer .knopf').addEventListener('click', () => this._positionsDialog());
-      const addresses = row('mdi:map-search', t('addr_title'), t('si_addr'), t('addr_fetch'),
-        '<div class="adressauftrag" style="grid-column:1 / -1"></div>');
+      const addresses = row('mdi:map-search', t('addr_title'), t('si_addr'), t('addr_fetch'));
       addresses.querySelector('.steuer .knopf').addEventListener('click', () => this._addressDialog());
-      this._addressStatus(addresses.querySelector('.adressauftrag'), (this._data.admin || {}).address_job);
     }
 
     // --- choosing persons and days ----------------------------------------------------------------------
@@ -108,8 +106,7 @@ export default (ctx, Base) => {
       });
       if (!answer) return;
       const { win, ...scope } = answer;
-      const done = await this._ws({ type: 'whereabouts/maintenance/rules', preview: false, ...scope });
-      if (done) this._toast(t('maint_rules_done', { days: done.days_changed, removed: done.points - done.stays }), false, true);
+      await this._startJob({ type: 'whereabouts/maintenance/rules', preview: false, ...scope });
     }
 
     // --- UTC offsets and time zones of places --------------------------------------------------------------
@@ -130,8 +127,7 @@ export default (ctx, Base) => {
       });
       if (!answer) return;
       const { win, ...scope } = answer;
-      const done = await this._ws({ type: 'whereabouts/maintenance/timezones', preview: false, ...scope });
-      if (done) this._toast(t('maint_tz_done', { days: done.days_changed }), false, true);
+      await this._startJob({ type: 'whereabouts/maintenance/timezones', preview: false, ...scope });
     }
 
     // --- edges of days (place of the day before from 00:00, last place until 23:59:59) --------------------
@@ -152,8 +148,7 @@ export default (ctx, Base) => {
       });
       if (!answer) return;
       const { win, ...scope } = answer;
-      const done = await this._ws({ type: 'whereabouts/maintenance/day_edges', preview: false, ...scope });
-      if (done) this._toast(t('maint_edges_done', { days: done.days_changed }), false, true);
+      await this._startJob({ type: 'whereabouts/maintenance/day_edges', preview: false, ...scope });
     }
 
     // --- rows without coordinates (0.7.2) --------------------------------------------------------------
@@ -174,8 +169,7 @@ export default (ctx, Base) => {
       });
       if (!answer) return;
       const { win, ...scope } = answer;
-      const done = await this._ws({ type: 'whereabouts/maintenance/positions', preview: false, ...scope });
-      if (done) this._toast(t('maint_pos_done', { days: done.days_changed }), false, true);
+      await this._startJob({ type: 'whereabouts/maintenance/positions', preview: false, ...scope });
     }
 
     // --- zones in the stored data --------------------------------------------------------------------------
@@ -227,14 +221,11 @@ export default (ctx, Base) => {
       if (!answer) return false;
       const { win, ...scope } = answer;
       const zones = readZones(win);
-      const message = { type: 'whereabouts/maintenance/zones', preview: false, ack: Boolean(preset.ack), ...scope };
-      if (zones) message.zones = zones;
+      // the job itself looks the addresses up afterwards (0.7.10), when asked for and when stays need one
       const fetchAfter = !win.querySelector('.adressen-danach').hidden && win.querySelector('.adressen-danach input').checked;
-      const done = await this._ws(message);
-      if (!done) return false;
-      this._toast(t('maint_zones_done', { n: done.changed }), false, true);
-      if (fetchAfter && done.need_address) await this._startAddresses(scope);
-      return true;
+      const message = { type: 'whereabouts/maintenance/zones', preview: false, ack: Boolean(preset.ack), addresses: fetchAfter, ...scope };
+      if (zones) message.zones = zones;
+      return Boolean(await this._startJob(message));
     }
 
     // Zones were created, changed, renamed or removed in Home Assistant: ask once per opening of the page.
@@ -284,8 +275,8 @@ export default (ctx, Base) => {
       if (!status) return;
       if (this._data.admin) this._data.admin.address_job = status;
       this._updateSummary('maintenance');
-      const el = this.querySelector('.adressauftrag');
-      if (el) this._addressStatus(el, status);
+      this._setOpen('tasks', true);
+      this._tasksDraw();
       this._toast(this._t('addr_started'), false, true);
     }
 
@@ -339,7 +330,9 @@ export default (ctx, Base) => {
           try { next = await this._hass.callWS({ type: 'whereabouts/addresses/status' }); } catch (err) { return; }
           if (this._data.admin) this._data.admin.address_job = next;
           this._updateSummary('maintenance');
+          this._updateSummary('tasks');
           this._addressStatus(el, next);
+          if (next.status !== 'running') this._openRefresh(); // what it found is no longer open
         }, POLL_MS);
       }
     }

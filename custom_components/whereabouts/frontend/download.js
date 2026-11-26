@@ -42,6 +42,9 @@ const CSS = `
   .wa-dl .knoepfe button.los { background: var(--primary-color, #03a9f4); border-color: var(--primary-color, #03a9f4);
                                color: var(--text-primary-color, #fff); }
   .wa-dl .knoepfe button:disabled { opacity: .5; cursor: default; }
+  .wa-dl a.link { font: inherit; font-size: 14px; font-weight: 500; padding: 8px 16px; border-radius: 18px; text-decoration: none; display: inline-block;
+                  background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
+  .wa-dl progress { width: 100%; }
   @media (max-height: 520px) {
     .wa-dl { padding: 6px; }
     .wa-dl .fenster { width: min(640px, 100%); max-height: calc(100vh - 12px); max-height: calc(100dvh - 12px); }
@@ -53,6 +56,23 @@ const CSS = `
   }
 `;
 
+// 0.7.10: a file the server prepared (export of a long period) is handed out through a signed link, because the
+// Home Assistant apps cannot download a blob: address. In the iOS app the link opens the file instead.
+const IOS_APP = () => Boolean(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.externalBus);
+export const inHaApp = () => Boolean(window.externalApp || IOS_APP());
+const attr = (text) => String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+export async function signedFileLink(hass, file) {
+  const result = await hass.callWS({ type: 'auth/sign_path', path: `/api/whereabouts/download/${encodeURIComponent(file)}`, expires: 600 });
+  return result.path;
+}
+
+export function fileLinkHtml(t, link, file, cls = '') {
+  const name = file.slice(file.indexOf('_') + 1);
+  const ios = IOS_APP();
+  return `<a class="${attr(cls)}" href="${attr(link)}"${ios ? ' target="_blank" rel="noopener"' : ` download="${attr(name)}"`}>${attr(t(ios ? 'job_open' : 'job_download'))}</a>`;
+}
+
 export const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>';
 
 const CALENDAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 19H5V8h14m-3-7v2H8V1H6v2H5c-1.11 0-2 .89-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-1V1m-1 11h-5v5h5v-5Z"/></svg>';
@@ -63,6 +83,7 @@ const CALENDAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 19H5V
 export function openDownloadDialog(S, { hass, t, persons, selected, from, to, days, first, mapImage }) {
   const esc = S.escapeHtml;
   const lang = S.language(hass);
+  const admin = Boolean(hass.user && hass.user.is_admin);
   if (!document.getElementById('wa-dl-css')) {
     const style = document.createElement('style');
     style.id = 'wa-dl-css';
@@ -82,7 +103,7 @@ export function openDownloadDialog(S, { hass, t, persons, selected, from, to, da
   };
   const box = document.createElement('div');
   box.className = 'wa-dl';
-  const close = () => { document.removeEventListener('keydown', key); box.remove(); };
+  const close = () => { clearTimeout(timer); document.removeEventListener('keydown', key); box.remove(); };
   const key = (e) => { if (e.key === 'Escape' && !document.querySelector('.wa-dp')) close(); };
 
   const render = async () => {
@@ -90,6 +111,8 @@ export function openDownloadDialog(S, { hass, t, persons, selected, from, to, da
     const count = P.daysBetween(state.from, state.to); // number of days ("days" is the set with data)
     const several = state.persons.size > 1;
     const image = state.format === 'jpg';
+    // long periods: administrators get a background job (a ZIP, one file per person and year)
+    const job = admin && !image && count > P.LARGE_DAYS;
     const files = (state.perDay && count > 1 ? count : 1) * (state.perPerson && several ? state.persons.size : 1);
     const before = box.querySelector('.rumpf');
     const scrolled = before ? before.scrollTop : 0;
@@ -109,12 +132,12 @@ export function openDownloadDialog(S, { hass, t, persons, selected, from, to, da
       <div class="abschnitt${image ? ' aus' : ''}"><div class="titel">${esc(t('download_period'))}</div>
         <button type="button" class="zeitraum">${CALENDAR}${esc(P.rangeText(lang, state.from, state.to))}</button>
       </div>
-      ${!image && count > P.LARGE_DAYS ? `<div class="warnung">${esc(t('large_period_warning'))}</div>` : ''}
+      ${!image && count > P.LARGE_DAYS && !job ? `<div class="warnung">${esc(t('large_period_warning'))}</div>` : ''}
       <div class="abschnitt${image ? ' aus' : ''}"><div class="titel">${esc(t('download_persons'))}</div>
         ${persons.map((p) => `<label><input type="checkbox" class="person" value="${esc(p.id)}"${state.persons.has(p.id) ? ' checked' : ''}>
           <span class="punkt" style="background:${S.safeColor(p.color, '#888')}"></span>${esc(p.name)}</label>`).join('')}
       </div>
-      ${image ? '' : `<div class="abschnitt"><div class="titel">${esc(t('download_per_day'))}</div>
+      ${job ? `<p class="hinweis">${esc(t('dl_job_hint'))}</p>` : image ? '' : `<div class="abschnitt"><div class="titel">${esc(t('download_per_day'))}</div>
         <label class="${count > 1 ? '' : 'aus'}"><input type="radio" name="tag" value="0"${state.perDay ? '' : ' checked'}${count > 1 ? '' : ' disabled'}>${esc(t('download_one_file'))}</label>
         <label class="${count > 1 ? '' : 'aus'}"><input type="radio" name="tag" value="1"${state.perDay ? ' checked' : ''}${count > 1 ? '' : ' disabled'}>${esc(t('download_each_day'))}</label>
       </div>
@@ -126,7 +149,7 @@ export function openDownloadDialog(S, { hass, t, persons, selected, from, to, da
       <div class="fehler"></div>
       </div>
       <div class="knoepfe"><button type="button" class="abbrechen">${esc(t('cancel'))}</button>
-        <button type="button" class="los"${image || state.persons.size ? '' : ' disabled'}>${esc(t('download'))}</button></div>
+        <button type="button" class="los"${image || state.persons.size ? '' : ' disabled'}>${esc(t(job ? 'dl_job_start' : 'download'))}</button></div>
     </div>`;
     box.querySelector('.rumpf').scrollTop = scrolled;
     box.querySelector('.zeitraum').addEventListener('click', async () => {
@@ -142,7 +165,7 @@ export function openDownloadDialog(S, { hass, t, persons, selected, from, to, da
     box.querySelectorAll('input[name="tag"]').forEach((r) => r.addEventListener('change', () => { state.perDay = r.value === '1'; render(); }));
     box.querySelectorAll('input[name="person"]').forEach((r) => r.addEventListener('change', () => { state.perPerson = r.value === '1'; render(); }));
     box.querySelector('.abbrechen').addEventListener('click', close);
-    box.querySelector('.los').addEventListener('click', () => download());
+    box.querySelector('.los').addEventListener('click', () => (job ? startJob() : download()));
   };
 
   const save = (blob, name) => {
@@ -152,6 +175,60 @@ export function openDownloadDialog(S, { hass, t, persons, selected, from, to, da
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  };
+
+  // The export of a long period: started as a background job, then the dialog shows the progress.
+  let timer = null;
+  const stopPolling = () => clearTimeout(timer);
+  const showJob = async (status) => {
+    stopPolling();
+    const percent = status.total ? Math.floor((100 * (status.done || 0)) / status.total) : 100;
+    let body;
+    let footer = `<button type="button" class="abbrechen">${esc(t(status.status === 'running' ? 'dl_job_background' : 'cancel'))}</button>`;
+    if (status.status === 'running') {
+      body = `<div class="abschnitt"><div class="titel">${esc(t('dl_job_running', { done: status.done || 0, total: status.total || 0 }))}</div>
+        <progress max="100" value="${percent}"></progress></div>`;
+    } else if (status.status === 'done' && status.file) {
+      body = `<div class="abschnitt"><div class="titel">${esc(t('job_export_done', { files: (status.result || {}).files || 0 }))}</div>
+        <p class="hinweis">${esc(t('job_file_hint'))}</p></div>`;
+      try {
+        footer += fileLinkHtml(t, await signedFileLink(hass, status.file), status.file, 'link');
+      } catch (err) { body += `<div class="fehler">${esc(t('dl_job_failed'))}</div>`; }
+    } else if (status.status === 'done') {
+      body = `<div class="abschnitt"><div class="titel">${esc(t('job_export_empty'))}</div></div>`;
+    } else {
+      body = `<div class="fehler">${esc(t('dl_job_failed'))}</div>`;
+    }
+    box.innerHTML = `<div class="fenster" role="dialog" aria-modal="true" aria-label="${esc(t('export_data'))}">
+      <h3>${DOWNLOAD_ICON}${esc(t('export_data'))}</h3><div class="rumpf">${body}</div>
+      <div class="knoepfe">${footer}</div></div>`;
+    box.querySelector('.abbrechen').addEventListener('click', close);
+    if (status.status === 'running') {
+      timer = setTimeout(async () => {
+        if (!box.isConnected) return;
+        try {
+          const result = await hass.callWS({ type: 'whereabouts/jobs/status' });
+          const job = result.job || {};
+          if (job.kind === 'export' && job.id === status.id) showJob(job); else showJob({ ...status, status: 'failed' });
+        } catch (err) { showJob({ ...status, status: 'failed' }); }
+      }, 2000);
+    }
+  };
+
+  const startJob = async () => {
+    const error = box.querySelector('.fehler');
+    const button = box.querySelector('.los');
+    button.disabled = true;
+    button.textContent = t('loading');
+    const ids = persons.map((p) => p.id).filter((id) => state.persons.has(id));
+    try {
+      const result = await hass.callWS({ type: 'whereabouts/jobs/export', persons: ids, from: state.from, to: state.to, format: state.format });
+      showJob(result.job);
+    } catch (err) {
+      error.textContent = err && err.code === 'busy' ? t('job_busy') : t('export_failed');
+      button.disabled = false;
+      button.textContent = t('dl_job_start');
+    }
   };
 
   const download = async () => {

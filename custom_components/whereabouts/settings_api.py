@@ -173,6 +173,46 @@ async def _users(hass: HomeAssistant) -> list[dict[str, Any]]:
     )
 
 
+async def _open_tasks(hass: HomeAssistant, runtime) -> dict:
+    """What is still open: the offer to import from the recorder, missing addresses."""
+    if runtime.jobs is None:
+        return {"hint": "never", "addresses": 0, "recorder": False}
+    tasks = runtime.jobs.open_tasks()
+    offer = False
+    if tasks["hint"] in ("open", "later") and "recorder" in hass.config.components and runtime.logger.persons:
+        offer = await _recorder_has_data(hass, runtime)
+    return {**tasks, "recorder": offer, "persons": sorted(runtime.logger.persons)}
+
+
+async def _recorder_has_data(hass: HomeAssistant, runtime) -> bool:
+    """The recorder knows a position of a recorded person (one small question, via the recorder's own interface)."""
+    from datetime import timedelta
+
+    from homeassistant.components.recorder import get_instance, history
+    from homeassistant.util import dt as dt_util
+
+    start = dt_util.now() - timedelta(days=2)
+    entity_ids = list(runtime.logger.persons)[:5]
+
+    def query() -> bool:
+        found = history.get_significant_states(
+            hass,
+            start,
+            None,
+            entity_ids,
+            include_start_time_state=True,
+            significant_changes_only=True,
+            minimal_response=True,
+            no_attributes=True,
+        )
+        return any(found.values())
+
+    try:
+        return bool(await get_instance(hass).async_add_executor_job(query))
+    except Exception:  # the offer is optional; never break the settings page
+        return False
+
+
 @websocket_api.websocket_command({vol.Required("type"): "whereabouts/settings"})
 @websocket_api.async_response
 async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
@@ -228,6 +268,9 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
             # zones created, changed, renamed or removed since the data was last checked
             "zone_changes": (await runtime.zones.async_changes())[0] if runtime.zones else [],
             "address_job": runtime.addresses.status() if runtime.addresses else {"status": "idle"},
+            # 0.7.10: background job, open tasks, offer to import from the recorder
+            "job": runtime.jobs.status() if runtime.jobs else {"status": "idle"},
+            "open_tasks": await _open_tasks(hass, runtime),
             # short info for the header of "Diagnostics"
             "stored": _stored_counts(await hass.async_add_executor_job(runtime.storage.list_files)),
             # 0.7.3: size of the history (per person) and of the trash

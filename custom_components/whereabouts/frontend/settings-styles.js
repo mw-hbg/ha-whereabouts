@@ -47,6 +47,7 @@ export const CSS = `
                    display: inline-flex; align-items: center; gap: 6px; }
   .wa-set .knopf:hover:not(:disabled) { background: rgba(var(--rgb-primary-color, 3,169,244), .08); }
   .wa-set .knopf:disabled { opacity: .45; cursor: default; }
+  .wa-set a.knopf { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
   .wa-set .knopf.gefahr { color: var(--error-color, #db4437); }
   .wa-set .knopf.voll { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
   .wa-set .knopf ha-icon { --mdc-icon-size: 18px; }
@@ -104,6 +105,14 @@ export const CSS = `
   .wa-set .ok { color: var(--success-color, #43a047); }
   .wa-set .schlecht { color: var(--error-color, #db4437); }
   .wa-set .klein { font-size: 12px; color: var(--secondary-text-color); }
+  /* 0.7.10: group "Open tasks" */
+  .wa-set .aufgaben { display: flex; flex-direction: column; gap: 10px; }
+  .wa-set .aufgabe { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--divider-color); border-radius: 10px; }
+  .wa-set .aufgabe-text { font-size: 14px; line-height: 1.5; }
+  .wa-set .aufgabe-aktionen { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .wa-set .aufgabe .knopf { width: auto; }
+  .wa-set .aufgaben .adressauftrag:empty, .wa-set .aufgaben .job:empty, .wa-set .aufgaben .offene:empty { display: none; }
+  .wa-set .aufgaben .adressauftrag { padding: 0; }
   .wa-set .dialog { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center;
                     background: rgba(0,0,0,.45); padding: 16px; }
   .wa-set .dialog .fenster { width: min(480px, 100%); max-height: 90vh; overflow: auto; box-sizing: border-box; padding: 20px 24px 16px;

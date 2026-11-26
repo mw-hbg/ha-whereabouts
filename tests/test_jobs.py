@@ -235,3 +235,60 @@ async def test_recorder_hint_and_open_addresses(hass: HomeAssistant, hass_ws_cli
     assert cleared["result"]["open"]["addresses"] == 0
     settings = (await _call(ws, 4, type="whereabouts/settings"))["result"]["admin"]
     assert settings["job"] == {"status": "idle"} and settings["open_tasks"]["hint"] == "never"
+
+
+async def test_export_after_a_restart_starts_again_without_double_rows(hass: HomeAssistant, hass_admin_user):
+    from custom_components.whereabouts.jobs import JobManager
+
+    _person(hass, "alex")
+    await setup_integration(hass)
+    runtime = hass.data["whereabouts"]
+    runtime.storage.import_points("alex", [Point("2026-05-30", "08:00:00", "not_home", 48.5, 8.5)])
+    runtime.storage.import_points("alex", [Point("2026-06-02", "09:00:00", "not_home", 48.6, 8.6)])
+    # a job that was stopped by a restart: progress saved after May, but June was half written too
+    state = {
+        "status": "running", "id": "abcdef123456", "kind": "export", "action": "export", "persons": ["alex"],
+        "from": "2026-05-01", "to": "2026-06-30", "params": {"format": "csv"}, "user": "Admin",
+        "total": 2, "done": 1, "result": {"rows": 1}, "started": "", "finished": "",
+    }  # fmt: skip
+    temp = os.path.join(downloads.exports_folder(hass), f"{downloads.TEMP_PREFIX}abcdef123456", "alex")
+    os.makedirs(temp, exist_ok=True)
+    with open(os.path.join(temp, "alex_2026.csv"), "w", encoding="utf-8") as file:  # noqa: ASYNC230
+        file.write("person,date\nalex,2026-05-30\nalex,2026-06-02\n")
+    jobs = JobManager(hass, runtime)
+    await jobs._store.async_save({"job": state, "hint": "open", "open_addresses": 0})
+    runtime.jobs = jobs
+    await jobs.async_load()
+    status = await wait_job(hass)
+    assert status["status"] == "done" and status["done"] == 2 and status["result"]["rows"] == 2
+    with zipfile.ZipFile(os.path.join(downloads.exports_folder(hass), status["file"])) as archive:
+        text = archive.read("alex/alex_2026.csv").decode()
+    assert text.count("2026-05-30") == 1 and text.count("2026-06-02") == 1 and text.count("person,date") == 1
+
+
+async def test_a_job_that_cannot_start_leaves_nothing_running(hass: HomeAssistant, hass_admin_user):
+    _person(hass, "alex")
+    await setup_integration(hass)
+    jobs = hass.data["whereabouts"].jobs
+    with pytest.raises(ValueError):
+        await jobs.async_start("maintenance", ["alex"], D, D, {"action": "nonsense"}, "Admin")
+    assert not jobs.busy and jobs.status() == {"status": "idle"}
+
+
+async def test_addresses_after_the_zones_job_are_logged(hass: HomeAssistant, hass_admin_user):
+    _person(hass, "alex")
+    await setup_integration(hass)
+    runtime = hass.data["whereabouts"]
+    seen = {}
+
+    async def start(persons, date_from, date_to, log=None):
+        seen.update(persons=persons, log=log)
+        return {}
+
+    state = {
+        "params": {"action": "zones", "addresses": True}, "result": {"need_address": 2}, "done": 0,
+        "persons": ["alex"], "from": D, "to": D, "user": "Admin", "status": "done",
+    }  # fmt: skip
+    with patch.object(runtime.addresses, "async_start", start):
+        await KINDS["maintenance"].finish(runtime.jobs, state, "done")
+    assert seen["persons"] == ["alex"] and callable(seen["log"])

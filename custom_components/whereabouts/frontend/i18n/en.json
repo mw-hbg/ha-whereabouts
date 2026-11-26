@@ -877,6 +877,7 @@
   "job_download": "Download",
   "job_open": "Open",
   "job_file_hint": "The file stays available for 24 hours. The link is valid for ten minutes; reload the page after that.",
+  "job_file_gone": "The file was deleted after 24 hours. Start the export again if needed.",
   "task_zones": "Zones were changed ({n}).",
   "task_zones_button": "Check",
   "task_addresses": "Addresses are still missing (about {n}).",

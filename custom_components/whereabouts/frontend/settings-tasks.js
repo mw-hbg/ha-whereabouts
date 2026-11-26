@@ -104,7 +104,12 @@ export default (ctx, Base) => {
         const result = await this._ws({ type: 'whereabouts/jobs/control', action: 'dismiss' });
         if (result && result.job) this._jobUpdate(result);
       });
-      if (job.status === 'done' && job.file) this._fileLink(el.querySelector('.datei'), job.file);
+      if (job.status === 'done' && job.file) {
+        // the server deletes the file after 24 hours (downloads.MAX_AGE_SECONDS)
+        const age = Date.now() - Date.parse(job.finished || '');
+        if (age > 24 * 3600 * 1000) el.querySelector('.datei').innerHTML = `<span class="klein">${esc(t('job_file_gone'))}</span>`;
+        else this._fileLink(el.querySelector('.datei'), job.file);
+      }
     }
 
     // The download of a finished file: a signed link (the apps cannot download a blob).

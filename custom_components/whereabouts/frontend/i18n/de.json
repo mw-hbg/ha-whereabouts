@@ -877,6 +877,7 @@
   "job_download": "Herunterladen",
   "job_open": "Öffnen",
   "job_file_hint": "Die Datei bleibt 24 Stunden bereit. Der Link gilt zehn Minuten; danach die Seite neu laden.",
+  "job_file_gone": "Die Datei wurde nach 24 Stunden gelöscht. Bei Bedarf den Export neu starten.",
   "task_zones": "Zonen wurden geändert ({n}).",
   "task_zones_button": "Prüfen",
   "task_addresses": "Es fehlen noch Adressen (etwa {n}).",

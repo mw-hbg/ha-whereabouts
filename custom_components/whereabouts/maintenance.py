@@ -433,6 +433,31 @@ async def ws_zone_ack(hass: HomeAssistant, connection: websocket_api.ActiveConne
     connection.send_result(msg["id"], None)
 
 
+def address_log(hass: HomeAssistant, runtime, user, persons: list[str], date_from: str, date_to: str):
+    """The log entry of "Fetch missing addresses" (only logged, no backup: the job only fills empty addresses)."""
+    if runtime.journal is None:
+        return None
+
+    async def log(state: dict[str, Any]) -> str:
+        entry = await async_finish(
+            hass,
+            runtime,
+            runtime.journal.new_id(dt_util.now()),
+            None,
+            "addresses",
+            user,
+            persons,
+            date_from,
+            date_to,
+            state.get("found", 0),
+            total=state.get("total", 0),
+            status=state.get("status", ""),
+        )
+        return entry["id"] if entry else ""
+
+    return log
+
+
 # --- missing addresses ----------------------------------------------------------------------------------
 @websocket_api.websocket_command({vol.Required("type"): "whereabouts/addresses/status"})
 @websocket_api.require_admin
@@ -463,30 +488,12 @@ async def ws_address_start(hass: HomeAssistant, connection: websocket_api.Active
         connection.send_result(msg["id"], {"missing": missing, "busy": busy})
         return
 
-    async def log(state: dict[str, Any]) -> str:
-        # only logged, no backup: the job only fills empty addresses
-        entry = await async_finish(
-            hass,
-            runtime,
-            runtime.journal.new_id(dt_util.now()),
-            None,
-            "addresses",
-            connection.user,
-            msg["persons"],
-            msg["from"],
-            msg["to"],
-            state.get("found", 0),
-            total=state.get("total", 0),
-            status=state.get("status", ""),
-        )
-        return entry["id"] if entry else ""
+    log = address_log(hass, runtime, connection.user, msg["persons"], msg["from"], msg["to"])
 
     try:
         if runtime.jobs and runtime.jobs.busy:
             raise RuntimeError("busy")
-        status = await runtime.addresses.async_start(
-            keys, msg["from"], msg["to"], log if runtime.journal is not None else None
-        )
+        status = await runtime.addresses.async_start(keys, msg["from"], msg["to"], log)
     except RuntimeError:
         connection.send_error(msg["id"], "busy", "A lookup is already running")
         return

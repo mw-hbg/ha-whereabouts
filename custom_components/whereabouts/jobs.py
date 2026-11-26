@@ -121,9 +121,17 @@ class JobManager:
             )
             self.open_addresses = max(0, int(data.get("open_addresses") or 0))
             job = data.get("job")
-            if isinstance(job, dict) and job.get("status") in (RUNNING, DONE, CANCELLED, FAILED):
+            if (
+                isinstance(job, dict)
+                and job.get("status") in (RUNNING, DONE, CANCELLED, FAILED)
+                and job.get("kind") in KINDS
+            ):
                 self.state = job
         if self.state.get("status") == RUNNING:
+            if not KINDS[self.state["kind"]].resumable:
+                # the progress may lag behind what was written: start again from the beginning
+                self.state["done"] = 0
+                self.state["result"] = {}
             self._start_task()
 
     def _data(self) -> dict[str, Any]:
@@ -198,7 +206,12 @@ class JobManager:
         self._cancel = False
         self._backup = None
         self._ctx = {}
-        units = await self._kind(kind).units(self, self.state)
+        try:
+            units = await self._kind(kind).units(self, self.state)
+        except Exception:
+            # nothing was done yet: no job stays "running" without a task
+            self.state = {"status": IDLE}
+            raise
         self.state["total"] = len(units)
         if not units:
             await self._end(DONE)
@@ -336,6 +349,7 @@ class MaintenanceKind:
     """Recording rules, zones, time zones, edges of days, coordinates - one day (file) per step."""
 
     backup = True
+    resumable = True  # a day done twice gives the same result
 
     async def units(self, jobs: JobManager, state: dict[str, Any]) -> list:
         runtime = jobs.runtime
@@ -401,8 +415,12 @@ class MaintenanceKind:
             and result.get("need_address")
             and runtime.addresses is not None
         ):
+            from .maintenance import address_log
+
+            user = SimpleNamespace(name=state.get("user", ""))
+            log = address_log(jobs.hass, runtime, user, state["persons"], state["from"], state["to"])
             try:
-                await runtime.addresses.async_start(state["persons"], state["from"], state["to"], None)
+                await runtime.addresses.async_start(state["persons"], state["from"], state["to"], log)
             except RuntimeError:
                 pass
 
@@ -411,11 +429,15 @@ class ExportKind:
     """A long period as a ZIP file: month by month into temporary files, then zipped."""
 
     backup = False
+    resumable = False  # the CSV files are appended to: after a restart everything is written again
 
     async def units(self, jobs: JobManager, state: dict[str, Any]) -> list:
         folder = downloads.exports_folder(jobs.hass)
         await jobs.hass.async_add_executor_job(lambda: os.makedirs(folder, exist_ok=True))
         await jobs.hass.async_add_executor_job(downloads.cleanup, folder)
+        if not state.get("done"):
+            # a new start (or a start again after a restart): no half written files of before
+            await jobs.hass.async_add_executor_job(shutil.rmtree, self._temp(jobs, state), True)
         return month_ranges(state["from"], state["to"])
 
     def _temp(self, jobs: JobManager, state: dict[str, Any]) -> str:
@@ -488,6 +510,7 @@ class RecorderKind:
     """Import from the Home Assistant recorder: one person and day per step, only fills gaps."""
 
     backup = True
+    resumable = True  # only gaps are filled: a day done twice adds nothing
 
     async def units(self, jobs: JobManager, state: dict[str, Any]) -> list:
         days = day_range(state["from"], state["to"])
@@ -587,7 +610,7 @@ async def async_import_day(jobs: JobManager, person: str, day: str, write: bool)
         "stays": len(stays),
         "added": outcome["added"],
         "skipped": outcome["skipped"],
-        "missing_addresses": missing if outcome["added"] else 0,
+        "missing_addresses": min(missing, int(outcome["added"])),
     }
 
 

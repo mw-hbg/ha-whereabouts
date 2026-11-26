@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: settings, "Tasks and progress": the content now keeps the same distance to the edges as the other categories; the progress of "Fetch missing addresses" is framed like the other tasks.
+
+---
+
+- Behoben: Einstellungen, „Aufgaben und Fortschritt“: Der Inhalt hat jetzt denselben Abstand zum Rand wie die anderen Kategorien; der Fortschritt von „Fehlende Adressen nachladen“ ist wie die anderen Aufgaben eingerahmt.
+
 ## 0.7.10
 
 - Changed: heatmap: the switch "Grade colours by total time per place" is off by default again (the stays add up as before 0.7.5). The switch stays in the legend.

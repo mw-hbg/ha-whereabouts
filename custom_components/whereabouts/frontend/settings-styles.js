@@ -112,7 +112,8 @@ export const CSS = `
   .wa-set .aufgabe-aktionen { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .wa-set .aufgabe .knopf { width: auto; }
   .wa-set .aufgaben .adressauftrag:empty, .wa-set .aufgaben .job:empty, .wa-set .aufgaben .offene:empty { display: none; }
-  .wa-set .aufgaben .adressauftrag { padding: 0; }
+  .wa-set .aufgaben-rahmen { padding: 4px 16px 14px; }
+  .wa-set .aufgaben .adressauftrag { padding: 4px 12px 10px; border: 1px solid var(--divider-color); border-radius: 10px; }
   .wa-set .dialog { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center;
                     background: rgba(0,0,0,.45); padding: 16px; }
   .wa-set .dialog .fenster { width: min(480px, 100%); max-height: 90vh; overflow: auto; box-sizing: border-box; padding: 20px 24px 16px;

@@ -60,8 +60,8 @@ export default (ctx, Base) => {
     // --- the category -----------------------------------------------------------------------------------
     _tasksSection(box) {
       const t = this._t;
-      box.innerHTML = `<p class="hinweis" style="margin:0 0 10px">${esc(t('tasks_intro'))}</p>
-        <div class="aufgaben"><div class="job"></div><div class="adressauftrag"></div><div class="offene"></div></div>`;
+      box.innerHTML = `<div class="aufgaben-rahmen"><p class="hinweis" style="margin:0 0 10px">${esc(t('tasks_intro'))}</p>
+        <div class="aufgaben"><div class="job"></div><div class="adressauftrag"></div><div class="offene"></div></div></div>`;
       this._tasksDraw();
     }
 

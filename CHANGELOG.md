@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0
 
 - New: evaluation of a place in the history card (button "Evaluate"): choose a circle on the map (tap to set the centre, drag the centre or the edge), a period (default: the last 12 months) and persons. The table shows visits, days with a visit, total time and the longest visit per day, month or year, with a total per person, and below every visit (date, from–to, duration, place). Stays less than 15 minutes apart count as one visit (also across midnight); visits shorter than the minimum duration (default 10 minutes) are passing through and only counted with the switch "Count passing through". Everyone may evaluate the persons whose history they may see; the calculation runs month by month on the server and does not block the data maintenance.
 - New: the evaluation as an Excel file (.xlsx, sheets "Summary" and "Visits", durations and dates as real values) or as a PDF (A4, selection in the header, "Page x of y"), through a signed link also in the Home Assistant apps ("Download", on iOS "Open"); in the browser also "Share" where the device can share files. The files stay for 24 hours.

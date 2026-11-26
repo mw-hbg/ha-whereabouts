@@ -48,7 +48,7 @@ export function defineHistoryCard(S, D) {
       this._mode = 'route'; // route | heat
       this._withHome = true; // heatmap: include home
       this._heatBy = 'duration'; // heatmap: 'duration' or 'visits'
-      this._heatLog = true; // heatmap: colour by the logarithm of the total per place (false: sum of the stays, linear)
+      this._heatLog = false; // heatmap: colour by the logarithm of the total per place (default off: sum of the stays, linear)
       this._points = [];
       this._map = null;
       this._tiles = [];
@@ -830,7 +830,7 @@ export function defineHistoryCard(S, D) {
 
     _setMode(mode) {
       this._mode = mode;
-      this._drawMap(true);
+      this._drawMap(false); // route <-> heatmap keeps zoom and position
     }
 
     // --- data ---------------------------------------------------------------------------

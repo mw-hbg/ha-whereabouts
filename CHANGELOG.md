@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Changed: heatmap: the switch "Grade colours by total time per place" is off by default again (the stays add up as before 0.7.5). The switch stays in the legend.
+- Improved: switching between route and heatmap keeps zoom and map position.
+- Tests: the UI check now switches to the heatmap (both colour modes, by visits), checks that it is drawn and that zoom and position stay.
+
+---
+
+- Geändert: Heatmap: Der Schalter „Farben nach Gesamtzeit pro Ort abstufen“ ist wieder standardmäßig aus (die Aufenthalte addieren sich wie vor 0.7.5). Der Schalter bleibt in der Legende.
+- Verbessert: Beim Umschalten zwischen Route und Heatmap bleiben Zoomstufe und Kartenausschnitt erhalten.
+- Tests: Die UI-Prüfung schaltet jetzt auf die Heatmap (beide Farbmodi, nach Besuchen), prüft, dass sie gezeichnet wird und dass Zoom und Position erhalten bleiben.
+
 ## 0.7.9
 
 - Changed: log and trash are now a settings category of their own (below the data maintenance).

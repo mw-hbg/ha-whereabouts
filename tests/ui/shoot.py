@@ -186,6 +186,76 @@ class Shooter:
         self._shot(page, name)
         page.set_viewport_size(size)
 
+    def _heat_pixels(self, page) -> int:
+        """Number of painted pixels in the heatmap canvas (0 = empty or missing)."""
+        return page.evaluate(
+            """() => {
+              const c = document.querySelector('whereabouts-history-card canvas.leaflet-heatmap-layer');
+              if (!c || !c.width || !c.height) return 0;
+              const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+              let n = 0;
+              for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+              return n;
+            }"""
+        )
+
+    def _view(self, page) -> dict:
+        return page.evaluate(
+            """() => {
+              const m = document.querySelector('whereabouts-history-card')._map;
+              const c = m.getCenter();
+              return { lat: Math.round(c.lat * 1e5) / 1e5, lon: Math.round(c.lng * 1e5) / 1e5, zoom: m.getZoom() };
+            }"""
+        )
+
+    def _check_heat(self, page, name: str) -> None:
+        """The heatmap must be drawn (0.7.5 broke it unnoticed), in both colour modes, and switching
+        between route and heatmap must keep zoom and position (0.7.10)."""
+
+        def fail(text: str) -> None:
+            self._note("heatcheck", f"{name}: {text}")
+
+        def settle() -> None:
+            page.wait_for_timeout(700)
+
+        card = "whereabouts-history-card"
+        page.click(f"{card} .modus .segment[data-modus=heat]")
+        try:
+            page.wait_for_selector(f"{card} canvas.leaflet-heatmap-layer", state="attached", timeout=10000)
+        except PlaywrightError:
+            fail("no heatmap canvas after switching to the heatmap")
+            return
+        settle()
+        if not self._heat_pixels(page):
+            fail("heatmap is empty (default: total per place off)")
+        # switches in the legend: logarithmic colours on, by visits on, then back off
+        for selector, label in ((".heatLog", "total per place"), (".nachBesuchen", "by visits")):
+            page.click(f"{card} {selector}")
+            settle()
+            if not self._heat_pixels(page):
+                fail(f"heatmap is empty with the switch '{label}' on")
+        for selector in (".heatLog", ".nachBesuchen"):
+            page.click(f"{card} {selector}")
+        settle()
+        # zoom and position stay when switching: move the map, go to the route and back
+        page.evaluate(
+            """() => {
+              const m = document.querySelector('whereabouts-history-card')._map;
+              const c = m.getCenter();
+              m.setView([c.lat + 0.004, c.lng + 0.006], Math.max(m.getZoom() - 1, 3), { animate: false });
+            }"""
+        )
+        settle()
+        before = self._view(page)
+        for mode in ("route", "heat", "route"):
+            page.click(f"{card} .modus .segment[data-modus={mode}]")
+            settle()
+            after = self._view(page)
+            if after != before:
+                fail(f"switching to {mode} moved the map: {before} -> {after}")
+        if self._heat_pixels(page):
+            fail("the heatmap is still drawn in route mode")
+
     def run(self, only: str | None = None) -> int:
         count = 0
         for device in DEVICES:
@@ -204,6 +274,8 @@ class Shooter:
                         if not only or only == name:
                             self._shot(page, name)
                             count += 1
+                        if view == "history" and (not only or only == name):
+                            self._check_heat(page, name)
                         if view == "settings" and (not only or only == open_name):
                             self.current = open_name
                             self._open_all(page)

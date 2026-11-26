@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Changed: the heatmap uses its weighting from before 0.7.5 again (time spent, capped at 4 hours). The switch "By number of visits instead of duration" stays.
+
+---
+
+- Geändert: Die Heatmap gewichtet wieder wie vor 0.7.5 (Aufenthaltsdauer, gedeckelt bei 4 Stunden). Der Schalter „Nach Besuchen statt nach Dauer“ bleibt.
+
 ## 0.7.8
 
 - Fixed: zoomed out, the heatmap was red everywhere – the scale is now worked out for every zoom level, so home stays stronger than a short holiday.

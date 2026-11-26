@@ -777,7 +777,7 @@ export function defineHistoryCard(S, D) {
         S.compactAttribution(this._map);
         this._setTiles(S.mapDark(this._hass, this._config));
         S.watchZoneNames(this._map, mapDiv, this._config);
-        this._map.on('zoomend', () => { this._simplify(); this._fitHeatRadius(); });
+        this._map.on('zoomend', () => this._simplify());
         this._drawZones();
       } catch (err) {
         // Without a map the table still works.
@@ -1013,48 +1013,17 @@ export function defineHistoryCard(S, D) {
       return this._mode === 'heat';
     }
 
-    // Heat radius in metres (about 75 m), converted to pixels for the zoom of the map (8-40 px).
-    // maxZoom = current zoom: the plugin then sums the weights without its own zoom scaling,
-    // so the 95th-percentile scale from _buildLayers fits at every zoom.
-    _fitHeatRadius(layer = this._heatLayer, map = this._map) {
-      if (!layer || !map) return;
-      const zoom = map.getZoom();
-      const lat = map.getCenter().lat;
-      const mPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / 2 ** zoom;
-      const radius = Math.max(8, Math.min(40, (layer._wRadiusM || 75) / mPerPx));
-      const blur = radius * 0.6;
-      // Scale = 95th percentile of the summed weight per cell, on the same pixel grid the plugin
-      // sums on at this zoom: zoomed out, one cell holds a whole region, so the scale grows with it
-      // and home stays stronger than a holiday.
-      const cell = (radius + blur) / 2;
-      const sums = new Map();
-      (layer._wData || []).forEach((d) => {
-        const pt = map.project([d[0], d[1]], zoom);
-        const key = `${Math.floor(pt.x / cell)}|${Math.floor(pt.y / cell)}`;
-        sums.set(key, (sums.get(key) || 0) + d[2]);
-      });
-      const sorted = [...sums.values()].sort((x, y) => x - y);
-      const max = sorted.length ? Math.max(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))], 0.05) : 1;
-      layer.setOptions({ radius, blur, max, maxZoom: zoom });
-    }
-
     // Layers of the route (or heatmap) for a map; used for the shown map and the picture.
     _buildLayers(forPicture) {
       const L = window.L;
       const visible = this._visiblePersons();
       const points = this._visiblePoints();
       if (this._heat()) {
-        // Weighted by the time spent there (short stays count little, 2 h and more fully) or by the number of visits.
+        // Weighted by the time spent there (capped, so home does not outshine everything) or by the number of visits.
         const byVisits = this._heatBy === 'visits';
-        const data = points.filter((p) => this._withHome || p.state !== 'home').map((p) => {
-          const min = this._minutes(p);
-          const weight = byVisits ? 1 : (min < 5 ? 0.03 : Math.min(1, 0.03 + (min - 5) / 115 * 0.97));
-          return [p.lat, p.lon, weight];
-        });
-        // The scale (max) is set per zoom in _fitHeatRadius.
-        const heat = L.heatLayer(data, { radius: 22, blur: 13, max: 1, minOpacity: 0.2 });
-        heat._wData = data;
-        heat._wRadiusM = 75;
+        const data = points.filter((p) => this._withHome || p.state !== 'home')
+          .map((p) => [p.lat, p.lon, byVisits ? 1 : Math.max(0.08, Math.min(this._minutes(p), 240) / 240)]);
+        const heat = L.heatLayer(data, { radius: 22, blur: 18, max: 1, minOpacity: 0.25 });
         const bounds = data.length ? L.latLngBounds(data.map((d) => [d[0], d[1]])) : null;
         return { heat, bounds };
       }
@@ -1122,7 +1091,6 @@ export function defineHistoryCard(S, D) {
       this._bounds = layers.bounds;
       if (layers.heat) {
         this._heatLayer = layers.heat.addTo(this._map);
-        this._fitHeatRadius();
       } else {
         this._routeLayer = layers.route.addTo(this._map);
         this._markerLayer = layers.markers;
@@ -1307,7 +1275,7 @@ export function defineHistoryCard(S, D) {
         if (this._config.show_zones) S.drawZones(map, null, this._hass, this._config, t);
         if (this._visiblePoints().length) {
           const layers = this._buildLayers(true);
-          if (layers.heat) { layers.heat.addTo(map); this._fitHeatRadius(layers.heat, map); }
+          if (layers.heat) layers.heat.addTo(map);
           else { layers.route.addTo(map); layers.markers.addTo(map); layers.ends.addTo(map); }
         }
         await new Promise((resolve) => {

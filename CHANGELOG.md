@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.8
 
 - Fixed: zoomed out, the heatmap was red everywhere – the scale is now worked out for every zoom level, so home stays stronger than a short holiday.
 

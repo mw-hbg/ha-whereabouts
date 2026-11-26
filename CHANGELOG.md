@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.9
 
 - Changed: log and trash are now a settings category of their own (below the data maintenance).
 - New: button "Download diagnostics" directly in the settings under Diagnostics.

@@ -38,7 +38,6 @@ export default (ctx, Base) => {
         '<div class="adressauftrag" style="grid-column:1 / -1"></div>');
       addresses.querySelector('.steuer .knopf').addEventListener('click', () => this._addressDialog());
       this._addressStatus(addresses.querySelector('.adressauftrag'), (this._data.admin || {}).address_job);
-      if (this._journalSection) this._journalSection(box);
     }
 
     // --- choosing persons and days ----------------------------------------------------------------------

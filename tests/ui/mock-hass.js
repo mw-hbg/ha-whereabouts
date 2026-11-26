@@ -291,6 +291,7 @@ function createBackend(userKey) {
     }),
     osm_paused: false,
     folder: '/config/whereabouts/history',
+    entry_id: 'mock-entry',
   });
 
   const subscribers = new Set();

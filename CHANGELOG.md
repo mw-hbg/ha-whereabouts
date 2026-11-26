@@ -2,10 +2,14 @@
 
 ## Unreleased
 
+- Changed: log and trash are now a settings category of their own (below the data maintenance).
+- New: button "Download diagnostics" directly in the settings under Diagnostics.
 - Improved: heatmap: the colour now shows the total time per place on a logarithmic scale (a few minutes blue, a day green, weeks red), so a place visited once no longer looks like home. Switch "Grade colours by total time per place"; switched off, the stays add up as before 0.7.5. The switch "By number of visits instead of duration" stays.
 
 ---
 
+- Geändert: Protokoll und Papierkorb sind jetzt eine eigene Einstellungskategorie (unter der Datenpflege).
+- Neu: Knopf „Diagnose herunterladen“ direkt in den Einstellungen unter Diagnose.
 - Verbessert: Heatmap: Die Farbe zeigt jetzt die Gesamtzeit pro Ort auf einer logarithmischen Skala (wenige Minuten blau, ein Tag grün, Wochen rot). Ein einmal besuchter Ort sieht dadurch nicht mehr aus wie Zuhause. Schalter „Farben nach Gesamtzeit pro Ort abstufen“; ausgeschaltet addieren sich die Aufenthalte wie vor 0.7.5. Der Schalter „Nach Besuchen statt nach Dauer“ bleibt.
 
 ## 0.7.8

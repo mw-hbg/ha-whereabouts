@@ -717,6 +717,8 @@ async def ws_diagnostics(hass: HomeAssistant, connection: websocket_api.ActiveCo
             "persons": persons,
             "osm_paused": bool(nominatim and nominatim.paused),
             "folder": runtime.storage.folder,
+            # 0.7.5: for the download of Home Assistant's diagnostics (diagnostics.py)
+            "entry_id": next((e.entry_id for e in hass.config_entries.async_entries(DOMAIN)), ""),
         },
     )
 

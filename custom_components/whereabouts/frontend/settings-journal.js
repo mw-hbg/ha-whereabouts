@@ -58,42 +58,30 @@ export default (ctx, Base) => {
         days > 0 ? t('sum_trash_days', { n: days }) : t('sum_trash_forever')].join(' · ');
     }
 
-    // --- the subsection below the data maintenance ----------------------------------------------------------
+    // --- the category "Log and trash" (0.7.5: own category, before below the data maintenance) ------------
     _journalSection(box) {
-      const t = this._t;
-      const c = ADMIN.find((x) => x.id === 'maintenance');
-      const admin = this._data.admin || {};
-      const journal = admin.journal || {};
-      const part = this._subsection('sub_journal', t('sub_journal'), this._journalSummary(), Boolean(journal.hint));
-      box.appendChild(part.el);
+      const c = ADMIN.find((x) => x.id === 'journal');
+      const part = { inner: box };
       this._journalPart = part;
-      const intro = document.createElement('div');
-      intro.className = 'hinweis';
-      intro.style.margin = '4px 16px 8px';
-      intro.textContent = t('journal_intro');
-      part.inner.appendChild(intro);
-      (c.options || []).filter((f) => f.late).forEach((f) => part.inner.appendChild(this._adminOptionRow(c, f)));
+      (c.options || []).filter((f) => f.late).forEach((f) => box.appendChild(this._adminOptionRow(c, f)));
       const list = document.createElement('div');
       list.className = 'protokoll';
-      part.inner.appendChild(list);
+      box.appendChild(list);
       this._journalShown = PAGE;
-      const load = () => { if (part.el.open) this._journalRefresh(); };
-      part.el.addEventListener('toggle', load);
-      setTimeout(load, 0); // opened before: load once the section is on the page
+      // opened before: load once the category is on the page
+      setTimeout(() => { if (this._open && this._open.has('journal')) this._journalRefresh(); }, 0);
     }
 
     async _journalRefresh() {
       const part = this._journalPart;
-      if (!part || !part.el.isConnected) return;
+      if (!part || !part.inner.isConnected) return;
       let data;
       try { data = await this._hass.callWS({ type: 'whereabouts/journal/list' }); } catch (err) { return; }
       this._journal = data;
       if (this._data.admin) this._data.admin.journal = { entries: data.entries, hint: data.hint, trash_bytes: data.trash_bytes, trash_entries: data.trash_entries };
-      part.summary.textContent = this._journalSummary();
-      part.summary.classList.toggle('warn', Boolean(data.hint));
       const note = part.inner.querySelector('[data-notiz="trash_size"]');
       if (note) note.textContent = this._optionNote('trash_size');
-      this._updateSummary('maintenance');
+      this._updateSummary('journal');
       this._journalList(part.inner.querySelector('.protokoll'), data);
     }
 

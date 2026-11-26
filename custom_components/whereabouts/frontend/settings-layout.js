@@ -299,11 +299,14 @@ export default (ctx, Base) => {
         case 'data': return t('sum_data');
         case 'maintenance': {
           const job = (d.admin && d.admin.address_job) || {};
-          const journal = d.admin && d.admin.journal;
-          const main = ['running', 'paused'].includes(job.status)
+          return ['running', 'paused'].includes(job.status)
             ? t('sum_address_job', { done: job.done || 0, total: job.total || 0 })
             : t('sum_maintenance');
+        }
+        case 'journal': {
           // 0.7.3: many entries in the log - suggest cleaning up (also when the category is closed)
+          const journal = d.admin && d.admin.journal;
+          const main = this._journalSummary ? this._journalSummary() : '';
           return journal && journal.hint ? `${main} · ${t('journal_hint_short', { n: journal.entries })}` : main;
         }
         case 'diagnostics': {
@@ -411,6 +414,7 @@ export default (ctx, Base) => {
       if (c.custom === 'sensors' && this._admin) this._sensors(box);
       if (c.custom === 'data') this._dataSection(box);
       if (c.custom === 'maintenance' && this._admin) this._maintenanceSection(box);
+      if (c.custom === 'journal' && this._admin && this._journalSection) this._journalSection(box);
       if (c.custom === 'diagnostics' && this._open.has('diagnostics')) {
         if (this._diag) this._showDiagnostics(); else this._loadDiagnostics();
       }
@@ -493,7 +497,6 @@ export default (ctx, Base) => {
           Number(o.retention_days) > 0 ? t('sum_keep_days', { n: o.retention_days }) : t('sum_keep_forever'),
           size && this._bytes ? this._bytes(size.bytes) : ''].filter(Boolean).join(' · ');
       }
-      if (group === 'journal' && this._journalSummary) return this._journalSummary();
       return '';
     }
 
@@ -506,6 +509,7 @@ export default (ctx, Base) => {
         this._open.add(id);
         // only the first time: a click on the open area must not load (and flicker) again
         if (id === 'diagnostics' && !this._diag) this._loadDiagnostics();
+        if (id === 'journal' && this._journalRefresh) this._journalRefresh();
       } else this._open.delete(id);
       const ids = [...this.querySelectorAll('.kat')].map((c) => c.dataset.kat);
       const allOpen = ids.every((x) => this._open.has(x));

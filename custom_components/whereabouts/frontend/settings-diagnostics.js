@@ -29,7 +29,10 @@ export default (ctx, Base) => {
       const kb = (bytes) => `${Math.max(1, Math.round(bytes / 1024))} KB`;
       box.innerHTML = `<div class="zeile breit" style="border-top:none"><div class="beschriftung" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
           <span class="klein">${esc(t('diag_as_of', { time: S.clock(this._hass, diag.at, true) }))}</span>
-          <button class="knopf diag-neu" type="button"><ha-icon icon="mdi:refresh"></ha-icon>${esc(t('refresh'))}</button></div></div>
+          <span style="display:flex;gap:8px;flex-wrap:wrap">
+            ${diag.entry_id ? `<button class="knopf diag-laden" type="button"><ha-icon icon="mdi:download"></ha-icon>${esc(t('diag_download'))}</button>` : ''}
+            <button class="knopf diag-neu" type="button"><ha-icon icon="mdi:refresh"></ha-icon>${esc(t('refresh'))}</button></span></div></div>
+        <p class="kat-text klein">${esc(t('diag_download_hint'))}</p>
         ${diag.osm_paused ? `<div class="warnung">${esc(t('osm_paused'))}</div>` : ''}
         <div class="tabellenrahmen"><table class="tabelle"><thead><tr>
           <th>${esc(t('col_person'))}</th><th>${esc(t('diag_trackers'))}</th><th>${esc(t('diag_address'))}</th><th>${esc(t('diag_history'))}</th>
@@ -44,6 +47,29 @@ export default (ctx, Base) => {
         </tr>`).join('')}</tbody></table></div>
         <p class="kat-text klein">${esc(t('diag_folder', { folder: diag.folder }))}</p>`;
       box.querySelector('.diag-neu').addEventListener('click', () => this._loadDiagnostics());
+      const dl = box.querySelector('.diag-laden');
+      if (dl) dl.addEventListener('click', () => this._downloadDiagnostics(dl));
+    }
+
+    // The same file as "Download diagnostics" in Devices & services (Home Assistant's own endpoint, admins only)
+    async _downloadDiagnostics(button) {
+      const t = this._t;
+      button.disabled = true;
+      try {
+        const response = await this._hass.fetchWithAuth(`/api/diagnostics/config_entry/${encodeURIComponent(this._diag.entry_id)}`);
+        if (!response.ok) throw new Error(String(response.status));
+        const blob = await response.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `whereabouts-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      } catch (err) {
+        this._toast(t('diag_download_failed'), true);
+      } finally {
+        button.disabled = false;
+      }
     }
   };
 };

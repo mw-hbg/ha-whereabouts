@@ -68,9 +68,10 @@ const ADMIN = [
     { key: 'address_max_distance', sel: num(10, 5000, 10, 'm'), hideWhen: (o) => o.address_source === 'osm' || o.address_source === 'off' },
   ], custom: 'sensors' },
   { id: 'data', icon: 'mdi:swap-vertical', custom: 'data', everyone: true },
-  // 0.7.3: "Keep the trash" is drawn below the log (late), not at the top
-  { id: 'maintenance', icon: 'mdi:database-cog', custom: 'maintenance', reset: ['trash_days'], options: [
-    { key: 'trash_days', sel: num(0, 36500, 1, 'd'), group: 'journal', late: true, note: 'trash_size' },
+  { id: 'maintenance', icon: 'mdi:database-cog', custom: 'maintenance' },
+  // 0.7.5: log and trash as a category of their own; "Keep the trash" is drawn below the intro (late)
+  { id: 'journal', icon: 'mdi:history', custom: 'journal', reset: ['trash_days'], options: [
+    { key: 'trash_days', sel: num(0, 36500, 1, 'd'), late: true, note: 'trash_size' },
   ] },
   { id: 'diagnostics', icon: 'mdi:stethoscope', custom: 'diagnostics' },
 ];

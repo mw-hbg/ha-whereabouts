@@ -305,6 +305,69 @@ class Shooter:
             context.close()
         print(f"  {name}", flush=True)
 
+    def _check_analysis(self, device: str, theme: str) -> None:
+        """Evaluation of a place (0.8.0): the window, choosing the circle on the map, the result and a file."""
+        name = f"history-analysis_{device}_{theme}"
+        self.current = name
+        context = self._context(device, theme)
+        page = context.new_page()
+        self._wire(page)
+
+        def fail(text: str) -> None:
+            self._note("analysischeck", f"{name}: {text}")
+
+        try:
+            self._load(page, "history", theme)
+            card = "whereabouts-history-card"
+            # the table with a row per day and its distance (0.8.0)
+            page.click(f"{card} .ansicht")
+            try:
+                page.wait_for_selector(f"{card} .tabelle tr.tageszeile", state="visible", timeout=10000)
+            except PlaywrightError:
+                fail("no rows per day in the table")
+            self._settle(page)
+            self._shot(page, f"{name}-table")
+            page.click(f"{card} .statusbar .auswerten")
+            try:
+                page.wait_for_selector(".wa-an .fenster .waehlen", state="visible", timeout=10000)
+            except PlaywrightError:
+                fail("the window of the evaluation did not open")
+                return
+            self._settle(page)
+            self._shot(page, f"{name}-form")
+            page.click(".wa-an .waehlen")
+            try:
+                page.wait_for_selector(f"{card} .wa-an-leiste", state="visible", timeout=10000)
+            except PlaywrightError:
+                fail("choosing on the map did not start")
+                return
+            if not page.query_selector(f"{card} .wa-an-griff") or not page.query_selector(f"{card} .wa-an-rand"):
+                fail("no handles for the centre and the radius")
+            self._settle(page)
+            self._shot(page, f"{name}-map")
+            page.click(f"{card} .wa-an-leiste button")
+            page.wait_for_selector(".wa-an .fenster .los", state="visible", timeout=10000)
+            page.click(".wa-an .knoepfe .los")
+            try:
+                page.wait_for_selector(".wa-an .liste table", state="visible", timeout=10000)
+            except PlaywrightError:
+                fail("no result table")
+                return
+            page.click(".wa-an .gruppe[data-gruppe=day]")
+            page.wait_for_selector(".wa-an .gruppe.an[data-gruppe=day]", timeout=10000)
+            page.click(".wa-an .datei-los[data-format=pdf]")
+            try:
+                page.wait_for_selector(".wa-an .datei a.link", state="visible", timeout=10000)
+            except PlaywrightError:
+                fail("no link to the PDF file")
+            self._settle(page)
+            self._shot(page, f"{name}-result")
+        except PlaywrightError as err:
+            self._note("harness", f"{name}: {str(err).splitlines()[0]}")
+        finally:
+            context.close()
+        print(f"  {name}", flush=True)
+
     def run(self, only: str | None = None) -> int:
         count = 0
         for device in DEVICES:
@@ -343,6 +406,10 @@ class Shooter:
             if not only or only == f"settings-tasks_{device}_{theme}":
                 self._check_tasks(device, theme)
                 count += 1
+        for device, theme in (("pc", "light"), ("phone", "dark"), ("phone-landscape", "light")):
+            if not only or only == f"history-analysis_{device}_{theme}":
+                self._check_analysis(device, theme)
+                count += 4
         return count
 
 

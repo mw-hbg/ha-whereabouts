@@ -2,10 +2,20 @@
 
 ## Unreleased
 
+- New: evaluation of a place in the history card (button "Evaluate"): choose a circle on the map (tap to set the centre, drag the centre or the edge), a period (default: the last 12 months) and persons. The table shows visits, days with a visit, total time and the longest visit per day, month or year, with a total per person, and below every visit (date, from–to, duration, place). Stays less than 15 minutes apart count as one visit (also across midnight); visits shorter than the minimum duration (default 10 minutes) are passing through and only counted with the switch "Count passing through". Everyone may evaluate the persons whose history they may see; the calculation runs month by month on the server and does not block the data maintenance.
+- New: the evaluation as an Excel file (.xlsx, sheets "Summary" and "Visits", durations and dates as real values) or as a PDF (A4, selection in the header, "Page x of y"), through a signed link also in the Home Assistant apps ("Download", on iOS "Open"); in the browser also "Share" where the device can share files. The files stay for 24 hours.
+- New: distance as the crow flies between consecutive stays ("approx. … km") per person in the status bar of the history card, and in the table a row per day with that day's distance. Hops under 50 m between two stays (GPS jitter) do not count; by road it is further, gaps and journeys count as a straight line.
+- New: card option "Evaluate button" (`show_analysis`, on by default), also in the settings for all cards.
+- Tests: the UI check opens the evaluation (window, choosing on the map, result, PDF link) and the table with its rows per day.
 - Fixed: settings, "Tasks and progress": the content now keeps the same distance to the edges as the other categories; the progress of "Fetch missing addresses" is framed like the other tasks.
 
 ---
 
+- Neu: Orts-Auswertung in der Verlaufskarte (Knopf „Auswertung“): Kreis auf der Karte wählen (Tippen setzt den Mittelpunkt, Mittelpunkt oder Rand ziehen), Zeitraum (Standard: die letzten 12 Monate) und Personen. Die Tabelle zeigt Besuche, Tage mit Besuch, Gesamtdauer und den längsten Besuch je Tag, Monat oder Jahr mit einer Summe je Person, darunter jeden Besuch (Datum, von–bis, Dauer, Ort). Aufenthalte mit weniger als 15 Minuten Abstand zählen als ein Besuch (auch über Mitternacht); Besuche unter der Mindestdauer (Standard 10 Minuten) gelten als Durchfahrt und werden nur mit dem Schalter „Durchfahrten zählen“ gezählt. Jede Person darf die Personen auswerten, deren Verlauf sie sehen darf; die Berechnung läuft Monat für Monat auf dem Server und blockiert die Datenpflege nicht.
+- Neu: Die Auswertung als Excel-Datei (.xlsx, Blätter „Übersicht“ und „Besuche“, Dauer und Datum als echte Werte) oder als PDF (A4, Auswahl im Kopf, „Seite x von y“), über einen signierten Link auch in den Home-Assistant-Apps („Herunterladen“, auf iOS „Öffnen“); im Browser zusätzlich „Teilen“, wenn das Gerät Dateien teilen kann. Die Dateien bleiben 24 Stunden bereit.
+- Neu: Strecke als Luftlinie zwischen aufeinanderfolgenden Aufenthalten („ca. … km“) je Person in der Statusleiste der Verlaufskarte, in der Tabelle eine Zeile pro Tag mit der Strecke des Tages. Sprünge unter 50 m zwischen zwei Aufenthalten (GPS-Zittern) zählen nicht; auf der Straße ist es weiter, Lücken und Reisen zählen als Luftlinie.
+- Neu: Kartenoption „Knopf Auswertung“ (`show_analysis`, standardmäßig an), auch in den Einstellungen für alle Karten.
+- Tests: Die UI-Prüfung öffnet die Auswertung (Fenster, Wahl auf der Karte, Ergebnis, PDF-Link) und die Tabelle mit ihren Tageszeilen.
 - Behoben: Einstellungen, „Aufgaben und Fortschritt“: Der Inhalt hat jetzt denselben Abstand zum Rand wie die anderen Kategorien; der Fortschritt von „Fehlende Adressen nachladen“ ist wie die anderen Aufgaben eingerahmt.
 
 ## 0.7.10

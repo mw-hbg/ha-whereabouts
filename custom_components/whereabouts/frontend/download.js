@@ -73,6 +73,15 @@ export function fileLinkHtml(t, link, file, cls = '') {
   return `<a class="${attr(cls)}" href="${attr(link)}"${ios ? ' target="_blank" rel="noopener"' : ` download="${attr(name)}"`}>${attr(t(ios ? 'job_open' : 'job_download'))}</a>`;
 }
 
+// The look of the windows (also used by the evaluation of a place, analysis.js).
+export function ensureDialogCss() {
+  if (document.getElementById('wa-dl-css')) return;
+  const style = document.createElement('style');
+  style.id = 'wa-dl-css';
+  style.textContent = CSS;
+  document.head.appendChild(style);
+}
+
 export const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>';
 
 const CALENDAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 19H5V8h14m-3-7v2H8V1H6v2H5c-1.11 0-2 .89-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-1V1m-1 11h-5v5h5v-5Z"/></svg>';
@@ -84,12 +93,7 @@ export function openDownloadDialog(S, { hass, t, persons, selected, from, to, da
   const esc = S.escapeHtml;
   const lang = S.language(hass);
   const admin = Boolean(hass.user && hass.user.is_admin);
-  if (!document.getElementById('wa-dl-css')) {
-    const style = document.createElement('style');
-    style.id = 'wa-dl-css';
-    style.textContent = CSS;
-    document.head.appendChild(style);
-  }
+  ensureDialogCss();
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const state = {

@@ -79,7 +79,7 @@ const FACTORY = {
   zones: { zones_in: 'both', zone_color_home: '#2E7D32', zone_color: '#EF6C00', zone_names_zoom: 14, hidden_zones: [], zone_colors: {} },
   live: { show_info_bar: true, show_status_bar: true, show_accuracy: true, follow: true, live_auto_refresh: true, live_refresh_interval: 30 },
   history: {
-    default_view: 'map', start_period: 'today', simplify_points: 400, show_legend: true, show_export: true,
+    default_view: 'map', start_period: 'today', simplify_points: 400, show_legend: true, show_export: true, show_analysis: true,
     history_auto_refresh: true, history_refresh_interval: 30,
   },
 };
@@ -403,6 +403,32 @@ function createBackend(userKey) {
     'whereabouts/recorder/start': (msg) => startJob('recorder', 'recorder', msg),
     'whereabouts/recorder/hint': (msg) => { db.open_tasks.hint = msg.hint; return jobAnswer(); },
     'auth/sign_path': (msg) => ({ path: `${msg.path}?authSig=mock` }),
+    // 0.8.0: evaluation of a place (done at once; the table follows the chosen grouping)
+    'whereabouts/analysis/start': (msg) => {
+      db.analysis = { id: 'a1b2c3d4e5f6', status: 'done', total: 12, done: 12, params: { ...msg, type: undefined } };
+      return { id: db.analysis.id, status: 'running', total: 12, done: 0, params: db.analysis.params };
+    },
+    'whereabouts/analysis/status': (msg) => {
+      if (!db.analysis) return { status: 'idle' };
+      const persons = db.analysis.params.persons;
+      const group = msg.group || 'month';
+      const periods = { day: ['2026-11-12', '2026-11-13', '2026-11-14'], month: ['2026-09', '2026-10', '2026-11'], year: ['2026'] }[group];
+      const rows = [];
+      periods.forEach((period, i) => persons.forEach((person, k) => rows.push({
+        period, person, visits: 3 + i + k, days: 2 + i, seconds: (5 + i * 3 + k) * 3600 + 1200, longest: (2 + k) * 3600 + 900,
+      })));
+      const totals = persons.map((person, k) => ({ person, visits: 12 + k, days: 9, seconds: (29 + k) * 3600, longest: (2 + k) * 3600 + 900 }));
+      const visits = [];
+      for (let i = 0; i < 8; i++) {
+        persons.forEach((person) => visits.push({
+          person, date: `2026-11-${String(14 - i).padStart(2, '0')}`, start: '08:05', end_date: `2026-11-${String(14 - i).padStart(2, '0')}`,
+          end: '11:50', seconds: 13500, state: i % 3 ? 'not_home' : 'Office', address: 'Königstraße 1, Stuttgart',
+        }));
+      }
+      return { ...db.analysis, table: { group, rows, totals }, visits, visit_count: 620, truncated: false, stamp: '2026-11-15T12:00' };
+    },
+    'whereabouts/analysis/cancel': () => { db.analysis = null; return { status: 'idle' }; },
+    'whereabouts/analysis/export': (msg) => ({ file: `a1b2c3d4e5f6_whereabouts_auswertung_2025-11-16_2026-11-15.${msg.format}` }),
     'whereabouts/addresses/status': () => clone(db.address_job),
     'whereabouts/addresses/start': (msg) => (msg.preview ? { missing: 42, busy: false } : clone(db.address_job)),
     'whereabouts/addresses/control': (msg) => {

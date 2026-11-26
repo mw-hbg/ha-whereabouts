@@ -112,6 +112,7 @@ export function defineEditor(S, defaults) {
           select('start_period', ['today', '3d', '7d', '4w']),
           { name: 'show_legend', selector: { boolean: {} } },
           { name: 'show_export', selector: { boolean: {} } },
+          { name: 'show_analysis', selector: { boolean: {} } },
           { name: 'simplify_points', selector: { number: { min: 0, max: 100000, step: 50, mode: 'box' } } },
           { name: 'auto_refresh', selector: { boolean: {} } },
           { name: 'refresh_interval', disabled: this._data().auto_refresh === false, selector: { number: { min: 10, max: 3600, step: 5, mode: 'box', unit_of_measurement: 's' } } },

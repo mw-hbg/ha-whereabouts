@@ -20,8 +20,9 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
-from . import api, downloads, jobs_api, journal_api, maintenance, settings_api
+from . import analysis_api, api, downloads, jobs_api, journal_api, maintenance, settings_api
 from .addresses import AddressJob
+from .analysis import AnalysisManager
 from .const import (
     CARDS_FILE,
     CONF_PANEL,
@@ -92,6 +93,7 @@ class Runtime:
     zones: ZoneWatch | None = None
     journal: Journal | None = None  # 0.7.3: log and trash of the data maintenance
     jobs: JobManager | None = None  # 0.7.10: background jobs (maintenance, export, import from the recorder)
+    analysis: AnalysisManager | None = None  # 0.8.0: evaluation of a place (one per user)
     js_url: str | None = None
     panel: bool = False
     # Raised whenever stored data changes outside the live recording (import,
@@ -133,6 +135,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     maintenance.async_register(hass)
     journal_api.async_register(hass)
     jobs_api.async_register(hass)
+    analysis_api.async_register(hass)
     hass.http.register_view(downloads.DownloadView())
     return True
 
@@ -212,6 +215,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     runtime.addresses.journal = runtime.journal
     runtime.jobs = JobManager(hass, runtime)
+    runtime.analysis = AnalysisManager(hass, runtime)
     runtime.addresses.on_finished = lambda state: hass.async_create_task(runtime.jobs.async_address_finished(state))
     await runtime.async_refresh_known(hass)
 
@@ -298,6 +302,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await runtime.addresses.async_stop()
     if runtime.jobs:
         await runtime.jobs.async_stop()
+    if runtime.analysis:
+        await runtime.analysis.async_stop()
     if runtime.js_url:
         remove_extra_js_url(hass, runtime.js_url)
     # The sidebar page stays (see _register_panel); it is removed with the entry.

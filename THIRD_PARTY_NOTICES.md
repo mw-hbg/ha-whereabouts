@@ -13,6 +13,7 @@ software and services; their licenses and terms apply.
 | [tzfpy](https://github.com/ringsaturn/tzfpy) 2.1.2 (installed by Home Assistant) | Time zone of a place, offline | MIT; time zone borders from [timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder) under [ODbL](https://opendatacommons.org/licenses/odbl/) | © ringsaturn, © OpenStreetMap contributors |
 | [Home Assistant](https://www.home-assistant.io) | Platform (APIs, frontend, file upload) | Apache-2.0 | © Home Assistant contributors |
 | [OpenStreetMap Nominatim](https://nominatim.org) (optional, off by default) | Reverse geocoding of places on the way | [Usage policy](https://operations.osmfoundation.org/policies/nominatim/); data [ODbL](https://opendatacommons.org/licenses/odbl/) | © OpenStreetMap contributors |
+| Adobe Font Metrics (AFM) of the PDF standard fonts Helvetica and Helvetica-Bold (character widths in `pdf.py`) | Line breaks and alignment in the PDF of the evaluation of a place | Adobe Core14 AFM terms: may be used, copied and distributed for any purpose, with the copyright notices kept | © Adobe Systems Incorporated |
 
 "Find My" is a trademark of Apple Inc. Whereabouts is not affiliated with or
 endorsed by Apple.

@@ -103,6 +103,7 @@ CATEGORIES: dict[str, dict[str, tuple[Any, Any]]] = {
         "simplify_points": (400, vol.All(vol.Coerce(int), vol.Range(min=0, max=100000))),
         "show_legend": (True, bool),
         "show_export": (True, bool),
+        "show_analysis": (True, bool),  # 0.8.0: evaluation of a place
         "history_auto_refresh": (True, bool),
         "history_refresh_interval": (30, vol.All(vol.Coerce(int), vol.Range(min=10, max=3600))),
     },

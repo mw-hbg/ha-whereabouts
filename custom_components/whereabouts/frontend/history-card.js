@@ -10,6 +10,7 @@ export const HISTORY_DEFAULTS = {
   simplify_points: 400, // points hidden from this many entries on (0 = always shown)
   show_legend: true,
   show_export: true,
+  show_analysis: true, // 0.8.0: button "Evaluate a place"
   auto_refresh: true,
   refresh_interval: 30,
 };
@@ -21,6 +22,8 @@ const EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 0 
 const EYE_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.83,9L15,12.16C15,12.11 15,12.05 15,12A3,3 0 0,0 12,9C11.94,9 11.89,9 11.83,9M7.53,9.8L9.08,11.35C9.03,11.56 9,11.77 9,12A3,3 0 0,0 12,15C12.22,15 12.44,14.97 12.65,14.92L14.2,16.47C13.53,16.8 12.79,17 12,17A5,5 0 0,1 7,12C7,11.21 7.2,10.47 7.53,9.8M2,4.27L4.28,6.55L4.73,7C3.08,8.3 1.78,10 1,12C2.73,16.39 7,19.5 12,19.5C13.55,19.5 15.03,19.2 16.38,18.66L16.81,19.08L19.73,22L21,20.73L3.27,3M12,7A5,5 0 0,1 17,12C17,12.64 16.87,13.26 16.64,13.82L19.57,16.75C21.07,15.5 22.27,13.86 23,12C21.27,7.61 17,4.5 12,4.5C10.6,4.5 9.26,4.75 8,5.2L10.17,7.35C10.74,7.13 11.35,7 12,7Z"/></svg>';
 const CALENDAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 19H5V8h14m-3-7v2H8V1H6v2H5c-1.11 0-2 .89-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-1V1m-1 11h-5v5h5v-5Z"/></svg>';
 const SEP = '<span class="trenner">·</span>'; // the same separator as in "Where is…?"
+const MIN_HOP_M = 50; // 0.8.0: shorter hops between two stays do not count for the distance
+const ANALYSIS_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7m0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5M3 21h4v-2H3v2m14 0h4v-2h-4v2Z"/></svg>';
 const LINK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7Z"/></svg>';
 
 export function defineHistoryCard(S, D) {
@@ -467,6 +470,41 @@ export function defineHistoryCard(S, D) {
       return n === 1 ? this._t('entry') : this._t('entries', { n });
     }
 
+    // 0.8.0: distance as the crow flies between consecutive stays, per person and per day (a hop counts on the
+    // day of arrival). Jitter within a stay does not count anyway; hops under MIN_HOP_M between two stays are GPS jitter.
+    _distances(points) {
+      const perPerson = new Map();
+      const perDay = new Map();
+      const lists = new Map();
+      points.forEach((p) => {
+        if (p.lat == null || p.lon == null || !Number.isFinite(Number(p.lat)) || !Number.isFinite(Number(p.lon))) return;
+        if (!lists.has(p.person)) lists.set(p.person, []);
+        lists.get(p.person).push(p);
+      });
+      const at = (p) => S.storedInstant(p.date, p.time, p.offset) ?? Date.parse(`${p.date}T${p.time}Z`);
+      lists.forEach((list, person) => {
+        const sorted = list.slice().sort((a, b) => at(a) - at(b));
+        let total = 0;
+        for (let i = 1; i < sorted.length; i++) {
+          const a = sorted[i - 1];
+          const b = sorted[i];
+          const m = S.distanceM(Number(a.lat), Number(a.lon), Number(b.lat), Number(b.lon));
+          if (!(m >= MIN_HOP_M)) continue;
+          total += m;
+          const key = `${person}|${b.date}`;
+          perDay.set(key, (perDay.get(key) || 0) + m);
+        }
+        perPerson.set(person, total);
+      });
+      return { perPerson, perDay };
+    }
+
+    _kmText(m) {
+      const km = m / 1000;
+      const text = km.toLocaleString(S.language(this._hass), { maximumFractionDigits: km < 10 ? 1 : 0 });
+      return this._t('distance_about', { km: text });
+    }
+
     // --- layout -----------------------------------------------------------------------
     _build() {
       const t = this._t;
@@ -612,6 +650,9 @@ export function defineHistoryCard(S, D) {
             .tabelle tr.gewaehlt .checkbox { background: var(--primary-color); border-color: var(--primary-color); }
             .tabelle .checkbox svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 3; display: none; }
             .tabelle tr.gewaehlt .checkbox svg { display: block; }
+            .tabelle tr.tageszeile td { background: none; box-shadow: none; font-size: 13px; font-weight: 500; padding: 12px 10px 4px;
+                                         color: var(--secondary-text-color); border-bottom: none; }
+            .tabelle tr.tageszeile .trenner { margin: 0 6px; opacity: .6; }
             .leer { padding: 30px; text-align: center; color: var(--secondary-text-color); font-size: 14px; }
             .niemand { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; padding: 30px; text-align: center;
                        color: var(--secondary-text-color); font-size: 15px; }
@@ -632,6 +673,7 @@ export function defineHistoryCard(S, D) {
             .statusbar.eng .export .text { display: none; }
             /* Narrow: one line, only symbols left and right */
             .statusbar.schmal .rest, .statusbar.schmal .zeit, .statusbar.schmal .export .text { display: none; }
+            .statusbar .strecke { white-space: nowrap; }
             .statusbar.schmal .infos { flex-wrap: nowrap; }
             .statusbar.schmal .status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             .controls .ic { display: none; --mdc-icon-size: 20px; }
@@ -702,6 +744,7 @@ export function defineHistoryCard(S, D) {
           <div class="niemand" hidden>${esc(t('no_person_selected'))}</div>
           <div class="statusbar">
             ${c.show_export ? `<button class="export" type="button" title="${esc(t('export_data'))}" aria-label="${esc(t('export_data'))}">${DOWNLOAD_ICON}<span class="text">${esc(t('export_data'))}</span></button>` : ''}
+            ${c.show_analysis ? `<button class="export auswerten" type="button" title="${esc(t('an_title'))}" aria-label="${esc(t('an_title'))}">${ANALYSIS_ICON}<span class="text">${esc(t('an_button'))}</span></button>` : ''}
             <div class="infos"><span class="status"></span></div>
             <span class="rest"></span>
             <button class="neuladen" title="${esc(t('reload_now'))}" aria-label="${esc(t('reload_now'))}">
@@ -742,8 +785,10 @@ export function defineHistoryCard(S, D) {
       this.querySelector('.exportCsv').addEventListener('click', () => this._exportSelected('csv'));
       this.querySelector('.exportGpx').addEventListener('click', () => this._exportSelected('gpx'));
       this.querySelector('.loeschenBtn').addEventListener('click', () => this._deleteSelected());
-      const exportButton = this.querySelector('.statusbar .export');
+      const exportButton = this.querySelector('.statusbar .export:not(.auswerten)');
       if (exportButton) exportButton.addEventListener('click', () => this._download());
+      const analysisButton = this.querySelector('.statusbar .auswerten');
+      if (analysisButton) analysisButton.addEventListener('click', () => this._analysis());
       this.querySelector('.punkte-hinweis').addEventListener('click', () => {
         if (this._map) this._map.setZoom(Math.max(13, this._map.getZoom() + 1));
       });
@@ -947,9 +992,17 @@ export function defineHistoryCard(S, D) {
       const parts = [];
       if (!persons.length && !failed.length) parts.push(esc(t('no_person_selected')));
       else if (!points.length) { if (!failed.length) parts.push(esc(t(this._multiDay() ? 'no_data_range' : 'no_data'))); }
-      else if (this._persons.length > 1) {
-        parts.push(persons.map((p) => `<span class="wer p-${p.key}">${esc(p.name)}:</span> ${esc(this._countText(points.filter((x) => x.person === p.id).length))}`).join(SEP));
-      } else parts.push(esc(this._countText(points.length)));
+      else {
+        // 0.8.0: with the distance (only from two places on)
+        const { perPerson } = this._distances(points);
+        const way = (id) => {
+          const m = perPerson.get(id) || 0;
+          return m > 0 ? `<span class="strecke" title="${esc(this._t('distance_hint'))}">${SEP}${esc(this._kmText(m))}</span>` : '';
+        };
+        if (this._persons.length > 1) {
+          parts.push(persons.map((p) => `<span class="wer p-${p.key}">${esc(p.name)}:</span> ${esc(this._countText(points.filter((x) => x.person === p.id).length))}${way(p.id)}`).join(SEP));
+        } else parts.push(esc(this._countText(points.length)) + way(persons[0] ? persons[0].id : ''));
+      }
       let text = parts.join('');
       if (this._multiDay()) {
         text += `<span class="zeit">${text ? SEP : ''}${esc(P.rangeText(S.language(this._hass), this._date, this._to))}</span>`;
@@ -982,6 +1035,13 @@ export function defineHistoryCard(S, D) {
           whole: () => this._mapPicture(true),
         } : null,
       });
+    }
+
+    // 0.8.0: evaluation of a place (window and circle on this card's map, see analysis.js)
+    async _analysis() {
+      const A = await import(`./analysis.js${S.QUERY}`);
+      const P = await pickerModule;
+      A.openAnalysis(S, P, D, this);
     }
 
     // --- map --------------------------------------------------------------------------
@@ -1460,7 +1520,19 @@ export function defineHistoryCard(S, D) {
       html += `<th>${esc(t('col_time'))}</th>`;
       if (withPerson) html += `<th>${esc(t('col_person'))}</th>`;
       html += `<th>${esc(t('col_place'))}</th><th>${esc(t('col_lat'))}</th><th>${esc(t('col_lon'))}</th></tr></thead><tbody>`;
+      const columns = (this._selectMode ? 1 : 0) + (withDate ? 1 : 0) + (withPerson ? 1 : 0) + 4;
+      const { perDay } = withDate ? this._distances(points) : { perDay: new Map() };
+      let lastDay = '';
       points.forEach((p, i) => {
+        // 0.8.0: in a period a row per day with the distance of that day
+        if (withDate && p.date !== lastDay) {
+          lastDay = p.date;
+          const ways = this._visiblePersons()
+            .map((person) => ({ person, m: perDay.get(`${person.id}|${p.date}`) || 0 }))
+            .filter((x) => x.m > 0)
+            .map((x) => (withPerson ? `${esc(x.person.name)} ${esc(this._kmText(x.m))}` : esc(this._kmText(x.m))));
+          html += `<tr class="tageszeile"><td colspan="${columns}">${esc(this._dayText(p.date))}${ways.length ? `<span class="trenner">·</span>${ways.join(', ')}` : ''}</td></tr>`;
+        }
         const person = this._personById(p.person);
         const key = this._keyOf(p);
         const classes = [];
@@ -1474,7 +1546,7 @@ export function defineHistoryCard(S, D) {
         html += `<td>${esc(this._placeText(p))}</td><td>${Number(p.lat).toFixed(6)}</td><td>${Number(p.lon).toFixed(6)}</td></tr>`;
       });
       box.innerHTML = `${html}</tbody></table>`;
-      box.querySelectorAll('tbody tr').forEach((tr) => {
+      box.querySelectorAll('tbody tr[data-key]').forEach((tr) => {
         tr.addEventListener('mousedown', (e) => { if (e.shiftKey) e.preventDefault(); });
         tr.addEventListener('click', (e) => this._rowClick(e, tr));
         // macOS: Ctrl+click opens the context menu instead of "click".

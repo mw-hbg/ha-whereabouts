@@ -39,7 +39,7 @@ const PERSONAL = [
   { id: 'history', icon: 'mdi:map-clock', weight: 'more', fields: [
     { key: 'default_view', sel: (t) => sel(['map', 'heat', 'table'].map((v) => ({ value: v, label: t(`ed_view_${v}`) }))) },
     { key: 'start_period', sel: (t) => sel(['today', '3d', '7d', '4w'].map((v) => ({ value: v, label: t(`start_period_${v}`) }))) },
-    { key: 'show_legend', sel: B }, { key: 'show_export', sel: B },
+    { key: 'show_legend', sel: B }, { key: 'show_export', sel: B }, { key: 'show_analysis', sel: B },
     { key: 'simplify_points', sel: num(0, 100000, 50) },
     { key: 'history_auto_refresh', sel: B },
     { key: 'history_refresh_interval', sel: num(10, 3600, 5, 's'), needs: 'history_auto_refresh' },

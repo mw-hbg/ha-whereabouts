@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.10
 
 - Changed: heatmap: the switch "Grade colours by total time per place" is off by default again (the stays add up as before 0.7.5). The switch stays in the legend.
 - Improved: switching between route and heatmap keeps zoom and map position.

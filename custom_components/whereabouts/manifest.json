@@ -27,5 +27,5 @@
     "tzfpy==2.1.2"
   ],
   "single_config_entry": true,
-  "version": "0.7.9"
+  "version": "0.7.10"
 }

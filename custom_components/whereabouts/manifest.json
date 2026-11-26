@@ -2,7 +2,8 @@
   "domain": "whereabouts",
   "name": "Whereabouts",
   "after_dependencies": [
-    "mobile_app"
+    "mobile_app",
+    "recorder"
   ],
   "codeowners": [
     "@mw-hbg"
